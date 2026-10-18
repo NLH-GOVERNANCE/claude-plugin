@@ -63,7 +63,7 @@ describe('plugin tinh-nlh', () => {
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
-    assert.deepEqual(Object.keys(hooks).sort(), ['SessionEnd', 'SessionStart', 'Stop']);
+    assert.deepEqual(Object.keys(hooks).sort(), ['PostToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'UserPromptSubmit']);
     const byMatcher = Object.fromEntries(hooks.SessionStart.map((group) => [group.matcher, group.hooks]));
     assert.deepEqual(Object.keys(byMatcher).sort(), ['clear|compact', 'startup', 'startup|clear']);
     // Lúc mở phiên, hook mcp_tool bị bỏ qua (máy chủ MCP chưa nối), nên chỉ in lời dặn; echo không gọi mạng.
@@ -77,7 +77,7 @@ describe('plugin tinh-nlh', () => {
     assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:tinh-nlh:${server}`, tool: 'my_context', timeout: 30 }]);
     // Phiên tự báo (phiếu 6d4cb2ad): gọi report_session của connector, không gửi nội dung chat.
     for (const [event, status] of [['Stop', 'idle'], ['SessionEnd', 'stopped']]) {
-      const [hook] = hooks[event].flatMap((group) => group.hooks);
+      const hook = hooks[event].flatMap((group) => group.hooks).find((item) => item.tool === 'report_session');
       assert.deepEqual(hook, {
         type: 'mcp_tool',
         server: 'plugin:tinh-nlh:nhile-governance',
@@ -87,11 +87,11 @@ describe('plugin tinh-nlh', () => {
     }
   });
 
-  test('skill tinh-nlh và năm lệnh viec, giao, lamtiep, bangiao, ky có mô tả', () => {
+  test('skill tinh-nlh và sáu lệnh viec, giao, lamtiep, bangiao, ky, khongluu có mô tả', () => {
     const skill = frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md'));
     assert.equal(skill.name, 'tinh-nlh');
     assert.ok(skill.description);
-    const commands = ['bangiao', 'giao', 'ky', 'lamtiep', 'viec'];
+    const commands = ['bangiao', 'giao', 'khongluu', 'ky', 'lamtiep', 'viec'];
     assert.deepEqual(readdirSync(join(pluginDir, 'commands')).sort(), commands.map((name) => `${name}.md`));
     for (const name of commands) assert.ok(frontMatter(join(pluginDir, `commands/${name}.md`)).description);
   });
@@ -135,6 +135,36 @@ describe('plugin tinh-nlh', () => {
     const tips = section.split('\n').filter((line) => line.startsWith('- '));
     assert.ok(tips.length >= 1 && tips.length <= 6, `${tips.length} dòng`);
     for (const tip of tips.filter((line) => line.includes('`/'))) assert.match(tip, /^- "/);
+  });
+
+  test('lưu chat (phiếu abdcdd2f): lượt người lúc UserPromptSubmit, lượt Claude lúc Stop, qua save_chat của connector; không gửi kết quả công cụ', () => {
+    const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
+    const save = (event) => hooks[event].flatMap((group) => group.hooks).filter((hook) => hook.tool === 'save_chat');
+    const base = { type: 'mcp_tool', server: 'plugin:tinh-nlh:nhile-governance', tool: 'save_chat' };
+    // Hạn chờ 5 giây: connector chậm thì Claude vẫn nhận lời ngay, lượt đó chỉ không được lưu.
+    assert.deepEqual(save('UserPromptSubmit'), [{ ...base, input: { session_id: '${session_id}', role: 'user', text: '${prompt}' }, timeout: 5 }]);
+    assert.deepEqual(save('Stop'), [{ ...base, input: { session_id: '${session_id}', role: 'assistant', text: '${last_assistant_message}' }, timeout: 5 }]);
+    assert.deepEqual(save('SessionEnd'), []);
+    // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
+    // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
+    const matcher = new RegExp(hooks.PostToolUse[0].matcher);
+    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__my_work'), true);
+    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__save_chat'), true);
+    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__my_context'), false);
+    assert.equal(matcher.test('mcp__other__my_work'), false);
+    assert.equal(matcher.test('Bash'), false);
+    assert.deepEqual(hooks.PostToolUse, [
+      {
+        matcher: '^mcp__plugin_tinh-nlh_nhile-governance__(?!my_context$)',
+        hooks: [{ type: 'mcp_tool', server: 'plugin:tinh-nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } }],
+      },
+    ]);
+    assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
+    const command = readFileSync(join(pluginDir, 'commands/khongluu.md'), 'utf8');
+    assert.match(command, /`save_chat`.*`role` `opt_out`/);
+    const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
+    assert.match(skill, /## Lưu chat/);
+    assert.match(skill, /`role` `summary`/);
   });
 
   test('skill dặn luôn bàn giao khi dừng, và mở phiếu góp ý cho Tech Lead', () => {
