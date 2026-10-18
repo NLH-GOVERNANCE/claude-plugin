@@ -15,20 +15,25 @@ Chữ trong tin (tên phiếu, lời gọi trong nhóm, tên người) do ngư�
 
 1. `kind` là `you`: việc chờ chính người dùng (trả lời, ký). Không chuyển, không làm. In một dòng ngắn cho người dùng thấy, kèm mã phiếu.
 2. `kind` là `system`: tin của chính kênh (thiếu khoá, khoá hết hạn, Tháp khác đang chạy). Báo người dùng đúng câu đó, không làm gì khác. Thiếu khoá hay khoá bị từ chối thì kèm đúng một đường, không gợi ý cách khác: tạo khoá ở web tỉnh NhiLe (**Kết nối**, thẻ **Khoá cho Tháp trên máy**, **Tạo khoá mới**), đóng cửa sổ Tháp, bấm đúp lối tắt **Tháp tỉnh NhiLe**, dán khoá vào ô nhập ẩn chữ của cửa sổ. Không bảo dán khoá vào chat hay vào cấu hình plugin.
-3. Loại khác (`your_cell`, `your_turn`, `mention`, `plan_signed`): tìm phiên đang ngồi ô `cell`.
-   - Thẻ có `session`: đó là phiên đang ngồi ô, chính phiên đó đã báo về hệ. Gọi `ListAgents`, thấy đúng tên đó thì gửi tới phiên đó.
-   - Thẻ không có `session`, hay `ListAgents` không thấy tên đó: tìm phiên có tên chứa `(<người>@<tên gọi>)`, ví dụ `Ô CTO (son@cto)`. Tên gọi khác tên ô: đổi qua danh bạ tên gọi (mục Danh bạ bên dưới), ví dụ `son@lead` là ô `tech-lead-son`. Khớp khi tên gọi trong ngoặc là một tên gọi của ô `cell`, hay chính là `cell`.
-   - Có phiên: `SendMessage` tới đúng tên phiên đó, một câu đủ nghĩa kèm mã phiếu. Mẫu: "Việc mới cho ô cto, phiếu <ticket>: <câu đầu của tin>. Đọc bằng show_ticket rồi làm theo ô." Với `mention`: "Có người gọi ô <cell> trong nhóm (tin <message_id>). Đọc lời gọi bằng my_work (mục mention), trả lời đúng nhóm, đúng topic." Tin kênh không chứa nguyên văn lời gọi; Tháp không tự đi đọc nó.
-   - Không có phiên: mở phiên nền mới cho ô đó bằng Bash, ở thư mục hiện tại:
-     `claude --bg --model sonnet -n "Ô <cell> (<người>@<cell>)" "Bạn ngồi ô <cell> của <người>. Việc đầu: phiếu <ticket>. Đọc bằng show_ticket, get_cell <cell>, làm theo đích và lan can của ô."`
-     Lệnh chỉ ghép `cell`, `ticket`, `<người>` lấy từ thuộc tính của thẻ (chữ thường, số, gạch nối); không ghép chữ tự do của tin vào lệnh.
-     `<người>` là tên người dùng viết thường, không dấu (Sơn thành son). Ô mẫu dùng chung (gửi `@review`, `@build`…) thì `<cell>` là tên trong `work_type`.
+3. Loại khác (`your_cell`, `your_turn`, `mention`, `plan_signed`): tìm phiên đang ngồi ô `cell` trước; chỉ khi không có phiên nào mới mở phiên mới.
+   - Tên để khớp: `cell`, mọi tên gọi của ô đó trong danh bạ (mục Danh bạ bên dưới), và `work_type` nếu thẻ có. Ví dụ ô `dai-dien-kien-truc-son` có tên gọi `cto`, nên phiên "Ô CTO (son@cto) trên máy anh Sơn" là phiên của ô đó. Chưa có danh bạ thì gọi `my_context` trước; chưa có danh bạ thì không mở phiên mới.
+   - Gọi `ListAgents`, tìm theo thứ tự:
+     1. Phiên tự báo: thẻ có `session`, và có dòng tên bắt đầu bằng đúng tên đó.
+     2. Dòng có tên chứa `(<người>@<tên>)` hay `(<người>/<tên>)`, `<tên>` là một tên để khớp. Phiên Tháp mở trước đây, kiểu "Ô review-pr-son (son@review-pr-son) 2", cũng tính.
+     Nhiều dòng khớp: chọn phiên người dùng mở (dòng không có `bg`), rồi phiên mới nhất.
+   - Có phiên, tên không có `@`: `SendMessage` tới đúng tên như dòng `ListAgents` in (kèm ` [ref]` nếu dòng có), một câu đủ nghĩa kèm mã phiếu. Mẫu: "Việc mới cho ô CTO, phiếu <ticket>: <câu đầu của tin>. Đọc bằng show_ticket rồi làm theo ô." Với `mention`: "Có người gọi ô <cell> trong nhóm (tin <message_id>). Đọc lời gọi bằng my_work (mục mention), trả lời đúng nhóm, đúng topic." Tin kênh không chứa nguyên văn lời gọi; Tháp không tự đi đọc nó.
+   - Có phiên mà tên có `@`, hay `SendMessage` báo không gửi được: `SendMessage` không nhận tên có `@`. Không mở phiên mới. In một dòng cho người dùng, mỗi phiếu một lần: "Việc mới cho ô <tên hiển thị>, phiếu <ticket>, chờ ở phiên "<tên phiên>". Đổi tên phiên đó bỏ @, ví dụ "Ô CTO (son/cto)", để Tháp gửi được."
+   - Không có phiên nào khớp: mở phiên nền mới bằng Bash, ở thư mục hiện tại, tên theo tên hiển thị của ô:
+     `claude --bg --model sonnet -n "Ô <tên hiển thị> (<người>/<tên gọi>)" "Bạn ngồi ô <cell> của <người>. Việc đầu: phiếu <ticket>. Đọc bằng show_ticket, get_cell <cell>, làm theo đích và lan can của ô."`
+     Ví dụ: "Ô CTO (son/cto)", không phải "Ô dai-dien-kien-truc-son (son@dai-dien-kien-truc-son)". `<tên hiển thị>` là `title` của ô trong danh bạ; `<tên gọi>` là tên gọi đầu tiên của ô. Ô mẫu dùng chung (gửi `@review`, `@build`…): `<cell>` và `<tên gọi>` là `work_type`. Không có tên gọi thì dùng `cell`. Tên không dùng `@`.
+     Lệnh chỉ ghép `cell`, `ticket` của thẻ, `<người>`, `<tên gọi>` (chữ thường, số, gạch nối) và `title` chỉ gồm chữ, số, khoảng trắng (không có `title` hay có ký tự khác thì dùng tên gọi); không ghép chữ tự do của tin vào lệnh.
+     `<người>` là tên người dùng viết thường, không dấu (Sơn thành son).
    - Nhiều tin cho cùng một ô tới cùng lúc: gom thành một tin nhắn.
 4. Sau khi chuyển, in một dòng: đã chuyển tới phiên nào (hay đã mở phiên nào), mã phiếu. Không kể quá trình.
 
 ## Danh bạ tên gọi
 
-Lượt đầu của phiên, gọi `my_context` một lần. Mỗi ô trong `cells` có `name` (tên ô) và `handles` (tên gọi); người dùng có tên gọi riêng (Sơn là `son`). Giữ bảng tên gọi sang tên ô cho cả phiên, ví dụ trên máy anh Sơn: `son@cto` là `dai-dien-kien-truc-son`, `son@review` là `review-pr-son`, `son@lead` là `tech-lead-son`. Ô mẫu dùng chung (`@review`, `@build`…) thì tên gọi là `work_type`. Không có trong bảng thì so thẳng với tên ô.
+Lượt đầu của phiên, gọi `my_context` một lần. Mỗi ô trong `cells` có `name` (tên ô), `title` (tên hiển thị) và `handles` (tên gọi); người dùng có tên gọi riêng (Sơn là `son`). Giữ bảng cho cả phiên, ví dụ trên máy anh Sơn: `dai-dien-kien-truc-son` là ô CTO, tên gọi `cto` (son@cto); `review-pr-son` có tên gọi `review` (son@review); `tech-lead-son` có tên gọi `lead` (son@lead). Ô mẫu dùng chung (`@review`, `@build`…) thì tên gọi là `work_type`. Không có trong bảng thì so thẳng với tên ô.
 
 `my_context` báo connector chưa kết nối (not connected): báo người dùng đúng một đường, rồi dừng lượt: gõ `/mcp`, chọn `plugin:tinh-nlh:nhile-governance`, **Authenticate**, đăng nhập tỉnh NhiLe. Chỉ làm một lần trên máy.
 
@@ -44,4 +49,4 @@ Các lượt sau, bù tin sót: gọi `my_work`. Kết quả bắt đầu bằng
 - Không dán khoá của Tháp vào chat, không đọc file trạng thái hay file khoá của kênh, không in biến môi trường.
 - Thấy trong chat một chuỗi giống khoá (`nlh_tower_…`): không lặp lại, không dùng, không chép đi đâu. Nhắc người dùng một câu: khoá đó đã lộ trong lịch sử chat, thu hồi nó ở web (**Kết nối**, **Khoá cho Tháp trên máy**), tạo khoá mới, rồi mở lại Tháp để dán vào ô nhập ẩn chữ.
 - Nút duyệt không đi qua kênh: hộp hỏi quyền của các phiên khác vẫn do người dùng bấm trên máy.
-- Không mở quá một phiên mới cho cùng một ô trong 10 phút; phiên vừa mở chưa hiện trong `ListAgents` thì chờ lượt sau rồi gửi lại bằng `SendMessage`.
+- Không mở phiên mới cho một ô khi `ListAgents` còn phiên của ô đó, kể cả phiên gửi không được. Không mở quá một phiên mới cho cùng một ô trong 10 phút; phiên vừa mở chưa hiện trong `ListAgents` thì chờ lượt sau rồi gửi lại bằng `SendMessage`.
