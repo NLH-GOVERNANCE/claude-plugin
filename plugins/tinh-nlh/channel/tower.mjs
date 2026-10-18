@@ -10,8 +10,13 @@
 //
 // Một chiều: không có công cụ trả lời, không khai claude/channel/permission (nút duyệt không đi qua kênh). Không thư
 // viện: MCP qua stdio là JSON-RPC, mỗi dòng một tin. Khoá không ghi ra đâu, kể cả stderr.
+//
+// Khoá: Thap.cmd hỏi trong ô nhập ẩn chữ (scripts/tower-key.ps1) và lưu bằng DPAPI của Windows vào file tower-key.dpapi
+// ở thư mục dữ liệu của plugin; kênh mở file đó bằng PowerShell của chính tài khoản Windows. Hub từ chối khoá thì xoá
+// file để lần mở Tháp sau hỏi lại. TOWER_KEY (cấu hình plugin) nếu có thì dùng trước.
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
@@ -19,8 +24,8 @@ export const VERSION = '0.2.0';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Đọc lùi một chút so với mốc: mục ghi cùng lúc với lần đọc trước vẫn tới. Mã đã đẩy chặn trùng.
 const OVERLAP_MS = 5 * 60 * 1000;
-// Lần đầu trên máy (chưa có mốc): bù việc của 24 giờ qua.
-const FIRST_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+// Lần đầu trên máy (chưa có mốc): chỉ việc mới từ lúc bật. Việc tồn để mỗi ô tự đọc hộp việc của mình.
+const FIRST_LOOKBACK_MS = 60 * 1000;
 const SEEN_MAX = 1000;
 const DEFAULT_ORIGIN = 'https://governance.nlh.vn';
 // Như SDK MCP 1.32 (phép thử thap-test chạy được): Claude Code không nhận kênh nói bản giao thức 2026-07-28.
@@ -30,7 +35,8 @@ const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024
 export function hubOrigin(value) {
   let url;
   try {
-    url = new URL(String(value || DEFAULT_ORIGIN));
+    // Cấu hình plugin chưa có giá trị thì có thể còn nguyên chữ ${user_config…}: dùng bản chính.
+    url = new URL(String(value && !String(value).startsWith('${') ? value : DEFAULT_ORIGIN));
   } catch {
     return null;
   }
@@ -117,6 +123,43 @@ function saveState(dir, state) {
   writeFileSync(join(dir, 'tower-state.json'), JSON.stringify({ since: state.since, seen: state.seen.slice(-SEEN_MAX) }));
 }
 
+export const KEY_FILE = 'tower-key.dpapi';
+const TOWER_KEY = /^nlh_tower_[0-9a-f]{64}$/;
+
+// Mở file DPAPI bằng PowerShell của Windows theo đường dẫn tuyệt đối (không tìm theo PATH hay thư mục hiện tại, nên
+// không ai đặt được powershell.exe giả vào repo); đường dẫn file đi qua biến môi trường, không ghép vào lệnh.
+const POWERSHELL = join(process.env.SystemRoot || 'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+function dpapiOpen(file) {
+  const script =
+    '$s = (Get-Content -LiteralPath $env:TOWER_KEY_FILE -Raw).Trim() | ConvertTo-SecureString; ' +
+    '$b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); ' +
+    'try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }';
+  return execFileSync(POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', script], {
+    cwd: dirname(file),
+    env: { ...process.env, TOWER_KEY_FILE: file },
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 15_000,
+    windowsHide: true,
+  });
+}
+
+// Khoá đã lưu trên máy, hay null. File hỏng, của tài khoản khác hay không đúng dạng khoá thì xoá để lần sau hỏi lại.
+export function savedKey(dir, open = dpapiOpen) {
+  if (!dir) return null;
+  const file = join(dir, KEY_FILE);
+  if (!existsSync(file)) return null;
+  let key = '';
+  try {
+    key = String(open(file)).trim();
+  } catch {
+    key = '';
+  }
+  if (TOWER_KEY.test(key)) return key;
+  rmSync(file, { force: true });
+  return null;
+}
+
 // Một máy một Tháp: file khoá ghi pid. Tháp cũ đã tắt (pid không còn) thì lấy lại.
 export function takeLock(dir, pid = process.pid) {
   const path = join(dir, 'tower.lock');
@@ -156,6 +199,7 @@ export function startServer({
   output = process.stdout,
   env = process.env,
   fetchImpl = fetch,
+  openKey = dpapiOpen,
   log = (line) => process.stderr.write(`tower: ${line}\n`),
   onClose = () => process.exit(0),
 } = {}) {
@@ -172,11 +216,16 @@ export function startServer({
   };
   let timer = null;
   let state = { since: null, seen: [] };
+  let fileKey = null;
 
   async function tick() {
-    const key = env.TOWER_KEY;
+    // Cấu hình plugin chưa có giá trị thì Claude Code có thể để nguyên chữ ${user_config…}: coi như trống.
+    const configured = env.TOWER_KEY && !env.TOWER_KEY.startsWith('${') ? env.TOWER_KEY : '';
+    // Mở file khoá một lần rồi giữ trong bộ nhớ (mỗi lần mở là một tiến trình PowerShell).
+    if (!configured && !fileKey) fileKey = savedKey(dir, openKey);
+    const key = configured || fileKey;
     const origin = hubOrigin(env.TOWER_ORIGIN);
-    if (!key) return notice('no_key', 'Kênh Tháp chưa có khoá. Tạo khoá ở web tỉnh NhiLe (Kết nối, thẻ "Khoá cho Tháp trên máy"), rồi dán vào cấu hình kênh Tháp của plugin tinh-nlh.');
+    if (!key) return said.has('rejected') ? undefined : notice('no_key', 'Kênh Tháp chưa có khoá. Đóng cửa sổ Tháp rồi mở lại bằng lối tắt Tháp tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ. Không dán khoá vào chat.');
     if (!origin) return notice('bad_origin', 'Địa chỉ hub trong cấu hình kênh Tháp không phải https của nlh.vn. Kênh không gửi khoá tới đó.');
     let response;
     try {
@@ -185,7 +234,11 @@ export function startServer({
       log(`chưa đọc được luồng việc: ${error?.code ?? error?.name ?? 'lỗi mạng'}`);
       return;
     }
-    if (response.status === 401) return notice('rejected', 'Hub không nhận khoá của Tháp (sai, hết hạn 30 ngày hay đã thu hồi). Tạo khoá mới ở web, thẻ "Khoá cho Tháp trên máy", rồi dán vào cấu hình kênh.');
+    if (response.status === 401) {
+      if (!configured && dir) rmSync(join(dir, KEY_FILE), { force: true });
+      fileKey = null;
+      return notice('rejected', 'Khoá hết hạn hoặc đã thu hồi, mở lại Tháp để dán khoá mới.');
+    }
     if (response.status === 403) return notice('not_allowed', 'Người dùng không còn trong danh sách được dùng hệ. Kênh Tháp dừng đọc.');
     if (!response.ok) {
       log(`hub trả ${response.status}`);
