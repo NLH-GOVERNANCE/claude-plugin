@@ -10,4 +10,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\tower-window.p
 rem NLH_TOWER=1: chi phien nay doc luong viec; cac phien Claude Code khac tren may khong doc.
 set NLH_TOWER=1
 cd /d "%~dp0.."
-claude -n "Thap truc" --model sonnet --dangerously-load-development-channels plugin:tinh-nlh@nlh-governance "/loop 10m /tinh-nlh:thap"
+rem Cau lenh mo dau dat TRUOC co kenh: co kenh nhan nhieu gia tri, dat sau thi Claude tuong cau lenh la ten kenh va thoat.
+claude "/loop 10m /tinh-nlh:thap" -n "Thap truc" --model sonnet --dangerously-load-development-channels plugin:tinh-nlh@nlh-governance
+rem Claude thoat vi loi thi giu cua so de doc loi, khong tu tat.
+if errorlevel 1 pause

@@ -19,8 +19,8 @@ export const VERSION = '0.2.0';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Đọc lùi một chút so với mốc: mục ghi cùng lúc với lần đọc trước vẫn tới. Mã đã đẩy chặn trùng.
 const OVERLAP_MS = 5 * 60 * 1000;
-// Lần đầu trên máy (chưa có mốc): bù việc của 24 giờ qua.
-const FIRST_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+// Lần đầu trên máy (chưa có mốc): chỉ việc mới từ lúc bật. Việc tồn để mỗi ô tự đọc hộp việc của mình.
+const FIRST_LOOKBACK_MS = 60 * 1000;
 const SEEN_MAX = 1000;
 const DEFAULT_ORIGIN = 'https://governance.nlh.vn';
 // Như SDK MCP 1.32 (phép thử thap-test chạy được): Claude Code không nhận kênh nói bản giao thức 2026-07-28.
@@ -176,7 +176,7 @@ export function startServer({
   async function tick() {
     const key = env.TOWER_KEY;
     const origin = hubOrigin(env.TOWER_ORIGIN);
-    if (!key) return notice('no_key', 'Kênh Tháp chưa có khoá. Tạo khoá ở web tỉnh NhiLe (Kết nối, thẻ "Khoá cho Tháp trên máy"), rồi dán vào cấu hình kênh Tháp của plugin tinh-nlh.');
+    if (!key) return notice('no_key', 'Kênh Tháp chưa có khoá. Tạo khoá ở web tỉnh NhiLe (Kết nối, thẻ "Khoá cho Tháp trên máy", Tạo khoá mới), rồi ở phiên này gõ /plugin, tab Installed, Tỉnh NhiLe, Configure options, dán vào ô Khoá cho Tháp; rồi đóng cửa sổ Tháp và mở lại bằng lối tắt Tháp tỉnh NhiLe.');
     if (!origin) return notice('bad_origin', 'Địa chỉ hub trong cấu hình kênh Tháp không phải https của nlh.vn. Kênh không gửi khoá tới đó.');
     let response;
     try {
@@ -185,7 +185,7 @@ export function startServer({
       log(`chưa đọc được luồng việc: ${error?.code ?? error?.name ?? 'lỗi mạng'}`);
       return;
     }
-    if (response.status === 401) return notice('rejected', 'Hub không nhận khoá của Tháp (sai, hết hạn 30 ngày hay đã thu hồi). Tạo khoá mới ở web, thẻ "Khoá cho Tháp trên máy", rồi dán vào cấu hình kênh.');
+    if (response.status === 401) return notice('rejected', 'Hub không nhận khoá của Tháp (sai, hết hạn 30 ngày hay đã thu hồi). Tạo khoá mới ở web, thẻ "Khoá cho Tháp trên máy", rồi ở phiên này gõ /plugin, tab Installed, Tỉnh NhiLe, Configure options, dán vào ô Khoá cho Tháp; rồi đóng cửa sổ Tháp và mở lại bằng lối tắt Tháp tỉnh NhiLe.');
     if (response.status === 403) return notice('not_allowed', 'Người dùng không còn trong danh sách được dùng hệ. Kênh Tháp dừng đọc.');
     if (!response.ok) {
       log(`hub trả ${response.status}`);

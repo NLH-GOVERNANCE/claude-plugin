@@ -112,7 +112,7 @@ describe('hàm thuần của kênh tower', () => {
     const again = nextEntries(first.state, [entry('b', '2026-10-18T05:01:00.000Z'), entry('c', '2026-10-18T05:02:00.000Z')]);
     assert.deepEqual(again.fresh.map((item) => item.id), ['c']);
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z'), 'https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z');
-    assert.equal(feedUrl('https://x.nlh.vn', null, Date.parse('2026-10-18T05:00:00Z')), 'https://x.nlh.vn/tower/feed?since=2026-10-17T05%3A00%3A00.000Z');
+    assert.equal(feedUrl('https://x.nlh.vn', null, Date.parse('2026-10-18T05:00:00Z')), 'https://x.nlh.vn/tower/feed?since=2026-10-18T04%3A59%3A00.000Z');
   });
 });
 
@@ -252,6 +252,7 @@ describe('server kênh tower chạy thật qua stdio', () => {
     const noKey = open(stateDir(), { TOWER_KEY: '' });
     await until(() => noKey.pushed().length >= 1);
     assert.match(noKey.pushed()[0].content, /chưa có khoá/);
+    assert.match(noKey.pushed()[0].content, /\/plugin, tab Installed, Tỉnh NhiLe, Configure options/);
     assert.equal(requests.length, 0);
     await noKey.close();
 
@@ -285,9 +286,9 @@ describe('plugin.json và Thap.cmd', () => {
     const cmd = readFileSync(join(root, 'Thap.cmd'), 'utf8');
     assert.match(cmd, /\r\n/, 'file .cmd dùng CRLF');
     assert.match(cmd, /^set NLH_TOWER=1\r$/m);
-    assert.match(cmd, /claude -n "Thap truc" --model sonnet/);
-    assert.match(cmd, /--dangerously-load-development-channels plugin:tinh-nlh@nlh-governance /);
-    assert.match(cmd, /"\/loop 10m \/tinh-nlh:thap"/);
+    // Câu mở đầu đứng trước cờ kênh: cờ nhận nhiều giá trị, câu đứng sau bị hiểu là tên kênh và Claude thoát ngay.
+    assert.match(cmd, /^claude "\/loop 10m \/tinh-nlh:thap" -n "Thap truc" --model sonnet --dangerously-load-development-channels plugin:tinh-nlh@nlh-governance\r$/m);
+    assert.match(cmd, /^if errorlevel 1 pause\r$/m, 'lỗi thì giữ cửa sổ');
     assert.doesNotMatch(cmd, /skip-permissions|bypassPermissions|TOWER_KEY/);
     assert.match(cmd, /^[\x00-\x7f]*$/, 'cmd chỉ ký tự ASCII');
     assert.match(cmd, /powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\\tower-window\.ps1"\r\nrem [^\r]*\r\nset NLH_TOWER=1/);
