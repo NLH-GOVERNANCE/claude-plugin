@@ -29,7 +29,7 @@ Nhận ngồi một ô, hay đổi sang phiếu khác: gọi `report_session` v�
 
 ## Lưu chat
 
-Ở Claude Code và Cowork, hook của plugin tự gửi từng lượt (lời người dùng, câu trả lời của Claude) về kho chat của công ty; không gửi kết quả công cụ. Kho nằm ngoài sổ, giữ 180 ngày; hệ tự che số tài khoản, giấy tờ, điện thoại, email, và không lưu nguyên văn lượt có khoá, token hay nói về tiền, hợp đồng, nhân sự, khách hàng, trẻ em (Danh ký). Chỉ chính người dùng đọc lại. Người dùng muốn xoá chat của một phiên thì hỏi lại một câu cho chắc, rồi gọi `delete_chat`. Xong một việc thì gọi `save_chat` với `role` `summary`: vài câu đã làm gì, kết quả, còn gì. Ở app Claude trên web và điện thoại (không có hook) thì chỉ lưu bản tóm tắt đó. Người dùng gõ `/khongluu` thì cả phiên thôi lưu.
+Ở Claude Code và Cowork, hook của plugin tự gửi từng lượt (lời người dùng, câu trả lời của Claude) về kho chat của công ty; không gửi kết quả công cụ. Kho nằm ngoài sổ, chỉ nhận chat của phiên đã báo đang ngồi một ô (mục Báo phiên), chưa tự xoá cho tới khi Danh đặt hạn; hệ tự che số tài khoản, giấy tờ, điện thoại, email, và không lưu nguyên văn lượt có khoá, token hay nói về tiền, hợp đồng, nhân sự, khách hàng, trẻ em (Danh ký). Chỉ chính người dùng đọc lại. Người dùng muốn xoá chat của một phiên thì hỏi lại một câu cho chắc, rồi gọi `delete_chat`. Xong một việc thì gọi `save_chat` với `role` `summary`: vài câu đã làm gì, kết quả, còn gì. Ở app Claude trên web và điện thoại (không có hook) thì chỉ lưu bản tóm tắt đó. Người dùng gõ `/khongluu` thì cả phiên thôi lưu.
 
 ## Người mới
 
