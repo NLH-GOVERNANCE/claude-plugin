@@ -270,6 +270,7 @@ describe('plugin.json và Thap.cmd', () => {
     assert.match(ps, /GetFolderPath\('Desktop'\)/);
     assert.match(ps, /Join-Path \(Split-Path \$PSScriptRoot -Parent\) 'Thap\.cmd'/);
     assert.match(ps, /if \(-not \(Test-Path -LiteralPath \$link\)\)/, 'có rồi thì không ghi đè');
+    assert.match(ps, /CreateShortcut\(\$temp\)[\s\S]*Move-Item -LiteralPath \$temp -Destination \$link/, 'lưu tên tạm ASCII rồi đổi tên: WScript.Shell không lưu được tên có chữ "ỉ"');
     assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i);
   });
 });

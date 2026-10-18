@@ -10,12 +10,14 @@ $message = 'Tháp đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này.'
 $desktop = [Environment]::GetFolderPath('Desktop')
 $link = Join-Path $desktop "$name.lnk"
 if (-not (Test-Path -LiteralPath $link)) {
+  # WScript.Shell khong luu duoc ten file co chu ngoai bang ma cua may (chu "ỉ"): luu ten tam bang chu ASCII, roi doi ten.
+  $temp = Join-Path $desktop ("tower-" + [guid]::NewGuid().ToString('N') + '.lnk')
   $shell = New-Object -ComObject WScript.Shell
-  $shortcut = $shell.CreateShortcut($link)
+  $shortcut = $shell.CreateShortcut($temp)
   $shortcut.TargetPath = $Target
   $shortcut.WorkingDirectory = Split-Path $Target -Parent
-  $shortcut.Description = $message
   $shortcut.Save()
+  Move-Item -LiteralPath $temp -Destination $link
 }
 
 $Host.UI.RawUI.WindowTitle = $name
