@@ -2,11 +2,22 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|clear",
+        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"Plugin tinh-nlh (tỉnh NhiLe) đang bật. Đầu phiên, Claude gọi my_work của connector NhiLe Governance và tóm tắt việc đang chờ người dùng bằng lời thường trước khi làm việc khác.\""
+            "command": "echo \"Plugin tinh-nlh (tỉnh NhiLe) đang bật. Câu đầu của phiên, trước khi làm việc khác: gọi my_context của connector NhiLe Governance một lần (người dùng là ai, ô của họ, dự án đang dở, việc đang chờ, việc đã giao), rồi tóm tắt việc đang chờ người dùng bằng lời thường. Người dùng hỏi đang làm gì dở thì trả lời từ chính kết quả đó, không tra thêm.\""
+          }
+        ]
+      },
+      {
+        "matcher": "clear|compact",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:tinh-nlh:nhile-governance",
+            "tool": "my_context",
+            "timeout": 30
           }
         ]
       }

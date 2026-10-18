@@ -1,6 +1,6 @@
 ---
 name: tinh-nlh
-description: Cách làm việc trong tỉnh NhiLe (NhiLe Governance, tỉnh NLH). Dùng ở đầu mỗi phiên; khi người dùng nhắc tới việc, phiếu, ô, hộp việc, giao việc, làm tiếp, ký, bảng chung, hay nói "tôi mới vào"; khi người dùng nói dừng, chuyển việc, hay phiên sắp hết; và khi người dùng góp ý, nói vướng, khó dùng hay than phiền về hệ.
+description: Cách làm việc trong tỉnh NhiLe (NhiLe Governance, tỉnh NLH). Dùng ở câu đầu mỗi cuộc trò chuyện, kể cả trên web và điện thoại, để nạp bối cảnh của người dùng; khi người dùng hỏi "tôi đang làm gì dở", "tới đâu rồi"; khi người dùng nhắc tới việc, phiếu, ô, hộp việc, giao việc, làm tiếp, ký, bảng chung, hay nói "tôi mới vào"; khi người dùng nói dừng, chuyển việc, hay phiên sắp hết; và khi người dùng góp ý, nói vướng, khó dùng hay than phiền về hệ.
 ---
 
 # Làm việc trong tỉnh NhiLe
@@ -11,11 +11,15 @@ Hệ là trung tâm. Plugin này chỉ là cửa mỏng: nó không chứa luậ
 
 Trước khi làm gì khác:
 
-1. Gọi `my_work`.
+1. Gọi `my_context` một lần: người dùng là ai, ô của họ, dự án đang dở kèm dòng sổ tay mới nhất, việc đang chờ, việc đã giao, mục lục quyết định đã ký. Ở Claude Code và Cowork, hook đầu phiên đã nạp sẵn kết quả này sau `/clear` hay khi gọn ngữ cảnh: có rồi thì không gọi lại.
 2. Tóm tắt bằng lời thường, vài câu ngắn:
    - việc đang chờ người dùng (ký, trả lời, quyết);
    - việc người dùng đã giao đang tới đâu: ai đang giữ, đã có biên nhận chưa, còn chờ gì.
 3. Không có gì thì nói một câu "Hôm nay chưa có việc chờ bạn", rồi làm điều người dùng hỏi.
+
+Người dùng hỏi "tôi đang làm gì dở", "tới đâu rồi": trả lời ngay từ bối cảnh đó, ba dòng (chờ bạn, đang chạy, lần trước dừng ở đâu), không hỏi lại, không tra thêm. Cần chi tiết mới mở: `show_ticket` cho một phiếu, `get_cell` với `path` cho một file của ô, `continue_work` cho sổ tay dài hơn.
+
+Bối cảnh chỉ có dữ liệu loại 1–2 theo bảng mức nhạy Danh đã ký. Claude đăng nhập bằng tài khoản cá nhân thì không mở hay chép vào cuộc trò chuyện dữ liệu loại 3–4 (tài chính, hợp đồng, nhân sự, tin nhóm, bộ não từng người, tên học viên, khách, trẻ em).
 
 Chưa đăng nhập connector thì chỉ người dùng mở Customize, mục Plugins, plugin Tỉnh NhiLe, tab Connectors, bấm Connect, đăng nhập bằng email công ty. Không bao giờ xin mật khẩu, token hay khoá trong chat.
 
@@ -45,4 +49,4 @@ Lệnh chỉ là lối tắt; người dùng nói câu thường cũng được.
 - `/tinh-nlh:bangiao`: ghi bàn giao ngay.
 - `/tinh-nlh:ky`: phiếu đang chờ người dùng ký.
 
-Trên app Claude và điện thoại, hook đầu phiên không chạy: người dùng gõ `/viec` (hay nói "xem việc của tôi") để xem việc. Không hứa "mở chat là thấy việc".
+Trên app Claude và điện thoại, hook đầu phiên không chạy: skill này dặn gọi `my_context` ở câu đầu; người dùng cũng gõ `/viec` (hay nói "xem việc của tôi") được. Không hứa "mở chat là thấy việc".
