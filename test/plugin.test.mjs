@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 import { pluginFiles, pluginZip } from '../scripts/plugin-zip.mjs';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -21,10 +22,11 @@ function filesUnder(dir) {
 
 // Dòng đầu (frontmatter) của file Markdown: các cặp khoá: giá trị giữa hai dòng ---.
 function frontMatter(path) {
-  const match = readFileSync(path, 'utf8').match(/^---\n([\s\S]*?)\n---\n/);
+  // Bản sao trên Windows có thể xuống dòng CRLF.
+  const match = readFileSync(path, 'utf8').match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   assert.ok(match, `${relative(root, path)} thiếu frontmatter`);
   return Object.fromEntries(
-    match[1].split('\n').map((line) => {
+    match[1].split(/\r?\n/).map((line) => {
       const at = line.indexOf(':');
       return [line.slice(0, at).trim(), line.slice(at + 1).trim()];
     }),
@@ -87,11 +89,11 @@ describe('plugin tinh-nlh', () => {
     }
   });
 
-  test('skill tinh-nlh và sáu lệnh viec, giao, lamtiep, bangiao, ky, khongluu có mô tả', () => {
+  test('skill tinh-nlh và bảy lệnh viec, giao, lamtiep, bangiao, ky, khongluu, batthap có mô tả', () => {
     const skill = frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md'));
     assert.equal(skill.name, 'tinh-nlh');
     assert.ok(skill.description);
-    const commands = ['bangiao', 'giao', 'khongluu', 'ky', 'lamtiep', 'viec'];
+    const commands = ['bangiao', 'batthap', 'giao', 'khongluu', 'ky', 'lamtiep', 'viec'];
     assert.deepEqual(readdirSync(join(pluginDir, 'commands')).sort(), commands.map((name) => `${name}.md`));
     for (const name of commands) assert.ok(frontMatter(join(pluginDir, `commands/${name}.md`)).description);
   });

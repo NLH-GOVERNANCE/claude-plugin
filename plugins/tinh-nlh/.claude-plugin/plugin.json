@@ -1,7 +1,7 @@
 {
   "name": "tinh-nlh",
   "displayName": "Tỉnh NhiLe",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Cửa vào NhiLe Governance (tỉnh NhiLe) trong Claude: xem việc đang chờ và việc mình đã giao (gõ /viec; Claude Code và Cowork tự kể khi mở phiên), giao việc cho một ô, ký phiếu. Luật và ô đọc từ hệ sau khi đăng nhập, plugin không chép.",
   "author": {
     "name": "NhiLe Holding"
@@ -32,7 +32,7 @@
         "tower_key": {
           "type": "string",
           "title": "Khoá cho Tháp",
-          "description": "Khoá tạo ở web tỉnh NhiLe: Kết nối, thẻ \"Khoá cho Tháp trên máy\". Chỉ đọc việc của chính bạn, hạn 30 ngày. Chỉ cần ở máy chạy Thap.cmd; máy khác để trống.",
+          "description": "Khoá tạo ở web tỉnh NhiLe: Kết nối, thẻ \"Khoá cho Tháp trên máy\". Chỉ đọc việc của chính bạn, hạn 30 ngày. Để trống: biểu tượng Tháp tỉnh NhiLe hỏi khoá trong ô nhập ẩn chữ.",
           "sensitive": true
         },
         "hub_origin": {
