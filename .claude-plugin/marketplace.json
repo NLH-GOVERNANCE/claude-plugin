@@ -1,0 +1,14 @@
+{
+  "name": "nlh-governance",
+  "description": "Plugin của NhiLe Governance (tỉnh NhiLe) cho Claude",
+  "owner": {
+    "name": "NhiLe Holding"
+  },
+  "plugins": [
+    {
+      "name": "tinh-nlh",
+      "source": "./plugins/tinh-nlh",
+      "description": "Mở Claude là thấy việc của mình trong tỉnh NhiLe: hộp việc, giao việc cho ô, ký"
+    }
+  ]
+}
