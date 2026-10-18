@@ -54,7 +54,8 @@
               "session_id": "${session_id}",
               "role": "assistant",
               "text": "${last_assistant_message}"
-            }
+            },
+            "timeout": 5
           }
         ]
       }
@@ -85,7 +86,8 @@
               "session_id": "${session_id}",
               "role": "user",
               "text": "${prompt}"
-            }
+            },
+            "timeout": 5
           }
         ]
       }
