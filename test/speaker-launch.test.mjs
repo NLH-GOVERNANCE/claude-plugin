@@ -70,7 +70,11 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /'https:\/\/claude\.ai\/install\.ps1'/);
     assert.match(ps, /\$base = 'https:\/\/nodejs\.org\/dist\/latest-v22\.x'/);
     assert.match(ps, /Get-FileHash -LiteralPath \$part -Algorithm SHA256/);
-    assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i);
+    assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i, 'tự mở đặt ở setup, không ở lối mở');
+    // Giữ máy thức khi Loa mở; kênh hỏng thì mở lại không cờ, chỉ nhịp 10 phút, in một dòng (phiếu 98bd8b93).
+    assert.match(ps, /SetThreadExecutionState\(\[uint32\]'0x80000001'\)/);
+    assert.match(ps, /\$fallback = \$arguments\[0\.\.\(\$arguments\.Count - 3\)\]/);
+    assert.match(ps, /Kênh báo nhanh chưa mở được\. Loa vẫn chạy, mỗi 10 phút xem việc một lần\./);
   });
 
   test('start.sh (macOS): khoá ô ẩn chữ vào Keychain qua stdin của security, đúng mục kênh đọc; cùng cách mở Claude như Windows', () => {
@@ -88,7 +92,10 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.doesNotMatch(sh, /export NLH_TOWER|skip-permissions|bypassPermissions/);
     assert.match(sh, /curl -fsSL https:\/\/claude\.ai\/install\.sh \| bash/);
     assert.match(sh, /shasum -a 256 "\$part"/);
-    assert.doesNotMatch(sh, /LaunchAgents|launchctl|crontab/);
+    assert.doesNotMatch(sh, /LaunchAgents|launchctl|crontab/, 'tự mở đặt ở setup, không ở lối mở');
+    assert.match(sh, /\/usr\/bin\/caffeinate -i -w \$\$ &/);
+    assert.match(sh, /"\$CLAUDE" "\$\{@:1:\$#-2\}"/);
+    assert.match(sh, /Kênh báo nhanh chưa mở được\. Loa vẫn chạy, mỗi 10 phút xem việc một lần\./);
   });
 
   test('setup.ps1 và setup.sh: biểu tượng "Loa tỉnh NhiLe" trên Desktop; đã có lối tắt cùng tên trỏ chỗ khác thì giữ nguyên', () => {
@@ -98,6 +105,13 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps.toString('utf8'), /giữ nguyên lối tắt đó/);
     const sh = read('speaker/setup.sh');
     assert.match(sh, /name='Loa tỉnh NhiLe'/);
+    // Tự mở khi đăng nhập máy: tác vụ của chính người dùng, không cần quyền quản trị (phiếu 98bd8b93, dòng 4b62d007).
+    const setupPs = ps.toString('utf8');
+    assert.match(setupPs, /New-ScheduledTaskTrigger -AtLogOn -User \$user/);
+    assert.match(setupPs, /-LogonType Interactive -RunLevel Limited/);
+    assert.match(setupPs, /Register-ScheduledTask -TaskName \$name /);
+    assert.match(setupPs, /if \(-not \$NoAutostart\)/);
+    assert.match(sh, /vn\.nlh\.tinh-nlh\.speaker\.plist/);
     assert.match(sh, /link="\$DESKTOP\/\$name\.command"/);
     assert.match(sh, /giữ nguyên lối tắt đó/);
   });
@@ -149,6 +163,8 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     assert.match(first.stdout, /Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn./);
     const dir = join(home, '.tinh-nlh/speaker');
     const dry = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN '));
+    const fallbackLine = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN-FALLBACK '));
+    assert.deepEqual(fallbackLine.split(' | ').slice(1), CLAUDE_ARGS.slice(0, -2).map((arg) => (arg === '<config>' ? `${posix(join(home, '.tinh-nlh/speaker'))}/speaker-mcp.json` : arg)));
     assert.deepEqual(dry.split(' | ').slice(1), CLAUDE_ARGS.map((arg) => (arg === '<config>' ? `${posix(dir)}/speaker-mcp.json` : arg)));
     assert.equal(readFileSync(join(dir, 'speaker.mjs'), 'utf8'), read('speaker/speaker.mjs'));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
@@ -177,7 +193,7 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     const desktop = join(home, 'Desktop');
     mkdirSync(desktop);
     const setup = (dir) =>
-      spawnSync(bash, [posix(join(plugin, 'speaker/setup.sh'))], { encoding: 'utf8', env: { ...process.env, HOME: posix(home), SPEAKER_DIR: posix(dir), SPEAKER_DESKTOP: posix(desktop) } });
+      spawnSync(bash, [posix(join(plugin, 'speaker/setup.sh'))], { encoding: 'utf8', env: { ...process.env, HOME: posix(home), SPEAKER_DIR: posix(dir), SPEAKER_DESKTOP: posix(desktop), SPEAKER_AGENTS: posix(join(home, 'Agents')) } });
     const dir = join(home, '.tinh-nlh/speaker');
     // Biểu tượng cũ trước khi đổi tên Loa, trỏ tới lối mở của chính mình: setup tự bỏ, người dùng không phải xoá tay.
     const old = join(desktop, 'Tháp tỉnh NhiLe.command');
@@ -187,6 +203,10 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     assert.match(done.stdout, /Đã bỏ biểu tượng cũ Tháp tỉnh NhiLe\./);
     assert.ok(!existsSync(old));
     assert.match(done.stdout, /Đã có biểu tượng Loa tỉnh NhiLe trên màn hình chính\./);
+    assert.match(done.stdout, /Loa sẽ tự mở mỗi khi bạn đăng nhập máy\./);
+    const agent = readFileSync(join(home, 'Agents', 'vn.nlh.tinh-nlh.speaker.plist'), 'utf8');
+    assert.match(agent, /<key>RunAtLoad<\/key><true\/>/);
+    assert.ok(agent.includes(`<string>/usr/bin/open</string><string>-a</string><string>Terminal</string><string>${posix(dir)}/start.sh</string>`));
     const link = join(desktop, 'Loa tỉnh NhiLe.command');
     assert.match(readFileSync(link, 'utf8'), new RegExp(`exec /bin/bash "${posix(dir)}/start\\.sh"`));
     assert.equal(readFileSync(join(dir, 'start.sh'), 'utf8'), read('speaker/start.sh'));
@@ -215,7 +235,7 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     const desktop = join(home, 'Desktop');
     mkdirSync(desktop);
     const dir = join(home, '.tinh-nlh', 'speaker');
-    const done = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
+    const done = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
     assert.equal(done.status, 0, done.stdout + done.stderr);
     assert.match(done.stdout, /Đã có biểu tượng Loa tỉnh NhiLe trên màn hình chính\./);
     const link = join(desktop, 'Loa tỉnh NhiLe.lnk');
@@ -232,24 +252,24 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     assert.ok(readFileSync(join(dir, 'start.ps1')).equals(readFileSync(join(plugin, 'speaker/start.ps1'))));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
     // Lối tắt cùng tên trỏ tới bản Loa cũ của mình (~\.tinh-nlh) thì thay; không đọc được (của người khác) thì giữ.
-    const older = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', join(home, '.tinh-nlh', 'cu'), '-Desktop', desktop]);
+    const older = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', join(home, '.tinh-nlh', 'cu'), '-Desktop', desktop, '-NoAutostart']);
     assert.match(older.stdout, /Đã có biểu tượng Loa tỉnh NhiLe/);
     assert.match(target(), /\\\.tinh-nlh\\cu\\start\.ps1/, 'thay lối tắt Loa cũ của mình');
-    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
+    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
     assert.match(target(), /\\\.tinh-nlh\\speaker\\start\.ps1/);
 
     // Lối tắt cũ "Tháp tỉnh NhiLe" trỏ tới ~.tinh-nlh (bản trước khi đổi tên Loa): setup tự bỏ. Lối tắt cũ không đọc được
     // (không phải của mình) thì giữ.
     const old = join(desktop, 'Tháp tỉnh NhiLe.lnk');
     cpSync(link, old);
-    const replaced = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
+    const replaced = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
     assert.match(replaced.stdout, /Đã bỏ biểu tượng cũ Tháp tỉnh NhiLe\./);
     assert.ok(!existsSync(old));
     writeFileSync(old, 'không phải lối tắt');
-    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
+    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
     assert.ok(existsSync(old), 'không bỏ lối tắt không phải của mình');
     writeFileSync(link, 'không phải lối tắt');
-    assert.match(ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]).stdout, /giữ nguyên lối tắt đó/);
+    assert.match(ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']).stdout, /giữ nguyên lối tắt đó/);
   });
 
   test('start.ps1: khoá ở chỗ cũ (~/.tinh-nlh/thap, Thap.cmd) thì chép sang, không hỏi; viết cấu hình kênh; câu lệnh mở Claude đúng', () => {
@@ -275,6 +295,8 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
     const dry = run.stdout.split(/\r?\n/).find((line) => line.startsWith('DRYRUN '));
     assert.equal(dry, `DRYRUN ${join(home, '.local', 'bin', 'claude.exe')} ${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? join(dir, 'speaker-mcp.json') : arg)).join(' | ')}`);
+    const fallback = run.stdout.split(/\r?\n/).find((line) => line.startsWith('DRYRUN-FALLBACK '));
+    assert.equal(fallback, `DRYRUN-FALLBACK ${join(home, '.local', 'bin', 'claude.exe')} ${CLAUDE_ARGS.slice(0, -2).map((arg) => (arg === '<config>' ? join(dir, 'speaker-mcp.json') : arg)).join(' | ')}`);
     const raw = readFileSync(join(dir, 'speaker-mcp.json'));
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { speaker: tower } = JSON.parse(raw.toString('utf8')).mcpServers;
