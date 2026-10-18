@@ -2,10 +2,13 @@
 # ~\.tinh-nlh\speaker (a fixed place plugin updates do not wipe), then makes the "Loa tỉnh NhiLe" desktop shortcut.
 # A shortcut of the same name pointing elsewhere is kept. The old "Tháp tỉnh NhiLe" shortcut that pointed to Loa's
 # earlier launcher (~\.tinh-nlh, or Thap.cmd of a repo clone) is removed, so nobody deletes it by hand. Never asks for the
-# key: the first double-click does. File saved as UTF-8 with BOM for PowerShell 5.1.
+# key: the first double-click does. Registers a per-user scheduled task so Loa opens by itself at login (ticket
+# 98bd8b93, line 4b62d007 point 3). File saved as UTF-8 with BOM for PowerShell 5.1.
 param(
   [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\speaker'),
-  [string]$Desktop = [Environment]::GetFolderPath('Desktop')
+  [string]$Desktop = [Environment]::GetFolderPath('Desktop'),
+  # Tests only: do not register the login task.
+  [switch]$NoAutostart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +27,21 @@ $oldName = 'Tháp tỉnh NhiLe'
 $link = Join-Path $Desktop "$name.lnk"
 $launcher = Join-Path $Dir 'start.ps1'
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+# Open Loa at every login of this Windows account: a scheduled task of the user's own, no admin rights, visible window.
+# Registering again replaces it, so running "bật Loa" twice is fine.
+if (-not $NoAutostart) {
+  try {
+    $user = "$env:USERDOMAIN\$env:USERNAME"
+    $action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`"" -WorkingDirectory $Dir
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+    $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+    Write-Output 'Loa sẽ tự mở mỗi khi bạn đăng nhập máy.'
+  } catch {
+    Write-Output 'Chưa đặt được Loa tự mở khi đăng nhập; mỗi lần bật máy, bấm đúp biểu tượng Loa.'
+  }
+}
 # WScript.Shell drops characters outside the machine code page ("ỉ" in the shortcut name, user names like "Thùy ỉ" in
 # paths) and cannot save. So shortcuts are read and written through Windows IShellLinkW, the Unicode interface.
 Add-Type -TypeDefinition @'

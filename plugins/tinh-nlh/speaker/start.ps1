@@ -156,11 +156,28 @@ if (-not (Test-Path -LiteralPath $opened)) {
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
 $arguments = @('/loop 10m /tinh-nlh:speaker', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
+# Fallback without the dev channel flag: the server still reads the hub, resumes and opens sessions; only sends wait
+# for the 10-minute loop.
+$fallback = $arguments[0..($arguments.Count - 3)]
 if ($DryRun) {
   Write-Host "DRYRUN $claude $($arguments -join ' | ')"
+  Write-Host "DRYRUN-FALLBACK $claude $($fallback -join ' | ')"
   exit 0
 }
 Set-Content -LiteralPath $opened -Value (Get-Date -Format o) -Encoding ascii
+# Keep the machine awake while Loa is open (ES_CONTINUOUS | ES_SYSTEM_REQUIRED on this process, which waits for Claude);
+# it ends by itself when the window closes. The screen may still turn off.
+try {
+  Add-Type -Namespace Loa -Name Power -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);'
+  [Loa.Power]::SetThreadExecutionState([uint32]'0x80000001') | Out-Null
+} catch { }
 # The opening prompt goes before the flags: the channel flag takes several values, a prompt after it reads as a name.
+$started = Get-Date
 & $claude @arguments
+# Claude quit within a minute (channel refused, or the channel dialog declined): run again without the channel.
+if ($LASTEXITCODE -and ((Get-Date) - $started).TotalSeconds -lt 60) {
+  Write-Host ''
+  Write-Host 'Kênh báo nhanh chưa mở được. Loa vẫn chạy, mỗi 10 phút xem việc một lần.'
+  & $claude @fallback
+}
 if ($LASTEXITCODE) { Stop-Loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.' }

@@ -143,8 +143,19 @@ if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
   printf '\n'
+  printf 'DRYRUN-FALLBACK %s' "$CLAUDE"
+  printf ' | %s' "${@:1:$#-2}"
+  printf '\n'
   exit 0
 fi
 date -u +%Y-%m-%dT%H:%M:%SZ > "$DIR/opened.txt"
+# Keep the machine awake while Loa is open; caffeinate ends with this shell. The screen may still turn off.
+[ -x /usr/bin/caffeinate ] && /usr/bin/caffeinate -i -w $$ &
 # The opening prompt goes before the flags: the channel flag takes several values, a prompt after it reads as a name.
-"$CLAUDE" "$@" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
+started=$(date +%s)
+if ! "$CLAUDE" "$@"; then
+  # Claude quit within a minute (channel refused, or the channel dialog declined): run again without the channel.
+  [ $(( $(date +%s) - started )) -lt 60 ] || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
+  printf '\n%s\n' 'Kênh báo nhanh chưa mở được. Loa vẫn chạy, mỗi 10 phút xem việc một lần.'
+  "$CLAUDE" "${@:1:$#-2}" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
+fi
