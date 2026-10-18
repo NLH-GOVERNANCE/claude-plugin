@@ -8,7 +8,7 @@ Gói gồm:
 - skill `tinh-nlh`: câu đầu mỗi cuộc trò chuyện gọi `my_context` (bối cảnh của mình: ô, dự án đang dở, việc đang chờ, việc đã giao), tóm tắt bằng lời thường;
 - năm lệnh: `/tinh-nlh:viec` (hộp việc), `/tinh-nlh:giao` (giao việc cho một ô), `/tinh-nlh:lamtiep` (làm tiếp một việc), `/tinh-nlh:bangiao` (ghi bàn giao), `/tinh-nlh:ky` (phiếu chờ ký). Trên app Claude và điện thoại, gõ `/viec`, `/giao`, `/ky` (hay nói "xem việc của tôi", "giao việc", "tôi ký");
 - kênh `tower` (chỉ Claude Code, chỉ khi mở bằng `Thap.cmd`): server trên máy đọc việc mới của chính người dùng từ hub mỗi 15 giây bằng khoá riêng có hạn, đẩy vào phiên Tháp hệ thống; skill `thap` dặn phiên đó chuyển việc tới đúng phiên đang ngồi ô. Cách bật: README ở gốc repo, mục "Tháp hệ thống trên máy";
-- hook đầu phiên (chỉ chạy ở Claude Code và Cowork): lúc mở phiên in một câu dặn Claude gọi `my_context` trước; sau `/clear` hay khi gọn ngữ cảnh thì gọi thẳng `my_context` qua connector đã đăng nhập và nạp kết quả vào phiên. Hook không tự gọi mạng, không giữ token.
+- hook (chỉ chạy ở Claude Code và Cowork): lúc mở phiên in một câu dặn Claude gọi `my_context` trước, kèm mã và tên của phiên; sau `/clear` hay khi gọn ngữ cảnh thì gọi thẳng `my_context` qua connector đã đăng nhập và nạp kết quả vào phiên; cuối mỗi lượt và lúc đóng phiên, Claude Code gọi `report_session` của connector với mã phiên và trạng thái, để Tháp trên máy biết phiên nào đang ngồi ô nào (phiên tự báo). Hook không giữ token, không gửi nội dung chat.
 
 Plugin không chứa secret, không chép luật hay ô: mọi thứ đọc từ hệ sau khi đăng nhập. Plugin không tạo việc định kỳ; muốn ô làm việc cả khi không mở Claude thì bật thêm việc định kỳ hay máy dự phòng.
 

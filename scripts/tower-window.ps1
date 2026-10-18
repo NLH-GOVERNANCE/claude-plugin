@@ -16,8 +16,13 @@ if (-not (Test-Path -LiteralPath $link)) {
   $shortcut = $shell.CreateShortcut($temp)
   $shortcut.TargetPath = $Target
   $shortcut.WorkingDirectory = Split-Path $Target -Parent
-  $shortcut.Save()
-  Move-Item -LiteralPath $temp -Destination $link
+  try {
+    $shortcut.Save()
+    Move-Item -LiteralPath $temp -Destination $link
+  } finally {
+    # Doi ten hong (vi du loi tat vua duoc tao o cua so khac) thi khong de file tam lai tren Desktop.
+    Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+  }
 }
 
 $Host.UI.RawUI.WindowTitle = $name

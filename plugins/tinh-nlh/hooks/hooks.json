@@ -11,6 +11,18 @@
         ]
       },
       {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs"
+            ]
+          }
+        ]
+      },
+      {
         "matcher": "clear|compact",
         "hooks": [
           {
@@ -18,6 +30,36 @@
             "server": "plugin:tinh-nlh:nhile-governance",
             "tool": "my_context",
             "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:tinh-nlh:nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:tinh-nlh:nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
           }
         ]
       }

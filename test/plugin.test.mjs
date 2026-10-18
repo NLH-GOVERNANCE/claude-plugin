@@ -61,18 +61,30 @@ describe('plugin tinh-nlh', () => {
     assert.deepEqual(servers[0], { type: 'http', url: 'https://governance.nlh.vn/mcp' });
   });
 
-  test('hook đầu phiên (phiếu 1409ab1f): lúc mở chỉ in một câu dặn gọi my_context; sau /clear hay gọn ngữ cảnh gọi my_context qua connector của plugin', () => {
+  test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
-    assert.deepEqual(Object.keys(hooks), ['SessionStart']);
+    assert.deepEqual(Object.keys(hooks).sort(), ['SessionEnd', 'SessionStart', 'Stop']);
     const byMatcher = Object.fromEntries(hooks.SessionStart.map((group) => [group.matcher, group.hooks]));
-    assert.deepEqual(Object.keys(byMatcher).sort(), ['clear|compact', 'startup']);
+    assert.deepEqual(Object.keys(byMatcher).sort(), ['clear|compact', 'startup', 'startup|clear']);
     // Lúc mở phiên, hook mcp_tool bị bỏ qua (máy chủ MCP chưa nối), nên chỉ in lời dặn; echo không gọi mạng.
     assert.equal(byMatcher.startup.length, 1);
     assert.equal(byMatcher.startup[0].type, 'command');
     assert.match(byMatcher.startup[0].command, /^echo "[^"$`]+my_context[^"$`]+"$/);
+    assert.deepEqual(byMatcher['startup|clear'], [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] }]);
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
     // Sau /clear hay gọn ngữ cảnh: gọi thẳng công cụ, đúng tên máy chủ có phạm vi plugin, không truyền gì thêm.
     const [server] = Object.keys(readJson('plugins/tinh-nlh/.mcp.json').mcpServers);
     assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:tinh-nlh:${server}`, tool: 'my_context', timeout: 30 }]);
+    // Phiên tự báo (phiếu 6d4cb2ad): gọi report_session của connector, không gửi nội dung chat.
+    for (const [event, status] of [['Stop', 'idle'], ['SessionEnd', 'stopped']]) {
+      const [hook] = hooks[event].flatMap((group) => group.hooks);
+      assert.deepEqual(hook, {
+        type: 'mcp_tool',
+        server: 'plugin:tinh-nlh:nhile-governance',
+        tool: 'report_session',
+        input: { session_id: '${session_id}', status },
+      });
+    }
   });
 
   test('skill tinh-nlh và năm lệnh viec, giao, lamtiep, bangiao, ky có mô tả', () => {
