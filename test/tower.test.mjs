@@ -389,4 +389,19 @@ describe('lời dặn Tháp: tìm phiên đang ngồi ô trước rồi mới m�
     const sessions = [{ session_id: 's-cto', session_name: 'Ô CTO (son/cto)', cell: 'dai-dien-kien-truc-son', status: 'idle' }];
     assert.deepEqual(seatedSession(sessions, { cell: 'dai-dien-kien-truc-son' }), { name: 'Ô CTO (son/cto)', id: 's-cto' });
   });
+
+  test('phiên ô đặt tên dạng người/ô ngay từ đầu; hook nhắc đổi tên khi tên có @', async () => {
+    const own = readFileSync(join(root, 'plugins/tinh-nlh/skills/tinh-nlh/SKILL.md'), 'utf8').replace(/\r/g, '');
+    assert.match(own, /Tên phiên ngồi ô dạng "Ô <tên hiển thị> \(<người>\/<tên gọi>\)", ví dụ "Ô CTO \(son\/cto\)": không dùng `@`/);
+    const run = (title) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(root, 'plugins/tinh-nlh/hooks/session-start.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end(JSON.stringify({ session_id: 'abc', session_title: title }));
+      });
+    assert.match(await run('Ô CTO (son@cto) trên máy anh Sơn'), /Tên phiên có @ nên Tháp không gửi việc tới được: nhắc người dùng đổi tên dạng "Ô CTO \(son\/cto\)"\.\n$/);
+    assert.doesNotMatch(await run('Ô CTO (son/cto) trên máy anh Sơn'), /Tên phiên có @/);
+  });
 });

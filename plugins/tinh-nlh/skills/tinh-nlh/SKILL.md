@@ -29,7 +29,7 @@ Chưa đăng nhập connector thì chỉ người dùng mở Customize, mục Pl
 
 ## Báo phiên (khi ngồi ô)
 
-Nhận ngồi một ô, hay đổi sang phiếu khác: gọi `report_session` với `session_id`, `session_name`, `cell` (tên ô trong sổ như `dai-dien-kien-truc-son`, không phải tên gọi `cto`), `ticket_id`, để Tháp trên máy chuyển việc của ô đó tới đúng phiên này. Mã và tên phiên lấy từ dòng đầu phiên "Phiên này: mã …, tên …". Không có dòng đó (app Claude trên web, điện thoại): tự đặt một mã ngắn giữ suốt phiên, tên dạng "Ô CTO (son/cto)" (không dùng `@`: Tháp không gửi tin được tới tên có `@`). Thôi ngồi ô thì báo `status` `stopped`. Không báo nội dung chat.
+Nhận ngồi một ô, hay đổi sang phiếu khác: gọi `report_session` với `session_id`, `session_name`, `cell` (tên ô trong sổ như `dai-dien-kien-truc-son`, không phải tên gọi `cto`), `ticket_id`, để Tháp trên máy chuyển việc của ô đó tới đúng phiên này. Mã và tên phiên lấy từ dòng đầu phiên "Phiên này: mã …, tên …". Không có dòng đó (app Claude trên web, điện thoại): tự đặt một mã ngắn giữ suốt phiên. Tên phiên ngồi ô dạng "Ô <tên hiển thị> (<người>/<tên gọi>)", ví dụ "Ô CTO (son/cto)": không dùng `@`, vì Tháp không gửi tin được tới tên có `@`. Tên phiên đang có `@` thì nhắc người dùng một câu: đổi tên phiên theo dạng đó. Thôi ngồi ô thì báo `status` `stopped`. Không báo nội dung chat.
 
 ## Lưu chat
 

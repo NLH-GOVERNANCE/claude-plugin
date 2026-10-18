@@ -21,7 +21,9 @@ const title = String(input.session_title ?? '')
 
 if (id) {
   const name = title ? `tên "${title}"` : 'chưa có tên';
+  // SendMessage không nhận tên có "@": Tháp không gửi việc tới được phiên tên kiểu "Ô CTO (son@cto)".
+  const rename = title.includes('@') ? ' Tên phiên có @ nên Tháp không gửi việc tới được: nhắc người dùng đổi tên dạng "Ô CTO (son/cto)".' : '';
   process.stdout.write(
-    `Phiên này: mã ${id}, ${name}. Khi nhận ngồi một ô của tỉnh NhiLe hay đổi sang phiếu khác, gọi report_session của connector NhiLe Governance với session_id ${id}${title ? ` và session_name đúng tên trên` : ''}, cell (tên ô trong sổ, ví dụ dai-dien-kien-truc-son, không phải tên gọi cto) và ticket_id, để Tháp trên máy chuyển việc của ô đó tới phiên này.\n`,
+    `Phiên này: mã ${id}, ${name}. Khi nhận ngồi một ô của tỉnh NhiLe hay đổi sang phiếu khác, gọi report_session của connector NhiLe Governance với session_id ${id}${title ? ` và session_name đúng tên trên` : ''}, cell (tên ô trong sổ, ví dụ dai-dien-kien-truc-son, không phải tên gọi cto) và ticket_id, để Tháp trên máy chuyển việc của ô đó tới phiên này.${rename}\n`,
   );
 }
