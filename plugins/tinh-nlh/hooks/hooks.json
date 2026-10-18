@@ -45,6 +45,17 @@
               "session_id": "${session_id}",
               "status": "idle"
             }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "plugin:tinh-nlh:nhile-governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
           }
         ]
       }
@@ -59,6 +70,39 @@
             "input": {
               "session_id": "${session_id}",
               "status": "stopped"
+            }
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:tinh-nlh:nhile-governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__plugin_tinh-nlh_nhile-governance__(?!my_context$)",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:tinh-nlh:nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
             }
           }
         ]

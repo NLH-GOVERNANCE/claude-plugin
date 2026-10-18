@@ -1,7 +1,7 @@
 {
   "name": "tinh-nlh",
   "displayName": "Tỉnh NhiLe",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Cửa vào NhiLe Governance (tỉnh NhiLe) trong Claude: xem việc đang chờ và việc mình đã giao (gõ /viec; Claude Code và Cowork tự kể khi mở phiên), giao việc cho một ô, ký phiếu. Luật và ô đọc từ hệ sau khi đăng nhập, plugin không chép.",
   "author": {
     "name": "NhiLe Holding"

@@ -31,6 +31,10 @@ Chưa đăng nhập connector thì chỉ người dùng mở Customize, mục Pl
 
 Nhận ngồi một ô, hay đổi sang phiếu khác: gọi `report_session` với `session_id`, `session_name`, `cell`, `ticket_id`, để Tháp trên máy chuyển việc của ô đó tới đúng phiên này. Mã và tên phiên lấy từ dòng đầu phiên "Phiên này: mã …, tên …". Không có dòng đó (app Claude trên web, điện thoại): tự đặt một mã ngắn giữ suốt phiên, tên dạng "Ô CTO (son@cto)". Thôi ngồi ô thì báo `status` `stopped`. Không báo nội dung chat.
 
+## Lưu chat
+
+Ở Claude Code và Cowork, hook của plugin tự gửi từng lượt (lời người dùng, câu trả lời của Claude) về kho chat của công ty; không gửi kết quả công cụ. Kho chỉ nhận chat của phiên thật sự dùng tỉnh NhiLe (đã gọi một công cụ của tỉnh ngoài `my_context` đầu phiên, hay đang ngồi một ô), và lưu lâu dài vì là dữ liệu công ty. Số điện thoại, email, số giấy tờ, tài khoản, địa chỉ được mã hoá; lượt có khoá, token hay nói về tiền, hợp đồng, nhân sự, khách hàng, trẻ em không lưu nguyên văn (Danh ký). Chỉ chính người dùng đọc lại. Không có nút xoá chat. Ai muốn hệ thôi hiện thông tin cá nhân của mình thì nhờ Danh ghi yêu cầu xoá mềm; phần ẩn đi chưa chạy, nên không hứa với người dùng là đã ẩn. Xong một việc thì gọi `save_chat` với `role` `summary`: vài câu đã làm gì, kết quả, còn gì. Ở app Claude trên web và điện thoại (không có hook) thì chỉ lưu bản tóm tắt đó. Người dùng gõ `/khongluu` thì cả phiên thôi lưu.
+
 ## Người mới
 
 Người dùng nói mới vào, hay chưa có ô riêng nào: làm theo phần "Người mới vào" trong lời dặn của server (gọi `how_to_use` nếu chưa thấy).
