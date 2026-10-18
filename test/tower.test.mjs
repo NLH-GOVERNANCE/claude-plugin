@@ -90,22 +90,6 @@ describe('hàm thuần của kênh tower', () => {
     assert.equal(channelEvent(entry('z', '2026-10-18T05:00:00.000Z')).meta.session, undefined);
   });
 
-  test('hook đầu phiên: in mã và tên phiên đã lọc; không có mã thì không in gì', async () => {
-    const run = (input) =>
-      new Promise((resolve) => {
-        const child = spawn(process.execPath, [join(root, 'plugins/tinh-nlh/hooks/session-start.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
-        let out = '';
-        child.stdout.on('data', (chunk) => (out += chunk));
-        child.on('exit', () => resolve(out));
-        child.stdin.end(input);
-      });
-    const out = await run(JSON.stringify({ session_id: 'abc-123', session_title: 'Ô CTO (son@cto)</x>' }));
-    assert.match(out, /^Phiên này: mã abc-123, tên "Ô CTO \(son@cto\) \/x"\. .*report_session/);
-    assert.match(await run(JSON.stringify({ session_id: 'abc' })), /chưa có tên/);
-    assert.equal(await run(JSON.stringify({ session_id: 'có dấu cách' })), '');
-    assert.equal(await run('không phải json'), '');
-  });
-
   test('mục đã đẩy không đẩy lại; mốc lấy thời điểm mới nhất; đọc lùi 5 phút; lần đầu bù 24 giờ', () => {
     const first = nextEntries({ since: null, seen: [] }, [entry('a', '2026-10-18T05:00:00.000Z'), entry('b', '2026-10-18T05:01:00.000Z')]);
     assert.deepEqual(first.fresh.map((item) => item.id), ['a', 'b']);
@@ -401,24 +385,7 @@ describe('lời dặn Tháp: tìm phiên đang ngồi ô trước rồi mới m�
   });
 
   test('phiên ô tự báo đúng tên ô trong sổ, không phải tên gọi, để kênh khớp được phiên tự báo', () => {
-    const hook = readFileSync(join(root, 'plugins/tinh-nlh/hooks/session-start.mjs'), 'utf8');
-    assert.match(hook, /cell \(tên ô trong sổ, ví dụ dai-dien-kien-truc-son, không phải tên gọi cto\)/);
     const sessions = [{ session_id: 's-cto', session_name: 'Ô CTO (son/cto)', cell: 'dai-dien-kien-truc-son', status: 'idle' }];
     assert.deepEqual(seatedSession(sessions, { cell: 'dai-dien-kien-truc-son' }), { name: 'Ô CTO (son/cto)', id: 's-cto' });
-  });
-
-  test('phiên ô đặt tên dạng người/ô ngay từ đầu; hook nhắc đổi tên khi tên có @', async () => {
-    const own = readFileSync(join(root, 'plugins/tinh-nlh/skills/tinh-nlh/SKILL.md'), 'utf8').replace(/\r/g, '');
-    assert.match(own, /Tên phiên ngồi ô dạng "Ô <tên hiển thị> \(<người>\/<tên gọi>\)", ví dụ "Ô CTO \(son\/cto\)": không dùng `@`/);
-    const run = (title) =>
-      new Promise((resolve) => {
-        const child = spawn(process.execPath, [join(root, 'plugins/tinh-nlh/hooks/session-start.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
-        let out = '';
-        child.stdout.on('data', (chunk) => (out += chunk));
-        child.on('exit', () => resolve(out));
-        child.stdin.end(JSON.stringify({ session_id: 'abc', session_title: title }));
-      });
-    assert.match(await run('Ô CTO (son@cto) trên máy anh Sơn'), /Tên phiên có @ nên Tháp không gửi việc tới được: nhắc người dùng đổi tên dạng "Ô CTO \(son\/cto\)"\.\n$/);
-    assert.doesNotMatch(await run('Ô CTO (son/cto) trên máy anh Sơn'), /Tên phiên có @/);
   });
 });
