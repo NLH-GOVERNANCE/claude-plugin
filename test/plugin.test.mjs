@@ -1,6 +1,7 @@
 // Phép thử plugin tinh-nlh (phiếu "1/4 Plugin tinh-nlh"): dạng JSON của danh mục và manifest, và các lan can
 // của gói: không secret, không bin/, hook không gọi mạng, connector đúng địa chỉ bản chính. Chỉ đọc file.
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, test } from 'node:test';
@@ -89,13 +90,36 @@ describe('plugin tinh-nlh', () => {
     }
   });
 
-  test('skill tinh-nlh và bảy lệnh viec, giao, lamtiep, bangiao, ky, khongluu, batthap có mô tả', () => {
+  test('skill tinh-nlh và sáu lệnh tiếng Anh (work, assign, sign, resume, handoff, no-save) có mô tả kèm câu tiếng Việt người dùng hay nói; không còn tên lệnh cũ', () => {
     const skill = frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md'));
     assert.equal(skill.name, 'tinh-nlh');
     assert.ok(skill.description);
-    const commands = ['bangiao', 'batthap', 'giao', 'khongluu', 'ky', 'lamtiep', 'viec'];
-    assert.deepEqual(readdirSync(join(pluginDir, 'commands')).sort(), commands.map((name) => `${name}.md`));
-    for (const name of commands) assert.ok(frontMatter(join(pluginDir, `commands/${name}.md`)).description);
+    const files = readdirSync(join(pluginDir, 'commands'));
+    for (const old of ['viec', 'giao', 'ky', 'lamtiep', 'bangiao', 'khongluu']) assert.ok(!files.includes(`${old}.md`), old);
+    for (const name of ['work', 'assign', 'sign', 'resume', 'handoff', 'no-save']) {
+      // Mô tả tiếng Anh, kèm câu người dùng nói để Claude nhận ra (phiếu 98bd8b93, dòng eb46f01f).
+      assert.match(frontMatter(join(pluginDir, `commands/${name}.md`)).description, /Use when the user says "[^"]*[^\u0000-\u007f][^"]*"/, name);
+    }
+  });
+
+  test('hook đầu phiên (tiếng Anh): in mã và tên phiên đã lọc, nhắc đổi tên khi có @; không có mã thì không in gì', async () => {
+    const run = (input) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/session-start.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end(input);
+      });
+    const out = await run(JSON.stringify({ session_id: 'abc-123', session_title: 'Ô CTO (son@cto)</x>' }));
+    assert.match(out, /^This session: id abc-123, name "Ô CTO \(son@cto\) \/x"\. .*report_session/);
+    // Phiên ô báo đúng tên ô trong sổ, không phải tên gọi, để Loa khớp được.
+    assert.match(out, /cell \(the ledger cell name, e\.g\. dai-dien-kien-truc-son, not the handle cto\)/);
+    assert.match(out, /The name has @, so Loa cannot forward work to it: ask the user to rename it like "Ô CTO \(son\/cto\)"\.\n$/);
+    assert.doesNotMatch(await run(JSON.stringify({ session_id: 'abc', session_title: 'Ô CTO (son/cto)' })), /The name has @/);
+    assert.match(await run(JSON.stringify({ session_id: 'abc' })), /no name yet/);
+    assert.equal(await run(JSON.stringify({ session_id: 'có dấu cách' })), '');
+    assert.equal(await run('không phải json'), '');
   });
 
   test('lan can: không có bin/ (claude.ai từ chối cả gói), không có gì trông như khoá hay token', () => {
@@ -162,42 +186,46 @@ describe('plugin tinh-nlh', () => {
       },
     ]);
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
-    const command = readFileSync(join(pluginDir, 'commands/khongluu.md'), 'utf8');
+    const command = readFileSync(join(pluginDir, 'commands/no-save.md'), 'utf8');
     assert.match(command, /`save_chat`.*`role` `opt_out`/);
     const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
-    assert.match(skill, /## Lưu chat/);
+    assert.match(skill, /## Chat saving/);
     assert.match(skill, /`role` `summary`/);
   });
 
   test('skill dặn luôn bàn giao khi dừng, và mở phiếu góp ý cho Tech Lead', () => {
     const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
-    assert.match(skill, /## Bàn giao \(luôn làm\)/);
+    assert.match(skill, /## Handoff \(always\)/);
     assert.match(skill, /kind `handoff`/);
-    assert.match(skill, /## Góp ý/);
-    assert.match(skill, /ô `tech-lead-son`, tiêu đề bắt đầu bằng "Góp ý:"/);
+    assert.match(skill, /## Feedback/);
+    assert.match(skill, /cell `tech-lead-son`, title starting with "Góp ý:"/);
   });
 
   test('skill: câu đầu mỗi cuộc trò chuyện gọi my_context, trả lời "tôi đang làm gì dở" không tra thêm, giữ bảng mức nhạy', () => {
     const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
-    assert.match(frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md')).description, /câu đầu mỗi cuộc trò chuyện, kể cả trên web và điện thoại/);
-    assert.match(skill, /1\. Gọi `my_context` một lần/);
-    assert.match(skill, /Connector chưa có `my_context` \(hub bản cũ\) thì gọi `my_work` thay/);
-    assert.match(skill, /"tôi đang làm gì dở".+không hỏi lại, không tra thêm/);
-    assert.match(skill, /tài khoản cá nhân thì không mở hay chép vào cuộc trò chuyện dữ liệu loại 3–4/);
+    assert.match(frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md')).description, /first turn of every conversation, including web and phone/);
+    assert.match(skill, /1\. Call `my_context` once/);
+    assert.match(skill, /If the connector has no `my_context` \(old hub\), call `my_work` instead/);
+    assert.match(skill, /"tôi đang làm gì dở".+no follow-up questions, no extra lookups/);
+    assert.match(skill, /personal account, never open or copy class 3–4 data into the conversation/);
+    // Tên phiên ngồi ô dạng người/ô, không @, để Loa gửi được.
+    assert.match(skill, /A seated session's name looks like "Ô <display name> \(<person>\/<handle>\)", e\.g\. "Ô CTO \(son\/cto\)", without `@`/);
+    // Tin của Loa chỉ có ô và phiếu: phiên tự đọc phiếu rồi nhận.
+    assert.match(skill, /When Loa sends a message into this session .*open the ticket with `show_ticket`, `claim` it if it is still waiting/);
   });
 
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {
-    // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /viec (phiếu bdec651d).
+    // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /work (phiếu bdec651d).
     const promise = /(mở|mở claude|mở chat)[^.\n"]{0,20}là thấy việc/i;
     const files = [join(root, 'README.md'), join(root, '.claude-plugin/marketplace.json'), ...filesUnder(pluginDir)];
-    for (const path of files) assert.doesNotMatch(readFileSync(path, 'utf8').replace(/Không hứa "mở chat là thấy việc"/g, ''), promise, relative(root, path));
+    for (const path of files) assert.doesNotMatch(readFileSync(path, 'utf8').replace(/Never promise "mở chat là thấy việc"/g, ''), promise, relative(root, path));
   });
 
-  test('/lamtiep chỉ nhận việc chờ chính người dùng; việc đã giao cho ô khác thì hỏi trước, không tự claim', () => {
-    const lamtiep = readFileSync(join(pluginDir, 'commands/lamtiep.md'), 'utf8');
-    assert.match(lamtiep, /Chỉ nhận \(`claim`\) việc đang chờ chính người dùng/);
-    assert.match(lamtiep, /mục `assigned` của `my_desk`\): chỉ đọc bàn giao và kể lại, không tự `claim`/);
-    assert.match(lamtiep, /"Muốn tôi làm thay không\?"/);
+  test('/resume chỉ nhận việc chờ chính người dùng; việc đã giao cho ô khác thì hỏi trước, không tự claim', () => {
+    const resume = readFileSync(join(pluginDir, 'commands/resume.md'), 'utf8');
+    assert.match(resume, /Only claim \(`claim`\) work waiting for the user themself/);
+    assert.match(resume, /\(`assigned` in `my_desk`\): only read the handoff and tell it back, do not `claim`/);
+    assert.match(resume, /"Muốn tôi làm thay không\?"/);
   });
 });
 

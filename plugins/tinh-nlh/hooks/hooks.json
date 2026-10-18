@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"Plugin tinh-nlh (tỉnh NhiLe) đang bật. Câu đầu của phiên, trước khi làm việc khác: gọi my_context của connector NhiLe Governance một lần (người dùng là ai, ô của họ, dự án đang dở, việc đang chờ, việc đã giao), rồi tóm tắt việc đang chờ người dùng bằng lời thường. Người dùng hỏi đang làm gì dở thì trả lời từ chính kết quả đó, không tra thêm.\""
+            "command": "echo \"Plugin tinh-nlh (tỉnh NhiLe) is on. First turn of the session, before anything else: call my_context of the NhiLe Governance connector once (who the user is, their cells, open projects, work waiting, work assigned), then tell the user in plain Vietnamese what is waiting for them. If the user asks what they left unfinished, answer from that result without more lookups.\""
           }
         ]
       },
