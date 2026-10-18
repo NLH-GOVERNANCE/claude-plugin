@@ -72,7 +72,9 @@ export function channelEvent(raw) {
   const headline = {
     your_cell: `Phiếu mới cho ô ${entry.cell}${entry.work_type ? ` (gửi @${entry.work_type})` : ''}: ${quote(entry.title)}.${by ? ` Người nhờ: ${entry.by_name}.` : ''}${ticket}`,
     your_turn: `Phiếu ${quote(entry.title)} của ô ${entry.cell} có câu trả lời mới.${ticket}`,
-    mention: `${by || 'Có người '}gọi ô ${entry.cell} trong nhóm ${quote(entry.title)}: ${quote(entry.body)}.${ticket}`,
+    // Lời gọi do bất kỳ ai trong nhóm viết: không đưa nguyên văn vào phiên Tháp, chỉ đưa mã tin; ô được gọi đọc lời
+    // gọi bằng my_work (mục mention) ở phiên của chính ô.
+    mention: `${by || 'Có người '}gọi ô ${entry.cell} trong nhóm ${quote(entry.title)}${ref(entry.message_id) ? ` (tin ${ref(entry.message_id)})` : ''}. Ô ${entry.cell} đọc lời gọi bằng my_work.${ticket}`,
     plan_signed: `Kế hoạch ${quote(entry.title)} (ô ${entry.cell}) vừa được ${entry.by_name || 'người duyệt'} ký.${ticket}`,
     you: `Phiếu ${quote(entry.title)} (ô ${entry.cell}) chờ chính người dùng trả lời hay ký. Tháp không làm thay.${ticket}`,
   }[entry.kind] ?? `${entry.kind}: ${quote(entry.title)}.${ticket}`;

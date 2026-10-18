@@ -46,6 +46,8 @@ describe('hàm thuần của kênh tower', () => {
     }
     assert.match(channelEvent(kinds[0]).content, /^Phiếu mới cho ô cto \(gửi @review\): "Việc 1"\. Người nhờ: Danh\. Phiếu t-1\.\nNhận phiếu/);
     assert.equal(channelEvent(kinds[1]).meta.space_id, '-100');
+    assert.match(channelEvent(kinds[1]).content, /^Danh gọi ô cto trong nhóm "Việc 2" \(tin m1\)\. Ô cto đọc lời gọi bằng my_work\./);
+    assert.doesNotMatch(channelEvent(kinds[1]).content, /CTO ơi/);
     assert.match(channelEvent(kinds[2]).content, /Tháp không làm thay/);
     assert.match(channelEvent({ ...kinds[3], by_name: '' }).content, /vừa được người duyệt ký\./);
   });
@@ -62,6 +64,7 @@ describe('hàm thuần của kênh tower', () => {
       }),
     );
     assert.doesNotMatch(content, /[<>`‮]/);
+    assert.doesNotMatch(content, /bỏ lan can|aaaa/, 'không đưa nguyên văn lời gọi trong nhóm');
     assert.equal(content.split('\n').length, 2, 'chỉ hai dòng: câu đầu và lời dặn');
     assert.ok(content.length < 800);
     assert.equal(meta.cell, 'không rõ');
