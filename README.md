@@ -19,6 +19,17 @@ Xong thì xem việc của mình:
 
 Telegram là tuỳ chọn, chỉ để ký ngay trong nhóm. Plugin tự cập nhật theo repo (bấm **Check for updates**, hoặc bật **Sync automatically**). Plugin cũng tự có trong Claude Code ở phiên sau, cùng tài khoản.
 
+### Làm việc trong Claude
+
+Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối tắt.
+
+- "Việc của tôi hôm nay?" (gồm việc chờ tôi ký) · `/viec`
+- "Giao cho chị Thùy: …, xong khi …" · `/giao`
+- "Làm tiếp việc …", ở máy nào cũng được · `/lamtiep`
+- "Tôi dừng đây": Claude tự ghi bàn giao lên phiếu · `/bangiao`
+- "Góp ý: …" khi vướng hay khó dùng, Claude ghi lại cho Tech Lead
+- Xem tình hình trên Telegram hay governance.nlh.vn/app
+
 ### Claude Code
 
 ```

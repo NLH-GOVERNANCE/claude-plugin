@@ -70,12 +70,13 @@ describe('plugin tinh-nlh', () => {
     assert.match(commands[0].command, /^echo "[^"$`]+my_work[^"$`]+"$/);
   });
 
-  test('skill tinh-nlh và ba lệnh viec, giao, ky có mô tả', () => {
+  test('skill tinh-nlh và năm lệnh viec, giao, lamtiep, bangiao, ky có mô tả', () => {
     const skill = frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md'));
     assert.equal(skill.name, 'tinh-nlh');
     assert.ok(skill.description);
-    assert.deepEqual(readdirSync(join(pluginDir, 'commands')).sort(), ['giao.md', 'ky.md', 'viec.md']);
-    for (const name of ['giao', 'ky', 'viec']) assert.ok(frontMatter(join(pluginDir, `commands/${name}.md`)).description);
+    const commands = ['bangiao', 'giao', 'ky', 'lamtiep', 'viec'];
+    assert.deepEqual(readdirSync(join(pluginDir, 'commands')).sort(), commands.map((name) => `${name}.md`));
+    for (const name of commands) assert.ok(frontMatter(join(pluginDir, `commands/${name}.md`)).description);
   });
 
   test('lan can: không có bin/ (claude.ai từ chối cả gói), không có gì trông như khoá hay token', () => {
@@ -109,5 +110,21 @@ describe('plugin tinh-nlh', () => {
     assert.ok(names.includes('.claude-plugin/plugin.json'));
     assert.ok(names.includes('.mcp.json'));
     assert.ok(names.every((name) => !name.startsWith('/') && !name.includes('..')));
+  });
+
+  test('mục "Làm việc trong Claude" của README: tối đa 6 dòng, câu mẫu trước, lệnh là lối tắt', () => {
+    const readme = readFileSync(join(root, 'README.md'), 'utf8');
+    const section = readme.split('### Làm việc trong Claude')[1].split('\n### ')[0];
+    const tips = section.split('\n').filter((line) => line.startsWith('- '));
+    assert.ok(tips.length >= 1 && tips.length <= 6, `${tips.length} dòng`);
+    for (const tip of tips.filter((line) => line.includes('`/'))) assert.match(tip, /^- "/);
+  });
+
+  test('skill dặn luôn bàn giao khi dừng, và mở phiếu góp ý cho Tech Lead', () => {
+    const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
+    assert.match(skill, /## Bàn giao \(luôn làm\)/);
+    assert.match(skill, /kind `handoff`/);
+    assert.match(skill, /## Góp ý/);
+    assert.match(skill, /ô `tech-lead-son`, tiêu đề bắt đầu bằng "Góp ý:"/);
   });
 });
