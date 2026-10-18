@@ -1,18 +1,18 @@
 #!/bin/bash
 # Loa tỉnh NhiLe on macOS. The "Loa tỉnh NhiLe.command" desktop file (made by the "bật Loa" command, setup.sh) opens
-# this file from the copy in ~/.tinh-nlh/thap, so a plugin installed from claude.ai or from GitHub both work, no repo.
+# this file from the copy in ~/.tinh-nlh/speaker, so a plugin installed from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
 # hash checked); ask for the key in a hidden prompt if none is saved (Keychain); then open Claude Code on Sonnet as Loa.
-# Same steps as thap.ps1 on Windows.
+# Same steps as start.ps1 on Windows.
 set -u
 
-DIR="${THAP_DIR:-$HOME/.tinh-nlh/thap}"
-WORK="${THAP_WORK:-$HOME/TinhNhiLe}"
+DIR="${SPEAKER_DIR:-$HOME/.tinh-nlh/speaker}"
+WORK="${SPEAKER_WORK:-$HOME/TinhNhiLe}"
 PLUGINS="$HOME/.claude/plugins"
-# The key lives in the macOS account Keychain under this service and account; the tower channel reads the same names.
+# The key lives in the macOS account Keychain under this service and account; the speaker channel reads the same names.
 SERVICE=tinh-nlh-tower
 ACCOUNT=tinh-nlh
-SECURITY="${THAP_SECURITY:-/usr/bin/security}"
+SECURITY="${SPEAKER_SECURITY:-/usr/bin/security}"
 
 stop_loa() {
   printf '\n%s\n' "$1"
@@ -37,20 +37,20 @@ for file in "$PLUGINS"/cache/*/tinh-nlh/*/.claude-plugin/plugin.json "$PLUGINS"/
   [ -f "$file" ] || continue
   grep -q '"name": *"tinh-nlh"' "$file" || continue
   root="$(dirname "$(dirname "$file")")"
-  [ -f "$root/tower/thap.sh" ] || continue
+  [ -f "$root/speaker/start.sh" ] || continue
   version="$(sed -n 's/^ *"version": *"\([0-9.]*\)".*/\1/p' "$file" | head -n 1)"
   [ -n "$version" ] || continue
   if newer "$version" "$best"; then best="$version"; best_root="$root"; fi
 done
 current="$(cat "$DIR/version.txt" 2>/dev/null)"
 if [ -n "$best_root" ] && { [ -z "$current" ] || [ "$best" = "$current" ] || newer "$best" "$current"; }; then
-  cp "$best_root/channel/tower.mjs" "$DIR/tower.mjs"
-  cp "$best_root/tower/thap.sh" "$DIR/thap.sh"
-  chmod +x "$DIR/thap.sh"
+  cp "$best_root/speaker/speaker.mjs" "$DIR/speaker.mjs"
+  cp "$best_root/speaker/start.sh" "$DIR/start.sh"
+  chmod +x "$DIR/start.sh"
   printf '%s\n' "$best" > "$DIR/version.txt"
 fi
-TOWER="$DIR/tower.mjs"
-[ -f "$TOWER" ] || stop_loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
+SPEAKER="$DIR/speaker.mjs"
+[ -f "$SPEAKER" ] || stop_loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
 
 # 2. Claude Code. The official installer (claude.ai/install.sh) puts claude in ~/.local/bin.
 CLAUDE="$HOME/.local/bin/claude"
@@ -64,7 +64,7 @@ if [ ! -x "$CLAUDE" ]; then
   fi
 fi
 
-# 3. Node (the tower channel is one JavaScript file). Use Node 18+ if present; otherwise download nodejs.org's build into
+# 3. Node (the speaker channel is one JavaScript file). Use Node 18+ if present; otherwise download nodejs.org's build into
 # $DIR/node once, checking SHA-256 against that release's SHASUMS256.txt.
 NODE=""
 if command -v node >/dev/null 2>&1; then
@@ -116,15 +116,15 @@ if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>
 fi
 
 # 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine
-# (nor the plugin's own tower server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
+# (nor the plugin's own speaker server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
 # and open sessions. Node writes the JSON so paths with spaces stay right.
-CONFIG="$DIR/tower-mcp.json"
+CONFIG="$DIR/speaker-mcp.json"
 "$NODE" -e '
-const [node, tower, dir, origin, claude, work] = process.argv.slice(1);
+const [node, speaker, dir, origin, claude, work] = process.argv.slice(1);
 const env = { NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude };
 if (origin) env.TOWER_ORIGIN = origin;
-process.stdout.write(JSON.stringify({ mcpServers: { tower: { command: node, args: [tower], env } } }, null, 2));
-' "$NODE" "$TOWER" "$DIR" "${TOWER_ORIGIN:-}" "$CLAUDE" "$WORK" > "$CONFIG" || stop_loa 'Chưa ghi được cấu hình của Loa.'
+process.stdout.write(JSON.stringify({ mcpServers: { speaker: { command: node, args: [speaker], env } } }, null, 2));
+' "$NODE" "$SPEAKER" "$DIR" "${TOWER_ORIGIN:-}" "$CLAUDE" "$WORK" > "$CONFIG" || stop_loa 'Chưa ghi được cấu hình của Loa.'
 
 # 6. Open Claude Code in its own work folder (new cell sessions open here too). claude and node go on the session PATH
 # so plugin hooks run.
@@ -138,8 +138,8 @@ if [ ! -f "$DIR/opened.txt" ]; then
 fi
 echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 echo ''
-set -- '/loop 10m /tinh-nlh:thap' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:tower
-if [ -n "${THAP_DRY_RUN:-}" ]; then
+set -- '/loop 10m /tinh-nlh:speaker' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
   printf '\n'

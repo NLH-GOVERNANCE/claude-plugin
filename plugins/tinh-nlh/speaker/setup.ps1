@@ -1,10 +1,10 @@
-﻿# The "bật Loa" command (/tinh-nlh:batthap) runs this on Windows, once per machine. Copies Loa from the plugin to
-# ~\.tinh-nlh\thap (a fixed place plugin updates do not wipe), then makes the "Loa tỉnh NhiLe" desktop shortcut.
+﻿# The "bật Loa" command (/tinh-nlh:speaker) runs this on Windows, once per machine. Copies Loa from the plugin to
+# ~\.tinh-nlh\speaker (a fixed place plugin updates do not wipe), then makes the "Loa tỉnh NhiLe" desktop shortcut.
 # A shortcut of the same name pointing elsewhere is kept. The old "Tháp tỉnh NhiLe" shortcut that pointed to Loa's
-# earlier launcher (thap.ps1, or Thap.cmd of a repo clone) is removed, so nobody deletes it by hand. Never asks for the
+# earlier launcher (~\.tinh-nlh, or Thap.cmd of a repo clone) is removed, so nobody deletes it by hand. Never asks for the
 # key: the first double-click does. File saved as UTF-8 with BOM for PowerShell 5.1.
 param(
-  [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\thap'),
+  [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\speaker'),
   [string]$Desktop = [Environment]::GetFolderPath('Desktop')
 )
 
@@ -15,14 +15,14 @@ $plugin = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content -LiteralPath (Join-Path $plugin '.claude-plugin\plugin.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version
 
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'thap.ps1') -Destination (Join-Path $Dir 'thap.ps1') -Force
-Copy-Item -LiteralPath (Join-Path $plugin 'channel\tower.mjs') -Destination (Join-Path $Dir 'tower.mjs') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'start.ps1') -Destination (Join-Path $Dir 'start.ps1') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
 Set-Content -LiteralPath (Join-Path $Dir 'version.txt') -Value $version -Encoding ascii
 
 $name = 'Loa tỉnh NhiLe'
 $oldName = 'Tháp tỉnh NhiLe'
 $link = Join-Path $Desktop "$name.lnk"
-$launcher = Join-Path $Dir 'thap.ps1'
+$launcher = Join-Path $Dir 'start.ps1'
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 # WScript.Shell drops characters outside the machine code page ("ỉ" in the shortcut name, user names like "Thùy ỉ" in
 # paths) and cannot save. So shortcuts are read and written through Windows IShellLinkW, the Unicode interface.
@@ -83,7 +83,7 @@ $oldLink = Join-Path $Desktop "$oldName.lnk"
 if (Test-Path -LiteralPath $oldLink) {
   $old = ''
   try { $old = [ThapLink]::Arguments($oldLink) } catch { }
-  if ($old -match 'thap\.ps1|Thap\.cmd') {
+  if ($old -match '\.tinh-nlh\\|Thap\.cmd') {
     Remove-Item -LiteralPath $oldLink -Force
     Write-Output "Đã bỏ biểu tượng cũ $oldName."
   }
@@ -91,7 +91,7 @@ if (Test-Path -LiteralPath $oldLink) {
 if (Test-Path -LiteralPath $link) {
   $existing = ''
   try { $existing = [ThapLink]::Arguments($link) } catch { }
-  if (-not $existing.Contains($launcher)) {
+  if (-not $existing.Contains($launcher) -and $existing -notmatch '\.tinh-nlh\\') {
     Write-Output "Trên màn hình chính đã có lối tắt $name khác, giữ nguyên lối tắt đó."
     exit 0
   }
