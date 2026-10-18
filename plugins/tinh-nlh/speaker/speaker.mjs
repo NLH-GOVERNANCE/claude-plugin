@@ -9,7 +9,9 @@
 //   calls the `forwarded` tool with the outcome;
 // - stopped or closed but its conversation is still on disk: resume that same session by id in the background with
 //   the sentence (`claude --bg --resume <id>`), keeping its conversation;
-// - deleted, never seen, or resume failed: open a new background session for the cell.
+// - no id, deleted, or resume failed: a running session whose name carries "(person/handle)" of the cell (it never
+//   reported, e.g. it ran before the connector signed in), sent to like a running one;
+// - none of these: open a new background session "Ô <cell title> (<person>/<first handle>)".
 // Every delivery writes one ledger row (POST /tower/forwards): entry, ticket, cell, target session, how, ok or failed.
 // Without the channel (fallback mode, /loop 10m) the Loa session calls the `pending` tool to deliver queued sends.
 //
@@ -27,7 +29,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Read a little before the saved mark so items recorded during the previous read still arrive; seen ids stop repeats.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -145,7 +147,38 @@ export function transcriptCwd(id, projects = join(homedir(), '.claude', 'project
   return null;
 }
 
-// Decide how to deliver one item. Pure apart from the lookups passed in, so tests can drive it.
+// What a seated session's name carries for this item's cell (ticket 98bd8b93, line 6db82e9b): "(person/handle)" or
+// "(person@handle)", handle from the cell's handles or the item's cell. Lower case. None without the person's handle.
+export function seatTags(entry) {
+  const person = name(entry.person_handle);
+  if (!person) return [];
+  const handles = [...(Array.isArray(entry.cell_handles) ? entry.cell_handles : []).map(name), ...cellsOf(entry.cell)].filter(Boolean);
+  return [...new Set(handles)].flatMap((handle) => [`(${person}/${handle})`, `(${person}@${handle})`]);
+}
+
+// A running session whose name carries one of the tags: a seated session that never reported its id (it ran before the
+// connector signed in). Names without @ first, since SendMessage refuses @.
+export function findByName(list, tags) {
+  if (!tags.length) return null;
+  const named = (list ?? []).filter((session) => session?.pid && typeof session.name === 'string' && tags.some((tag) => session.name.toLowerCase().includes(tag)));
+  const found = named.find((session) => !session.name.includes('@')) ?? named[0];
+  if (!found || !plain(found.name)) return null;
+  return { name: plain(found.name), sessionId: SESSION_ID.test(String(found.sessionId ?? '')) ? found.sessionId : null };
+}
+
+// Name for a new session: "Ô <cell title> (<person>/<first handle>)", never @. A hub without these fields: the name the
+// cell's session reported (without @), else "Ô <cell>".
+export function seatName(entry) {
+  const cell = cellsOf(entry.cell)[0] ?? 'khac';
+  const person = name(entry.person_handle);
+  const title = plain(entry.cell_title, 60).replace(/@/g, '/') || cell;
+  const handle = name(Array.isArray(entry.cell_handles) ? entry.cell_handles[0] : '') || cell;
+  if (person) return `Ô ${title} (${person}/${handle})`;
+  return plain(entry.session_name).replace(/@/g, '/') || `Ô ${title}`;
+}
+
+// Decide how to deliver one item: by the reported session id, then by name, then a new session. Pure apart from the
+// lookups passed in, so tests can drive it.
 // Returns { via: 'send', to, sessionId } | { via: 'resume', sessionId, cwd } | { via: 'new', name } | null (nothing to do).
 export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.now() }) {
   if (!sentence(entry)) return null;
@@ -157,11 +190,11 @@ export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.n
     const cwd = found?.cwd ?? cwdOf(id);
     if (cwd) return { via: 'resume', sessionId: id, cwd };
   }
+  const named = findByName(sessions, seatTags(entry));
+  if (named) return { via: 'send', to: named.name, sessionId: named.sessionId };
   const opened = recent.get(cell);
   if (opened && now - opened.at < NEW_SESSION_GAP_MS) return { via: 'send', to: opened.name, sessionId: null };
-  // Reuse the name the cell's session reported (without @, which SendMessage refuses), else a plain one.
-  const reported = plain(entry.session_name).replace(/@/g, '/');
-  return { via: 'new', name: reported || `Ô ${cell}` };
+  return { via: 'new', name: seatName(entry) };
 }
 
 // Mark and seen ids, kept in the Loa folder across plugin updates. pending: sends waiting for the Loa session.
@@ -377,20 +410,23 @@ export function startServer({
       const ticket = item.ticket ? `, phiếu ${item.ticket}` : '';
       return push(`Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
-    const plan = route(entry, { sessions: machineSessions(run), cwdOf, recent });
+    const sessions = machineSessions(run);
+    let plan = route(entry, { sessions, cwdOf, recent });
     if (!plan || !item.entry_id) return;
+    if (plan.via === 'resume') {
+      const ok = await spawnClaude(['--bg', `--resume=${plan.sessionId}`, text], plan.cwd);
+      await record({ ...item, session_id: plan.sessionId }, 'resume', ok);
+      if (ok) return push(`Đã mở lại phiên đang ngồi ô ${item.cell} và báo phiếu ${item.ticket || 'mới'}.`, { action: 'resumed', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, session_id: plan.sessionId });
+      // Resume failed: as if no id was reported, by name, then a new session.
+      plan = route({ ...entry, session_id: null }, { sessions, cwdOf, recent });
+    }
     if (plan.via === 'send') {
       const pending = { ...item, session_id: plan.sessionId ?? '', to: plan.to, text, queued_at: Date.now() };
       state.pending = [...state.pending.filter((other) => other.entry_id !== item.entry_id), pending];
       return push(text, { action: 'send', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, to: plan.to, ...(plan.sessionId ? { session_id: plan.sessionId } : {}) });
     }
-    if (plan.via === 'resume') {
-      const ok = await spawnClaude(['--bg', `--resume=${plan.sessionId}`, text], plan.cwd);
-      await record({ ...item, session_id: plan.sessionId }, 'resume', ok);
-      if (ok) return push(`Đã mở lại phiên đang ngồi ô ${item.cell} và báo phiếu ${item.ticket || 'mới'}.`, { action: 'resumed', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, session_id: plan.sessionId });
-    }
-    // New session: never seen, deleted, or resume failed.
-    const sessionName = plan.via === 'new' ? plan.name : plain(entry.session_name).replace(/@/g, '/') || `Ô ${item.cell}`;
+    // New session: never seen, deleted, or resume failed, and no running session named for the cell.
+    const sessionName = plan.name;
     const ok = await spawnClaude(['--bg', '--model', 'sonnet', '-n', sessionName, text], work);
     await record(item, 'new', ok);
     if (ok) recent.set(item.cell, { name: sessionName, at: Date.now() });

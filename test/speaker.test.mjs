@@ -14,6 +14,7 @@ import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   feedUrl,
+  findByName,
   findSession,
   hubOrigin,
   KEY_FILE,
@@ -24,6 +25,8 @@ import {
   plain,
   route,
   savedKey,
+  seatName,
+  seatTags,
   sentence,
   startServer,
   transcriptCwd,
@@ -123,6 +126,32 @@ describe('hàm thuần của Loa', () => {
     assert.equal(route(entry('h', at, { session_id: LIVE }), { sessions: [{ pid: 1, kind: 'interactive', sessionId: LIVE, name: '' }], cwdOf }), null);
     // Mã không phải uuid (ví dụ bắt đầu bằng --) không bao giờ thành đối số của claude.
     assert.deepEqual(route(entry('i', at, { session_id: '--dangerously-skip-permissions' }), { sessions, cwdOf: () => 'C:\w' }), { via: 'new', name: 'Ô cto' });
+  });
+
+  test('chưa có mã phiên: tìm phiên đang chạy theo tên "(người/tên gọi)" của ô; không thấy mới mở phiên mới tên "Ô <tên ô> (<người>/<tên gọi đầu>)" (dòng 6db82e9b)', () => {
+    // Ô CTO trong sổ tên dai-dien-kien-truc-son, tên gọi cto, son; người son. Phiên ghim chạy trước khi connector đăng nhập nên chưa báo mã.
+    const seat = { cell: 'dai-dien-kien-truc-son', cell_title: 'CTO', cell_handles: ['cto', 'son'], person_handle: 'son' };
+    const PINNED = '5e22aee8-b510-4a5b-b071-046ba1d93b24';
+    const sessions = [
+      { pid: 3, kind: 'background', sessionId: GONE, name: 'Ô dai-dien-kien-truc-son (son@dai-dien-kien-truc-son)' },
+      { pid: 1, kind: 'interactive', sessionId: PINNED, name: 'Ô CTO (son/cto) trên máy anh Sơn' },
+      { kind: 'background', sessionId: STOPPED, name: 'Ô Lead (son/lead)', state: 'stopped' },
+    ];
+    const cwdOf = () => null;
+    const at = '2026-10-18T05:00:00.000Z';
+    assert.deepEqual(seatTags(seat), ['(son/cto)', '(son@cto)', '(son/son)', '(son@son)', '(son/dai-dien-kien-truc-son)', '(son@dai-dien-kien-truc-son)']);
+    assert.deepEqual(seatTags({ ...seat, person_handle: null }), []);
+    // Tên không có @ trước, vì SendMessage không gửi tới tên có @.
+    assert.deepEqual(route(entry('a', at, seat), { sessions, cwdOf }), { via: 'send', to: 'Ô CTO (son/cto) trên máy anh Sơn', sessionId: PINNED });
+    assert.deepEqual(route(entry('b', at, { ...seat, session_id: STOPPED.replace('c1', 'c2') }), { sessions, cwdOf }), { via: 'send', to: 'Ô CTO (son/cto) trên máy anh Sơn', sessionId: PINNED }, 'mã không còn: theo tên');
+    assert.equal(findByName([{ pid: 1, sessionId: 'x', name: 'Ô CTO (SON/CTO)' }], seatTags(seat)).name, 'Ô CTO (SON/CTO)');
+    assert.equal(findByName([{ sessionId: STOPPED, name: 'Ô CTO (son/cto)' }], seatTags(seat)), null, 'phiên đã dừng không khớp theo tên');
+    assert.equal(findByName([{ pid: 1, sessionId: 'x', name: 'Ô CTO (sonx/cto)' }], seatTags(seat)), null);
+    // Không có phiên nào khớp: tên phiên mới dễ đọc, có tên gọi đầu, không @, không mã ô.
+    assert.deepEqual(route(entry('c', at, seat), { sessions: [], cwdOf }), { via: 'new', name: 'Ô CTO (son/cto)' });
+    assert.equal(seatName({ ...seat, cell_title: 'Review @ PR', cell_handles: ['review'] }), 'Ô Review / PR (son/review)');
+    assert.equal(seatName({ cell: 'cto', person_handle: 'son' }), 'Ô cto (son/cto)');
+    assert.equal(seatName({ cell: 'cto', session_name: 'Ô CTO (son@cto)' }), 'Ô CTO (son/cto)', 'hub cũ: tên phiên đã báo');
   });
 
   test('mục đã đẩy không đẩy lại; mốc lấy thời điểm mới nhất; đọc lùi 5 phút; lần đầu chỉ việc từ lúc bật', () => {
@@ -256,6 +285,20 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['resume', false], ['new', false]]);
     assert.equal(loa.pushed().at(-1).meta.action, 'failed');
     assert.match(loa.pushed().at(-1).content, /^Chưa mở được phiên cho ô cto\./);
+    loa.close();
+  });
+
+  test('mở lại hỏng mà có phiên đang chạy mang tên của ô: gửi vào phiên đó, không mở phiên mới', async () => {
+    const seat = { cell: 'dai-dien-kien-truc-son', cell_title: 'CTO', cell_handles: ['cto', 'son'], person_handle: 'son' };
+    const loa = inProcess({
+      feed: () => [entry('your_cell:t:7', at, { ...seat, session_id: CLOSED })],
+      sessions: [{ pid: 7, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto) trên máy anh Sơn' }],
+      cwdOf: () => 'C:\\w',
+      spawnOk: false,
+    });
+    await loa.server.tick();
+    assert.deepEqual(loa.spawned.map((item) => item.args.slice(0, 2)), [['--bg', `--resume=${CLOSED}`]]);
+    assert.deepEqual([loa.pushed().at(-1).meta.action, loa.pushed().at(-1).meta.to], ['send', 'Ô CTO (son/cto) trên máy anh Sơn']);
     loa.close();
   });
 
