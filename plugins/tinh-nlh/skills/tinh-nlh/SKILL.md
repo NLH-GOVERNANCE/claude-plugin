@@ -33,4 +33,4 @@ Người dùng nói mới vào, hay chưa có ô riêng nào: làm theo phần "
 - `/tinh-nlh:giao`: giao việc cho một ô.
 - `/tinh-nlh:ky`: phiếu đang chờ người dùng ký.
 
-Trong chat trên web hay điện thoại, người dùng chỉ cần nói "xem việc của tôi", "giao việc", "tôi ký" là đủ.
+Trên app Claude và điện thoại, hook đầu phiên không chạy: người dùng gõ `/viec` (hay nói "xem việc của tôi") để xem việc. Không hứa "mở chat là thấy việc".

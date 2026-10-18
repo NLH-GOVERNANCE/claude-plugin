@@ -8,7 +8,7 @@
     {
       "name": "tinh-nlh",
       "source": "./plugins/tinh-nlh",
-      "description": "Mở Claude là thấy việc của mình trong tỉnh NhiLe: hộp việc, giao việc cho ô, ký"
+      "description": "Làm việc trong tỉnh NhiLe từ Claude: xem việc (gõ /viec), giao việc cho ô, ký"
     }
   ]
 }
