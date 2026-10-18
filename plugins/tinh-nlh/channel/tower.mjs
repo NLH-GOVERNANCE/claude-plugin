@@ -16,7 +16,7 @@
 // file để lần mở Tháp sau hỏi lại. TOWER_KEY (cấu hình plugin) nếu có thì dùng trước.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
@@ -126,13 +126,16 @@ function saveState(dir, state) {
 export const KEY_FILE = 'tower-key.dpapi';
 const TOWER_KEY = /^nlh_tower_[0-9a-f]{64}$/;
 
-// Mở file DPAPI bằng PowerShell; đường dẫn đi qua biến môi trường, không ghép vào lệnh.
+// Mở file DPAPI bằng PowerShell của Windows theo đường dẫn tuyệt đối (không tìm theo PATH hay thư mục hiện tại, nên
+// không ai đặt được powershell.exe giả vào repo); đường dẫn file đi qua biến môi trường, không ghép vào lệnh.
+const POWERSHELL = join(process.env.SystemRoot || 'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 function dpapiOpen(file) {
   const script =
     '$s = (Get-Content -LiteralPath $env:TOWER_KEY_FILE -Raw).Trim() | ConvertTo-SecureString; ' +
     '$b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); ' +
     'try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }';
-  return execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+  return execFileSync(POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', script], {
+    cwd: dirname(file),
     env: { ...process.env, TOWER_KEY_FILE: file },
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
