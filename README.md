@@ -37,6 +37,16 @@ Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối
 /plugin install tinh-nlh@nlh-governance
 ```
 
+### Tháp hệ thống trên máy (Claude Code, Windows)
+
+Một phiên Claude Code chạy Sonnet ngồi ô Tháp hệ thống: hệ đẩy việc mới qua kênh `thap` của plugin, phiên chuyển việc tới đúng phiên đang ngồi ô đó (hay mở phiên nền mới) trong khoảng 15 giây. Mỗi 10 phút gọi `my_work` để bù tin sót. Chỉ cần ở một máy.
+
+1. Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Tháp trên máy**, bấm **Tạo khoá mới**, chép khoá (chỉ hiện một lần, hạn 30 ngày).
+2. Trong Claude Code: `/plugin marketplace update nlh-governance`, rồi `/plugin`, tab **Installed**, `tinh-nlh`, cập nhật lên bản 0.2.0 và dán khoá vào ô **Khoá cho Tháp** khi được hỏi (hay ở **Configure options**). Khoá tạo ở bản dev thì đặt **Địa chỉ hub** là `https://governance-dev.nlh.vn`.
+3. Bấm đúp `Thap.cmd` ở gốc repo này. Hộp cảnh báo kênh thử hiện ra: chọn **I am using this for local development**.
+
+Cờ `--dangerously-load-development-channels` trong `Thap.cmd` làm gì: kênh tự làm chưa nằm trong danh sách kênh Anthropic duyệt sẵn (research preview), nên Claude Code chỉ nạp nó khi mình nói rõ đang thử. Cờ chỉ bỏ qua danh sách đó, chỉ cho đúng `plugin:tinh-nlh@nlh-governance`, và hỏi lại mỗi lần mở. Vì sao an toàn: kênh do repo này viết, chỉ đọc việc của chính bạn bằng khoá có hạn, chỉ gửi khoá tới `*.nlh.vn`; không có công cụ trả lời, không nhận duyệt quyền từ xa, nên hộp hỏi quyền vẫn do bạn bấm trên máy; luật của tổ chức (`channelsEnabled`) vẫn áp dụng. Tắt Tháp: đóng cửa sổ.
+
 ### Khi có tổ chức Team hoặc Enterprise
 
 Chưa dùng. Owner đồng bộ repo này ở [Organization settings > Plugins & skills](https://claude.ai/admin-settings/skills?tab=inventory) (**Add**, **Sync from GitHub**), đặt `tinh-nlh` là **Required**, và thêm connector `https://governance.nlh.vn/mcp` ở [Organization settings > Connectors](https://claude.ai/admin-settings/connectors). Khi đó từng người không cần tài khoản GitHub.

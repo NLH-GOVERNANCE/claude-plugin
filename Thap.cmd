@@ -1,0 +1,10 @@
+@echo off
+rem Thap he thong tren may (phieu 98bd8b93). Bam dup de mo mot phien Claude Code ngoi o Thap, chay Sonnet.
+rem Kenh "thap" cua plugin tinh-nlh day viec moi vao phien nay; phien chuyen moi viec toi dung phien dang ngoi o.
+rem Co --dangerously-load-development-channels: kenh tu lam chua nam trong danh sach kenh Anthropic duyet san
+rem (research preview), nen phai noi ro "toi dang thu kenh nay". Co chi bo qua danh sach do cho dung kenh
+rem plugin:tinh-nlh@nlh-governance, sau mot hop hoi. Quyen duyet, dang nhap, luat to chuc giu nguyen.
+rem NLH_THAP=1: chi phien nay doc luong viec; cac phien Claude Code khac tren may khong doc.
+set NLH_THAP=1
+cd /d "%~dp0.."
+claude -n "Thap he thong" --model sonnet --dangerously-load-development-channels plugin:tinh-nlh@nlh-governance "/loop 10m /tinh-nlh:thap"
