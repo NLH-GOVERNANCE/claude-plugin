@@ -128,6 +128,20 @@ describe('hàm thuần của Loa', () => {
     assert.deepEqual(route(entry('i', at, { session_id: '--dangerously-skip-permissions' }), { sessions, cwdOf: () => 'C:\w' }), { via: 'new', name: 'Ô cto' });
   });
 
+  test('phiên ô đã báo đang chạy mà tên có @ (SendMessage từ chối): không gửi, không mở lại; theo tên không @, phiên vừa mở, hoặc mở phiên mới tên "/"', () => {
+    // 18/10: ô tech-lead-son (phiếu a0c937f9) và ô dai-dien-kien-truc-son (phiếu c2a6cb4b) không nhận được tin vì Loa gửi tới tên có @.
+    const seat = { cell: 'tech-lead-son', cell_title: 'Tech Lead', cell_handles: ['tech-lead-son'], person_handle: 'son', session_id: LIVE };
+    const old = { pid: 1, kind: 'interactive', sessionId: LIVE, name: 'Ô tech-lead-son (son@tech-lead-son)', cwd: 'C:\\t' };
+    const cwdOf = () => 'C:\\t';
+    const at = '2026-10-18T05:00:00.000Z';
+    assert.deepEqual(route(entry('a', at, seat), { sessions: [old], cwdOf }), { via: 'new', name: 'Ô Tech Lead (son/tech-lead-son)' });
+    const SLASH = '5e22aee8-b510-4a5b-b071-046ba1d93b25';
+    const slash = { pid: 2, kind: 'background', sessionId: SLASH, name: 'Ô Tech Lead (son/tech-lead-son)' };
+    assert.deepEqual(route(entry('b', at, seat), { sessions: [old, slash], cwdOf }), { via: 'send', to: 'Ô Tech Lead (son/tech-lead-son)', sessionId: SLASH });
+    const recent = new Map([['tech-lead-son', { name: 'Ô Tech Lead (son/tech-lead-son)', at: Date.now() }]]);
+    assert.deepEqual(route(entry('c', at, seat), { sessions: [old], cwdOf, recent }), { via: 'send', to: 'Ô Tech Lead (son/tech-lead-son)', sessionId: null });
+  });
+
   test('chưa có mã phiên: tìm phiên đang chạy theo tên "(người/tên gọi)" của ô; không thấy mới mở phiên mới tên "Ô <tên ô> (<người>/<tên gọi đầu>)" (dòng 6db82e9b)', () => {
     // Ô CTO trong sổ tên dai-dien-kien-truc-son, tên gọi cto, son; người son. Phiên ghim chạy trước khi connector đăng nhập nên chưa báo mã.
     const seat = { cell: 'dai-dien-kien-truc-son', cell_title: 'CTO', cell_handles: ['cto', 'son'], person_handle: 'son' };
@@ -139,7 +153,7 @@ describe('hàm thuần của Loa', () => {
     ];
     const cwdOf = () => null;
     const at = '2026-10-18T05:00:00.000Z';
-    assert.deepEqual(seatTags(seat), ['(son/cto)', '(son@cto)', '(son/son)', '(son@son)', '(son/dai-dien-kien-truc-son)', '(son@dai-dien-kien-truc-son)']);
+    assert.deepEqual(seatTags(seat), ['(son/cto)', '(son/son)', '(son/dai-dien-kien-truc-son)']);
     assert.deepEqual(seatTags({ ...seat, person_handle: null }), []);
     // Tên không có @ trước, vì SendMessage không gửi tới tên có @.
     assert.deepEqual(route(entry('a', at, seat), { sessions, cwdOf }), { via: 'send', to: 'Ô CTO (son/cto) trên máy anh Sơn', sessionId: PINNED });
@@ -147,6 +161,9 @@ describe('hàm thuần của Loa', () => {
     assert.equal(findByName([{ pid: 1, sessionId: 'x', name: 'Ô CTO (SON/CTO)' }], seatTags(seat)).name, 'Ô CTO (SON/CTO)');
     assert.equal(findByName([{ sessionId: STOPPED, name: 'Ô CTO (son/cto)' }], seatTags(seat)), null, 'phiên đã dừng không khớp theo tên');
     assert.equal(findByName([{ pid: 1, sessionId: 'x', name: 'Ô CTO (sonx/cto)' }], seatTags(seat)), null);
+    // Chỉ có phiên tên có @ (kể cả tên có cả "/" lẫn "@"): không trả phiên nào, để mở phiên mới tên "/".
+    assert.equal(findByName([sessions[0], { pid: 2, sessionId: 'y', name: 'Ô CTO (son/cto) son@cto' }], seatTags(seat)), null);
+    assert.deepEqual(route(entry('d', at, seat), { sessions: [sessions[0]], cwdOf }), { via: 'new', name: 'Ô CTO (son/cto)' });
     // Không có phiên nào khớp: tên phiên mới dễ đọc, có tên gọi đầu, không @, không mã ô.
     assert.deepEqual(route(entry('c', at, seat), { sessions: [], cwdOf }), { via: 'new', name: 'Ô CTO (son/cto)' });
     assert.equal(seatName({ ...seat, cell_title: 'Review @ PR', cell_handles: ['review'] }), 'Ô Review / PR (son/review)');
