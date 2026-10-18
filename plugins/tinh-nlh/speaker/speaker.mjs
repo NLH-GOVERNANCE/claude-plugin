@@ -5,13 +5,15 @@
 //
 // Who receives an item: the hub puts the session id last reported for that cell (report_session) on the item. The
 // server looks that id up among the sessions on this machine (`claude agents --json --all`):
-// - running (app or terminal): push a channel message to the Loa session, which delivers it with SendMessage and then
-//   calls the `forwarded` tool with the outcome;
+// - running (app or terminal) with a name without @: push a channel message to the Loa session, which delivers it with
+//   SendMessage and then calls the `forwarded` tool with the outcome. SendMessage refuses any name with @, so a running
+//   session named with @ (named before 18/10) counts as unreachable and the steps below run;
 // - stopped or closed but its conversation is still on disk: resume that same session by id in the background with
 //   the sentence (`claude --bg --resume <id>`), keeping its conversation;
-// - no id, deleted, or resume failed: a running session whose name carries "(person/handle)" of the cell (it never
-//   reported, e.g. it ran before the connector signed in), sent to like a running one;
-// - none of these: open a new background session "Ô <cell title> (<person>/<first handle>)".
+// - no id, deleted, resume failed or named with @: a running session whose name carries "(person/handle)" of the cell
+//   and no @ (it never reported, e.g. it ran before the connector signed in), sent to like a running one;
+// - none of these: the session Loa opened for the cell in the last 10 minutes, else open a new background session
+//   "Ô <cell title> (<person>/<first handle>)".
 // Every delivery writes one ledger row (POST /tower/forwards): entry, ticket, cell, target session, how, ok or failed.
 // Without the channel (fallback mode, /loop 10m) the Loa session calls the `pending` tool to deliver queued sends.
 //
@@ -147,21 +149,21 @@ export function transcriptCwd(id, projects = join(homedir(), '.claude', 'project
   return null;
 }
 
-// What a seated session's name carries for this item's cell (ticket 98bd8b93, line 6db82e9b): "(person/handle)" or
-// "(person@handle)", handle from the cell's handles or the item's cell. Lower case. None without the person's handle.
+// What a seated session's name carries for this item's cell (ticket 98bd8b93, line 6db82e9b): "(person/handle)", handle
+// from the cell's handles or the item's cell. Lower case. None without the person's handle. No "(person@handle)": a name
+// with @ cannot receive SendMessage.
 export function seatTags(entry) {
   const person = name(entry.person_handle);
   if (!person) return [];
   const handles = [...(Array.isArray(entry.cell_handles) ? entry.cell_handles : []).map(name), ...cellsOf(entry.cell)].filter(Boolean);
-  return [...new Set(handles)].flatMap((handle) => [`(${person}/${handle})`, `(${person}@${handle})`]);
+  return [...new Set(handles)].map((handle) => `(${person}/${handle})`);
 }
 
 // A running session whose name carries one of the tags: a seated session that never reported its id (it ran before the
-// connector signed in). Names without @ first, since SendMessage refuses @.
+// connector signed in). Only names without @, since SendMessage refuses @; none such: null.
 export function findByName(list, tags) {
   if (!tags.length) return null;
-  const named = (list ?? []).filter((session) => session?.pid && typeof session.name === 'string' && tags.some((tag) => session.name.toLowerCase().includes(tag)));
-  const found = named.find((session) => !session.name.includes('@')) ?? named[0];
+  const found = (list ?? []).find((session) => session?.pid && typeof session.name === 'string' && !session.name.includes('@') && tags.some((tag) => session.name.toLowerCase().includes(tag)));
   if (!found || !plain(found.name)) return null;
   return { name: plain(found.name), sessionId: SESSION_ID.test(String(found.sessionId ?? '')) ? found.sessionId : null };
 }
@@ -177,8 +179,9 @@ export function seatName(entry) {
   return plain(entry.session_name).replace(/@/g, '/') || `Ô ${title}`;
 }
 
-// Decide how to deliver one item: by the reported session id, then by name, then a new session. Pure apart from the
-// lookups passed in, so tests can drive it.
+// Decide how to deliver one item: by the reported session id, then by name, then a new session. A running session named
+// with @ cannot receive SendMessage and must not be resumed (a second copy), so it falls through to the name steps.
+// Pure apart from the lookups passed in, so tests can drive it.
 // Returns { via: 'send', to, sessionId } | { via: 'resume', sessionId, cwd } | { via: 'new', name } | null (nothing to do).
 export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.now() }) {
   if (!sentence(entry)) return null;
@@ -186,9 +189,13 @@ export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.n
   const id = SESSION_ID.test(String(entry.session_id ?? '')) ? String(entry.session_id) : '';
   if (id) {
     const found = findSession(sessions, id);
-    if (found?.live) return found.name ? { via: 'send', to: found.name, sessionId: id } : null;
-    const cwd = found?.cwd ?? cwdOf(id);
-    if (cwd) return { via: 'resume', sessionId: id, cwd };
+    if (found?.live) {
+      if (!found.name) return null;
+      if (!found.name.includes('@')) return { via: 'send', to: found.name, sessionId: id };
+    } else {
+      const cwd = found?.cwd ?? cwdOf(id);
+      if (cwd) return { via: 'resume', sessionId: id, cwd };
+    }
   }
   const named = findByName(sessions, seatTags(entry));
   if (named) return { via: 'send', to: named.name, sessionId: named.sessionId };
