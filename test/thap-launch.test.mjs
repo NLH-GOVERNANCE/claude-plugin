@@ -1,4 +1,4 @@
-// Phép thử lối mở Tháp trong plugin (plugins/tinh-nlh/tower): lệnh "bật Tháp" chép Tháp sang ~/.tinh-nlh/thap và tạo
+// Phép thử lối mở Loa trong plugin (plugins/tinh-nlh/tower): lệnh "bật Loa" chép Loa sang ~/.tinh-nlh/thap và tạo
 // biểu tượng trên Desktop; bấm đúp thì lối mở lấy bản mới nhất từ plugin đã cài, tự cài Claude Code và Node khi thiếu,
 // hỏi khoá trong ô nhập ẩn chữ, rồi mở Claude Code với kênh tower qua --mcp-config. Không cần repo, không cần GitHub.
 // thap.sh chạy thật bằng bash ở chế độ thử (THAP_DRY_RUN), với security giả; thap.ps1 và setup.ps1 chạy thật trên
@@ -40,16 +40,17 @@ function fakeHome(name = 'user') {
 }
 
 // Hai lối mở cùng mở Claude một cách: câu mở đầu trước, Sonnet, kênh tower qua --mcp-config, cờ dev chỉ cho server:tower.
-const CLAUDE_ARGS = ['/loop 10m /tinh-nlh:thap', '-n', 'Thap truc', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:tower'];
+const CLAUDE_ARGS = ['/loop 10m /tinh-nlh:thap', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:tower'];
 
-describe('lệnh "bật Tháp" và các file của lối mở', () => {
+describe('lệnh "bật Loa" và các file của lối mở', () => {
   test('lệnh /tinh-nlh:batthap chạy đúng file setup có trong plugin, theo hệ điều hành; không hỏi khoá trong chat', () => {
     const command = read('commands/batthap.md');
-    assert.match(command, /"bật Tháp"/);
+    assert.match(command, /"bật Loa"/);
+    assert.match(command, /biểu tượng \*\*Loa tỉnh NhiLe\*\*/);
     const paths = [...command.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)].map((match) => match[1]);
     assert.deepEqual(paths, ['tower/setup.ps1', 'tower/setup.sh']);
     for (const path of paths) assert.ok(existsSync(join(plugin, path)), path);
-    assert.match(command, /Không hỏi khoá, không nhận khoá trong chat/);
+    assert.match(command, /Never ask for the key, never accept it in chat/);
   });
 
   test('thap.ps1 (Windows): UTF-8 có BOM; NLH_TOWER chỉ trong cấu hình kênh; khoá ô ẩn chữ, DPAPI; Claude Code và Node bản chính thức, kiểm mã băm', () => {
@@ -57,7 +58,9 @@ describe('lệnh "bật Tháp" và các file của lối mở', () => {
     assert.deepEqual([...raw.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 có BOM cho PowerShell 5.1');
     const ps = raw.toString('utf8');
     assert.ok(ps.includes(`$arguments = @(${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? '$config' : `'${arg}'`)).join(', ')})`));
-    assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir \}/);
+    // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
+    assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; CLAUDE_BIN = \$claude \}/);
+    assert.doesNotMatch(ps, /Tháp/);
     assert.doesNotMatch(ps, /\$env:NLH_TOWER\s*=|skip-permissions|bypassPermissions|AsPlainText|ConvertFrom-SecureString -Key|Write-Host \$secure/);
     assert.match(ps, /Read-Host -AsSecureString/);
     assert.match(ps, /\$secure \| ConvertFrom-SecureString \| Set-Content -LiteralPath \$keyFile/);
@@ -80,20 +83,21 @@ describe('lệnh "bật Tháp" và các file của lối mở', () => {
     assert.equal(adds.length, 1);
     assert.match(adds[0], /^\s*printf 'add-generic-password -U -s %s -a %s -w %s\\n' "\$SERVICE" "\$ACCOUNT" "\$key" \| "\$SECURITY" -i/);
     assert.ok(sh.includes(`set -- ${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? '"$CONFIG"' : arg.includes(' ') ? `'${arg}'` : arg)).join(' ')}`));
-    assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_DIR: dir \}/);
+    assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude \}/);
+    assert.doesNotMatch(sh, /Tháp(?! tỉnh NhiLe\.command)/);
     assert.doesNotMatch(sh, /export NLH_TOWER|skip-permissions|bypassPermissions/);
     assert.match(sh, /curl -fsSL https:\/\/claude\.ai\/install\.sh \| bash/);
     assert.match(sh, /shasum -a 256 "\$part"/);
     assert.doesNotMatch(sh, /LaunchAgents|launchctl|crontab/);
   });
 
-  test('setup.ps1 và setup.sh: biểu tượng "Tháp tỉnh NhiLe" trên Desktop; đã có lối tắt cùng tên trỏ chỗ khác thì giữ nguyên', () => {
+  test('setup.ps1 và setup.sh: biểu tượng "Loa tỉnh NhiLe" trên Desktop; đã có lối tắt cùng tên trỏ chỗ khác thì giữ nguyên', () => {
     const ps = readFileSync(join(plugin, 'tower/setup.ps1'));
     assert.deepEqual([...ps.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
-    assert.match(ps.toString('utf8'), /\$name = 'Tháp tỉnh NhiLe'/);
+    assert.match(ps.toString('utf8'), /\$name = 'Loa tỉnh NhiLe'/);
     assert.match(ps.toString('utf8'), /giữ nguyên lối tắt đó/);
     const sh = read('tower/setup.sh');
-    assert.match(sh, /name='Tháp tỉnh NhiLe'/);
+    assert.match(sh, /name='Loa tỉnh NhiLe'/);
     assert.match(sh, /link="\$DESKTOP\/\$name\.command"/);
     assert.match(sh, /giữ nguyên lối tắt đó/);
   });
@@ -108,7 +112,7 @@ const posix = (path) => (process.platform === 'win32' ? path.replace(/^([A-Za-z]
 const same = (path) => path.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:/`);
 
 describe('thap.sh chạy thật (chế độ thử, security giả)', { skip: bash ? false : 'không có bash' }, () => {
-  test('lần đầu: chép Tháp từ plugin, hỏi khoá rồi lưu vào Keychain qua stdin, viết cấu hình kênh; lần sau không hỏi lại', () => {
+  test('lần đầu: chép Loa từ plugin, hỏi khoá rồi lưu vào Keychain qua stdin, viết cấu hình kênh; lần sau không hỏi lại', () => {
     const home = fakeHome();
     const bin = temp('thap-bin');
     // claude giả ở chỗ trình cài chính thức đặt; security giả giữ Keychain trong một file và ghi lại dòng lệnh đã gọi.
@@ -139,9 +143,9 @@ describe('thap.sh chạy thật (chế độ thử, security giả)', { skip: ba
 
     const first = run(`không phải khoá\n${KEY}\n`);
     assert.equal(first.status, 0, first.stdout + first.stderr);
-    assert.match(first.stdout, /Chuỗi vừa dán không phải khoá Tháp/);
-    assert.match(first.stdout, /Đã lưu khoá Tháp trên máy này\./);
-    assert.match(first.stdout, /Tháp đang nghe tỉnh NhiLe\. Đừng đóng cửa sổ này\./);
+    assert.match(first.stdout, /Chuỗi vừa dán không phải khoá Loa/);
+    assert.match(first.stdout, /Đã lưu khoá Loa trên máy này\./);
+    assert.match(first.stdout, /Loa đang nghe tỉnh NhiLe\. Đừng đóng cửa sổ này\./);
     assert.match(first.stdout, /Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn./);
     const dir = join(home, '.tinh-nlh/thap');
     const dry = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN '));
@@ -156,25 +160,34 @@ describe('thap.sh chạy thật (chế độ thử, security giả)', { skip: ba
     const config = JSON.parse(readFileSync(join(dir, 'tower-mcp.json'), 'utf8'));
     assert.deepEqual(Object.keys(config.mcpServers), ['tower']);
     assert.deepEqual(config.mcpServers.tower.args.map(same), [same(`${posix(dir)}/tower.mjs`)]);
-    assert.deepEqual({ ...config.mcpServers.tower.env, NLH_TOWER_DIR: same(config.mcpServers.tower.env.NLH_TOWER_DIR) }, { NLH_TOWER: '1', NLH_TOWER_DIR: same(posix(dir)) });
+    const { env: towerEnv } = config.mcpServers.tower;
+    assert.deepEqual(
+      { ...towerEnv, NLH_TOWER_DIR: same(towerEnv.NLH_TOWER_DIR), NLH_TOWER_WORK: same(towerEnv.NLH_TOWER_WORK), CLAUDE_BIN: same(towerEnv.CLAUDE_BIN) },
+      { NLH_TOWER: '1', NLH_TOWER_DIR: same(posix(dir)), NLH_TOWER_WORK: same(`${posix(home)}/TinhNhiLe`), CLAUDE_BIN: same(`${posix(home)}/.local/bin/claude`) },
+    );
     assert.ok(!JSON.stringify(config).includes(KEY), 'khoá không vào cấu hình');
 
     const again = run('');
     assert.equal(again.status, 0, again.stdout + again.stderr);
-    assert.doesNotMatch(again.stdout, /Khoá cho Tháp|Đã lưu khoá/);
+    assert.doesNotMatch(again.stdout, /Khoá cho Loa|Đã lưu khoá/);
   });
 
-  test('setup.sh: tạo "Tháp tỉnh NhiLe.command" trỏ tới thap.sh; lối tắt cùng tên của người khác thì giữ nguyên', () => {
+  test('setup.sh: tạo "Loa tỉnh NhiLe.command" trỏ tới thap.sh; bỏ "Tháp tỉnh NhiLe.command" cũ của mình; lối tắt cùng tên của người khác thì giữ nguyên', () => {
     const home = temp('thap-setup');
     const desktop = join(home, 'Desktop');
     mkdirSync(desktop);
     const setup = (dir) =>
       spawnSync(bash, [posix(join(plugin, 'tower/setup.sh'))], { encoding: 'utf8', env: { ...process.env, HOME: posix(home), THAP_DIR: posix(dir), THAP_DESKTOP: posix(desktop) } });
     const dir = join(home, '.tinh-nlh/thap');
+    // Biểu tượng cũ trước khi đổi tên Loa, trỏ tới lối mở của chính mình: setup tự bỏ, người dùng không phải xoá tay.
+    const old = join(desktop, 'Tháp tỉnh NhiLe.command');
+    writeFileSync(old, `#!/bin/bash\nexec /bin/bash "${posix(dir)}/thap.sh"\n`);
     const done = setup(dir);
     assert.equal(done.status, 0, done.stderr);
-    assert.match(done.stdout, /Đã có biểu tượng Tháp tỉnh NhiLe trên màn hình chính\./);
-    const link = join(desktop, 'Tháp tỉnh NhiLe.command');
+    assert.match(done.stdout, /Đã bỏ biểu tượng cũ Tháp tỉnh NhiLe\./);
+    assert.ok(!existsSync(old));
+    assert.match(done.stdout, /Đã có biểu tượng Loa tỉnh NhiLe trên màn hình chính\./);
+    const link = join(desktop, 'Loa tỉnh NhiLe.command');
     assert.match(readFileSync(link, 'utf8'), new RegExp(`exec /bin/bash "${posix(dir)}/thap\\.sh"`));
     assert.equal(readFileSync(join(dir, 'thap.sh'), 'utf8'), read('tower/thap.sh'));
     assert.ok(existsSync(join(dir, 'tower.mjs')));
@@ -194,7 +207,7 @@ const ps = (file, args, env = {}) =>
   });
 
 describe('setup.ps1 và thap.ps1 chạy thật trên Windows (thư mục người dùng giả)', { skip: process.platform === 'win32' ? false : 'chỉ Windows' }, () => {
-  test('setup.ps1: chép Tháp, tạo lối tắt trỏ tới thap.ps1 (tên người dùng có dấu vẫn đúng); lối tắt cùng tên trỏ chỗ khác thì giữ nguyên', () => {
+  test('setup.ps1: chép Loa, tạo lối tắt trỏ tới thap.ps1 (tên người dùng có dấu vẫn đúng); bỏ lối tắt "Tháp tỉnh NhiLe" cũ của mình; lối tắt cùng tên trỏ chỗ khác thì giữ nguyên', () => {
     const home = join(temp('thap-setup'), 'Thùy ỉ');
     mkdirSync(home);
     const desktop = join(home, 'Desktop');
@@ -202,14 +215,14 @@ describe('setup.ps1 và thap.ps1 chạy thật trên Windows (thư mục ngườ
     const dir = join(home, '.tinh-nlh', 'thap');
     const done = ps(join(plugin, 'tower/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
     assert.equal(done.status, 0, done.stdout + done.stderr);
-    assert.match(done.stdout, /Đã có biểu tượng Tháp tỉnh NhiLe trên màn hình chính\./);
-    const link = join(desktop, 'Tháp tỉnh NhiLe.lnk');
+    assert.match(done.stdout, /Đã có biểu tượng Loa tỉnh NhiLe trên màn hình chính\./);
+    const link = join(desktop, 'Loa tỉnh NhiLe.lnk');
     const target = () =>
       spawnSync(powershell, ['-NoProfile', '-Command', '[Console]::OutputEncoding = [Text.Encoding]::UTF8; $l = (New-Object -ComObject Shell.Application).NameSpace($env:DESK).ParseName($env:NAME).GetLink; "$($l.Path)|$($l.Arguments)"'], {
         encoding: 'utf8',
     // PowerShell ghi bộ nhớ đệm mô-đun vào thư mục hiện tại khi thư mục người dùng là giả: chạy ở thư mục tạm.
     cwd: tmpdir(),
-        env: { ...process.env, DESK: desktop, NAME: 'Tháp tỉnh NhiLe.lnk' },
+        env: { ...process.env, DESK: desktop, NAME: 'Loa tỉnh NhiLe.lnk' },
       }).stdout.trim();
     // Windows tự viết lại hoa thường của đường dẫn tới powershell.exe: so không phân biệt hoa thường.
     assert.equal(target().toLowerCase(), `${powershell}|-NoProfile -ExecutionPolicy Bypass -File "${join(dir, 'thap.ps1')}"`.toLowerCase());
@@ -219,13 +232,24 @@ describe('setup.ps1 và thap.ps1 chạy thật trên Windows (thư mục ngườ
     const other = ps(join(plugin, 'tower/setup.ps1'), ['-Dir', join(home, 'khac'), '-Desktop', desktop]);
     assert.match(other.stdout, /giữ nguyên lối tắt đó/);
     assert.match(target(), /\\\.tinh-nlh\\thap\\thap\.ps1/, 'không ghi đè');
+
+    // Lối tắt cũ "Tháp tỉnh NhiLe" trỏ tới thap.ps1 (bản trước khi đổi tên Loa): setup tự bỏ. Lối tắt cũ không đọc được
+    // (không phải của mình) thì giữ.
+    const old = join(desktop, 'Tháp tỉnh NhiLe.lnk');
+    cpSync(link, old);
+    const replaced = ps(join(plugin, 'tower/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
+    assert.match(replaced.stdout, /Đã bỏ biểu tượng cũ Tháp tỉnh NhiLe\./);
+    assert.ok(!existsSync(old));
+    writeFileSync(old, 'không phải lối tắt');
+    ps(join(plugin, 'tower/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
+    assert.ok(existsSync(old), 'không bỏ lối tắt không phải của mình');
   });
 
   test('thap.ps1: khoá ở chỗ cũ (Thap.cmd) thì chép sang, không hỏi; viết cấu hình kênh; câu lệnh mở Claude đúng', () => {
     const home = fakeHome('Thùy ỉ');
     mkdirSync(join(home, '.local', 'bin'), { recursive: true });
     writeFileSync(join(home, '.local', 'bin', 'claude.exe'), '');
-    // Khoá DPAPI ở thư mục dữ liệu cũ của plugin, như máy đã bật Tháp bằng Thap.cmd.
+    // Khoá DPAPI ở thư mục dữ liệu cũ của plugin, như máy đã bật Loa bằng Thap.cmd (đường cũ, đã bỏ).
     const legacy = join(home, '.claude', 'plugins', 'data', 'tinh-nlh-nlh-governance');
     mkdirSync(legacy, { recursive: true });
     const sealed = spawnSync(powershell, ['-NoProfile', '-Command', 'ConvertTo-SecureString $env:K -AsPlainText -Force | ConvertFrom-SecureString'], {
@@ -238,7 +262,7 @@ describe('setup.ps1 và thap.ps1 chạy thật trên Windows (thư mục ngườ
     const dir = join(home, '.tinh-nlh', 'thap');
     const run = ps(join(plugin, 'tower/thap.ps1'), ['-DryRun'], { USERPROFILE: home, TOWER_ORIGIN: '' });
     assert.equal(run.status, 0, run.stdout + run.stderr);
-    assert.doesNotMatch(run.stdout, /Khoá cho Tháp|Đã lưu khoá/);
+    assert.doesNotMatch(run.stdout, /Khoá cho Loa|Đã lưu khoá/);
     assert.equal(readFileSync(join(dir, KEY_FILE), 'utf8'), sealed);
     assert.equal(readFileSync(join(dir, 'tower.mjs'), 'utf8'), read('channel/tower.mjs'));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
@@ -248,8 +272,8 @@ describe('setup.ps1 và thap.ps1 chạy thật trên Windows (thư mục ngườ
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { tower } = JSON.parse(raw.toString('utf8')).mcpServers;
     assert.deepEqual(tower.args, [join(dir, 'tower.mjs')]);
-    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: dir });
+    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: join(home, 'TinhNhiLe'), CLAUDE_BIN: join(home, '.local', 'bin', 'claude.exe') });
     assert.match(tower.command, /node(\.exe)?$/i);
-    assert.ok(existsSync(join(home, 'TinhNhiLe')), 'thư mục làm việc của Tháp');
+    assert.ok(existsSync(join(home, 'TinhNhiLe')), 'thư mục làm việc của Loa');
   });
 });

@@ -1,13 +1,13 @@
-﻿# Tháp tỉnh NhiLe trên Windows. Lối tắt "Tháp tỉnh NhiLe" trên Desktop (do lệnh "bật Tháp", setup.ps1, tạo) mở file
-# này từ bản chép ở ~\.tinh-nlh\thap, nên plugin cài từ claude.ai hay từ GitHub đều chạy được, không cần repo.
-# Mỗi lần mở: lấy bản mới nhất của Tháp từ plugin đã cài; máy chưa có Claude Code hay Node thì tự cài (bản chính thức,
-# kiểm mã băm); chưa có khoá thì hỏi trong ô nhập ẩn chữ, lưu DPAPI; rồi mở Claude Code chạy Sonnet, ngồi ô Tháp.
-# Kênh tower nạp qua --mcp-config (server:tower), không qua tên plugin: plugin cài từ claude.ai mang tên @synced, không
-# khai kênh được. Không tự chạy cùng Windows. File lưu UTF-8 có BOM để PowerShell 5.1 đọc đúng chữ có dấu.
+﻿# Loa tỉnh NhiLe on Windows. The "Loa tỉnh NhiLe" desktop shortcut (made by the "bật Loa" command, setup.ps1) opens
+# this file from the copy in ~\.tinh-nlh\thap, so a plugin installed from claude.ai or from GitHub both work, no repo.
+# Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
+# hash checked); ask for the key in a hidden prompt if none is saved (DPAPI); then open Claude Code on Sonnet as Loa.
+# The tower channel loads through --mcp-config (server:tower), not by plugin name: a plugin installed from claude.ai is
+# named @synced and cannot declare channels. File saved as UTF-8 with BOM so PowerShell 5.1 reads Vietnamese text.
 param(
   [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\thap'),
   [string]$Work = (Join-Path $env:USERPROFILE 'TinhNhiLe'),
-  # Chỉ để thử: in câu lệnh mở Claude thay vì chạy.
+  # Tests only: print the Claude command line instead of running it.
   [switch]$DryRun
 )
 
@@ -15,9 +15,9 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-$Host.UI.RawUI.WindowTitle = 'Tháp tỉnh NhiLe'
+$Host.UI.RawUI.WindowTitle = 'Loa tỉnh NhiLe'
 
-function Stop-Thap([string]$text) {
+function Stop-Loa([string]$text) {
   Write-Host ''
   Write-Host $text
   Read-Host 'Bấm Enter để đóng' | Out-Null
@@ -26,7 +26,7 @@ function Stop-Thap([string]$text) {
 
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 
-# 1. Bản mới nhất của Tháp từ plugin đã cài (plugin tự cập nhật). Chép đè bản ở $Dir, dùng từ lần mở này.
+# 1. Newest Loa from the installed plugin (the plugin updates itself). Copy over the one in $Dir, used from this launch.
 $plugins = Join-Path $env:USERPROFILE '.claude\plugins'
 $best = $null
 foreach ($pattern in @('cache\*\tinh-nlh\*\.claude-plugin\plugin.json', 'synced\*\*\.claude-plugin\plugin.json')) {
@@ -47,10 +47,10 @@ if ($best -and (-not $current -or $best.Version -ge $current)) {
   Set-Content -LiteralPath $versionFile -Value $best.Version.ToString() -Encoding ascii
 }
 $tower = Join-Path $Dir 'tower.mjs'
-if (-not (Test-Path -LiteralPath $tower)) { Stop-Thap 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Tháp", rồi bấm đúp Tháp lại.' }
+if (-not (Test-Path -LiteralPath $tower)) { Stop-Loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
 
-# 2. Claude Code. Trình cài chính thức (claude.ai/install.ps1) đặt claude.exe ở ~\.local\bin, không thêm vào PATH; máy có
-# biến HOME (người dùng Git) thì ~ là HOME.
+# 2. Claude Code. The official installer (claude.ai/install.ps1) puts claude.exe in ~\.local\bin without touching PATH;
+# on machines with HOME set (Git users) ~ is HOME.
 $homes = @($env:USERPROFILE) + @($env:HOME | Where-Object { $_ })
 function Find-Claude { foreach ($at in $homes) { $file = Join-Path $at '.local\bin\claude.exe'; if (Test-Path -LiteralPath $file) { return $file } } }
 $claude = Find-Claude
@@ -63,17 +63,17 @@ if (-not $claude) {
     $installer = Join-Path $Dir 'install-claude.ps1'
     try {
       Invoke-WebRequest -Uri 'https://claude.ai/install.ps1' -OutFile $installer -UseBasicParsing
-      # Chạy ở tiến trình riêng: trình cài thoát bằng exit khi lỗi, không được đóng luôn cửa sổ Tháp.
+      # Separate process: the installer exits on error and must not close the Loa window.
       & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $installer | Out-Host
     } catch { }
     Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
     $claude = Find-Claude
-    if (-not $claude) { Stop-Thap 'Chưa cài được Claude Code. Kiểm mạng rồi bấm đúp Tháp lại.' }
+    if (-not $claude) { Stop-Loa 'Chưa cài được Claude Code. Kiểm mạng rồi bấm đúp Loa lại.' }
   }
 }
 
-# 3. Node (kênh tower là một file JavaScript). Máy có Node 18 trở lên thì dùng; không thì tải node.exe của nodejs.org
-# vào $Dir\node một lần, kiểm mã băm SHA-256 theo SHASUMS256.txt của chính bản đó.
+# 3. Node (the tower channel is one JavaScript file). Use Node 18+ if present; otherwise download node.exe from
+# nodejs.org into $Dir\node once, checking SHA-256 against that release's SHASUMS256.txt.
 $node = $null
 $found = Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($found) {
@@ -82,7 +82,7 @@ if ($found) {
 if (-not $node) {
   $node = Join-Path $Dir 'node\node.exe'
   if (-not (Test-Path -LiteralPath $node)) {
-    Write-Host 'Lần đầu: đang tải phần chạy của Tháp, khoảng một phút.'
+    Write-Host 'Lần đầu: đang tải phần chạy của Loa, khoảng một phút.'
     $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
     $base = 'https://nodejs.org/dist/latest-v22.x'
     $part = "$node.part"
@@ -97,24 +97,24 @@ if (-not $node) {
       Move-Item -LiteralPath $part -Destination $node -Force
     } catch {
       Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue
-      Stop-Thap 'Chưa tải được phần chạy của Tháp. Kiểm mạng rồi bấm đúp Tháp lại.'
+      Stop-Loa 'Chưa tải được phần chạy của Loa. Kiểm mạng rồi bấm đúp Loa lại.'
     }
   }
 }
 
-# 4. Khoá Tháp: chưa có thì hỏi trong ô nhập ẩn chữ, kiểm dạng khoá, lưu bằng DPAPI của Windows (chỉ tài khoản Windows
-# này trên máy này mở được). Khoá không qua chat, không ra màn hình, không nằm trong biến môi trường. Hub từ chối khoá
-# thì kênh xoá file, lần mở sau hỏi lại. Máy đã có khoá ở chỗ cũ (Thap.cmd ở gốc repo) thì chép sang.
+# 4. Loa key: if none, ask in a hidden prompt, check its shape, save with Windows DPAPI (only this Windows account on
+# this machine can open it). The key never goes through chat, the screen or an environment variable. A key the hub
+# rejects is deleted by the channel and asked again next launch. A key at the old place (Thap.cmd) is copied over.
 $keyFile = Join-Path $Dir 'tower-key.dpapi'
 $legacy = Join-Path $plugins 'data\tinh-nlh-nlh-governance\tower-key.dpapi'
 if (-not (Test-Path -LiteralPath $keyFile) -and (Test-Path -LiteralPath $legacy)) { Copy-Item -LiteralPath $legacy -Destination $keyFile }
 if (-not (Test-Path -LiteralPath $keyFile)) {
   Write-Host ''
-  Write-Host 'Lấy khoá ở web tỉnh NhiLe: Kết nối, Khoá cho Tháp trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
+  Write-Host 'Lấy khoá ở web tỉnh NhiLe: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
   Write-Host 'Chữ không hiện ra khi dán, đó là bình thường. Dán xong bấm Enter.'
   $saved = $false
   for ($try = 0; $try -lt 3 -and -not $saved; $try++) {
-    $secure = Read-Host -AsSecureString 'Khoá cho Tháp'
+    $secure = Read-Host -AsSecureString 'Khoá cho Loa'
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try {
       $ok = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim() -match '^nlh_tower_[0-9a-f]{64}$'
@@ -123,42 +123,43 @@ if (-not (Test-Path -LiteralPath $keyFile)) {
     }
     if ($ok) {
       $secure | ConvertFrom-SecureString | Set-Content -LiteralPath $keyFile -Encoding ascii
-      Write-Host 'Đã lưu khoá Tháp trên máy này.'
+      Write-Host 'Đã lưu khoá Loa trên máy này.'
       $saved = $true
     } else {
-      Write-Host 'Chuỗi vừa dán không phải khoá Tháp (bắt đầu bằng nlh_tower_). Dán lại.'
+      Write-Host 'Chuỗi vừa dán không phải khoá Loa (bắt đầu bằng nlh_tower_). Dán lại.'
     }
   }
-  if (-not $saved) { Stop-Thap 'Chưa lưu khoá. Bấm đúp Tháp lại khi đã có khoá.' }
+  if (-not $saved) { Stop-Loa 'Chưa lưu khoá. Bấm đúp Loa lại khi đã có khoá.' }
 }
 
-# 5. Cấu hình kênh tower cho đúng phiên này: NLH_TOWER=1 chỉ nằm ở đây, nên các phiên Claude Code khác trên máy
-# (và server tower có sẵn của plugin) không đọc luồng việc. TOWER_ORIGIN (hub dev, bản thử) nếu có thì chuyển tiếp.
-$envs = @{ NLH_TOWER = '1'; NLH_TOWER_DIR = $Dir }
+# 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine
+# (nor the plugin's own tower server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
+# and open sessions. TOWER_ORIGIN (dev hub, trials) is passed on when set.
+$envs = @{ NLH_TOWER = '1'; NLH_TOWER_DIR = $Dir; NLH_TOWER_WORK = $Work; CLAUDE_BIN = $claude }
 if ($env:TOWER_ORIGIN) { $envs.TOWER_ORIGIN = $env:TOWER_ORIGIN }
 $config = Join-Path $Dir 'tower-mcp.json'
 $json = @{ mcpServers = @{ tower = @{ command = $node; args = @($tower); env = $envs } } } | ConvertTo-Json -Depth 5
 [IO.File]::WriteAllText($config, $json, (New-Object Text.UTF8Encoding $false))
 
-# 6. Mở Claude Code ở thư mục làm việc riêng (ô Tháp mở phiên nền cho các ô ở đây). claude và node vào PATH của phiên,
-# để Tháp mở được phiên nền và các hook của plugin chạy được.
+# 6. Open Claude Code in its own work folder (new cell sessions open here too). claude and node go on the session PATH
+# so plugin hooks run.
 New-Item -ItemType Directory -Force -Path $Work | Out-Null
 Set-Location -LiteralPath $Work
 $env:PATH = "$(Split-Path $claude -Parent);$(Split-Path $node -Parent);$env:PATH"
 $opened = Join-Path $Dir 'opened.txt'
 Write-Host ''
-Write-Host 'Tháp đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này.'
+Write-Host 'Loa đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này.'
 if (-not (Test-Path -LiteralPath $opened)) {
   Write-Host 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/loop 10m /tinh-nlh:thap', '-n', 'Thap truc', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:tower')
+$arguments = @('/loop 10m /tinh-nlh:thap', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:tower')
 if ($DryRun) {
   Write-Host "DRYRUN $claude $($arguments -join ' | ')"
   exit 0
 }
 Set-Content -LiteralPath $opened -Value (Get-Date -Format o) -Encoding ascii
-# Câu mở đầu đứng trước các cờ: cờ kênh nhận nhiều giá trị, câu đứng sau bị hiểu là tên kênh.
+# The opening prompt goes before the flags: the channel flag takes several values, a prompt after it reads as a name.
 & $claude @arguments
-if ($LASTEXITCODE) { Stop-Thap 'Tháp dừng vì lỗi ở trên. Bấm đúp Tháp để mở lại.' }
+if ($LASTEXITCODE) { Stop-Loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.' }

@@ -1,14 +1,15 @@
-﻿# Lệnh "bật Tháp" (/tinh-nlh:batthap) chạy file này trên Windows, một lần mỗi máy. Chép Tháp từ plugin sang
-# ~\.tinh-nlh\thap (chỗ cố định, plugin cập nhật không làm mất), rồi tạo lối tắt "Tháp tỉnh NhiLe" trên Desktop.
-# Đã có lối tắt cùng tên trỏ chỗ khác (ví dụ Thap.cmd ở gốc repo của người bảo trì) thì giữ nguyên, không ghi đè.
-# Không tự chạy cùng Windows, không hỏi khoá: khoá hỏi lúc bấm đúp Tháp lần đầu. File lưu UTF-8 có BOM cho PowerShell 5.1.
+﻿# The "bật Loa" command (/tinh-nlh:batthap) runs this on Windows, once per machine. Copies Loa from the plugin to
+# ~\.tinh-nlh\thap (a fixed place plugin updates do not wipe), then makes the "Loa tỉnh NhiLe" desktop shortcut.
+# A shortcut of the same name pointing elsewhere is kept. The old "Tháp tỉnh NhiLe" shortcut that pointed to Loa's
+# earlier launcher (thap.ps1, or Thap.cmd of a repo clone) is removed, so nobody deletes it by hand. Never asks for the
+# key: the first double-click does. File saved as UTF-8 with BOM for PowerShell 5.1.
 param(
   [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\thap'),
   [string]$Desktop = [Environment]::GetFolderPath('Desktop')
 )
 
 $ErrorActionPreference = 'Stop'
-# Chữ có dấu ra đúng cả khi đầu ra đi qua ống (Claude chạy lệnh "bật Tháp" và đọc dòng in ra).
+# Vietnamese text stays right when output goes through a pipe (Claude runs "bật Loa" and reads the printed line).
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $plugin = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content -LiteralPath (Join-Path $plugin '.claude-plugin\plugin.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version
@@ -18,12 +19,13 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'thap.ps1') -Destination (Join-P
 Copy-Item -LiteralPath (Join-Path $plugin 'channel\tower.mjs') -Destination (Join-Path $Dir 'tower.mjs') -Force
 Set-Content -LiteralPath (Join-Path $Dir 'version.txt') -Value $version -Encoding ascii
 
-$name = 'Tháp tỉnh NhiLe'
+$name = 'Loa tỉnh NhiLe'
+$oldName = 'Tháp tỉnh NhiLe'
 $link = Join-Path $Desktop "$name.lnk"
 $launcher = Join-Path $Dir 'thap.ps1'
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-# WScript.Shell bỏ mất chữ ngoài bảng mã của máy (chữ "ỉ" trong tên lối tắt, tên người dùng như "Thùy ỉ" trong đường
-# dẫn) và không lưu được. Nên đọc ghi lối tắt bằng IShellLinkW của Windows, giao diện chữ Unicode.
+# WScript.Shell drops characters outside the machine code page ("ỉ" in the shortcut name, user names like "Thùy ỉ" in
+# paths) and cannot save. So shortcuts are read and written through Windows IShellLinkW, the Unicode interface.
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -61,7 +63,9 @@ public static class ThapLink {
     ((IPersistFile)shell).Load(link, 0);
     var text = new StringBuilder(4096);
     shell.GetArguments(text, text.Capacity);
-    return text.ToString();
+    var target = new StringBuilder(4096);
+    shell.GetPath(target, target.Capacity, IntPtr.Zero, 0);
+    return target.ToString() + " " + text.ToString();
   }
 
   public static void Save(string link, string target, string args, string dir, string description) {
@@ -74,6 +78,16 @@ public static class ThapLink {
   }
 }
 '@
+# Old shortcut from before Loa had its name: remove it only when it is ours.
+$oldLink = Join-Path $Desktop "$oldName.lnk"
+if (Test-Path -LiteralPath $oldLink) {
+  $old = ''
+  try { $old = [ThapLink]::Arguments($oldLink) } catch { }
+  if ($old -match 'thap\.ps1|Thap\.cmd') {
+    Remove-Item -LiteralPath $oldLink -Force
+    Write-Output "Đã bỏ biểu tượng cũ $oldName."
+  }
+}
 if (Test-Path -LiteralPath $link) {
   $existing = ''
   try { $existing = [ThapLink]::Arguments($link) } catch { }
