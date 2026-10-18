@@ -1,6 +1,6 @@
 # claude-plugin
 
-Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo riêng tư, chỉ chứa plugin, để người được mời đọc được plugin mà không đọc được code của hệ.
+Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo công khai, chỉ chứa plugin: ai cũng cài được, không cần tài khoản GitHub; code của hệ nằm ở repo riêng.
 
 - `.claude-plugin/marketplace.json`: danh mục, liệt kê plugin `tinh-nlh`.
 - `plugins/tinh-nlh/`: plugin. Nội dung xem [README của plugin](plugins/tinh-nlh/README.md).
@@ -8,9 +8,9 @@ Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo riêng tư, chỉ 
 
 ## Cài cho mỗi người (tài khoản Claude cá nhân)
 
-1. Nhận lời mời GitHub trong email và bấm chấp nhận. Chưa có tài khoản GitHub thì tạo một tài khoản, rồi báo anh Sơn mời.
-2. Trong Claude (claude.ai hoặc ứng dụng Claude), vào [Customize > Plugins](https://claude.ai/customize/plugins), bấm **Add**, rồi **Add marketplace**, gõ `NLH-GOVERNANCE/claude-plugin`. Được hỏi thì bấm **Connect GitHub** và cho Claude GitHub App đọc repo này.
-3. Cài plugin **Tỉnh NhiLe** (`tinh-nlh`). Mở tab **Connectors** của plugin, bấm **Add** rồi **Connect**, bấm **Đồng ý và đăng nhập** bằng email công ty. Chỉ đăng nhập một lần.
+1. Trong Claude (claude.ai hoặc ứng dụng Claude), vào [Customize > Plugins](https://claude.ai/customize/plugins), bấm **Add**, rồi **Add marketplace**, gõ `NLH-GOVERNANCE/claude-plugin`.
+2. Cài plugin **Tỉnh NhiLe** (`tinh-nlh`).
+3. Mở tab **Connectors** của plugin, bấm **Add** rồi **Connect**, bấm **Đồng ý và đăng nhập** bằng email công ty. Chỉ đăng nhập một lần.
 
 Xong thì xem việc của mình:
 
@@ -60,7 +60,7 @@ Khi dán, chữ không hiện ra: đó là bình thường. Lần đầu, cửa 
 
 ### Khi có tổ chức Team hoặc Enterprise
 
-Chưa dùng. Owner đồng bộ repo này ở [Organization settings > Plugins & skills](https://claude.ai/admin-settings/skills?tab=inventory) (**Add**, **Sync from GitHub**), đặt `tinh-nlh` là **Required**, và thêm connector `https://governance.nlh.vn/mcp` ở [Organization settings > Connectors](https://claude.ai/admin-settings/connectors). Khi đó từng người không cần tài khoản GitHub.
+Chưa dùng. Owner đồng bộ repo này ở [Organization settings > Plugins & skills](https://claude.ai/admin-settings/skills?tab=inventory) (**Add**, **Sync from GitHub**), đặt `tinh-nlh` là **Required**, và thêm connector `https://governance.nlh.vn/mcp` ở [Organization settings > Connectors](https://claude.ai/admin-settings/connectors).
 
 ## File .zip (cho người bảo trì, để thử)
 
