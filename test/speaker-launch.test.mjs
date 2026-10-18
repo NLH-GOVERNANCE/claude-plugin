@@ -40,7 +40,7 @@ function fakeHome(name = 'user') {
 }
 
 // Hai lối mở cùng mở Claude một cách: câu mở đầu trước, Sonnet, kênh tower qua --mcp-config, cờ dev chỉ cho server:tower.
-const CLAUDE_ARGS = ['/loop 10m /tinh-nlh:speaker', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
+const CLAUDE_ARGS = ['/loop 10m /tinh-nlh:loa', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
 
 describe('lệnh "bật Loa" và các file của lối mở', () => {
   test('lệnh /tinh-nlh:speaker chạy đúng file setup có trong plugin, theo hệ điều hành; không hỏi khoá trong chat', () => {

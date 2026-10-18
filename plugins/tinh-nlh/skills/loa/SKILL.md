@@ -1,6 +1,6 @@
 ---
-name: speaker
-description: Instructions for Loa, the speaker session on this machine (channel speaker of plugin tinh-nlh). Use when the session receives <channel source="...speaker"> messages, when the Loa tỉnh NhiLe icon opens the session with /loop 10m /tinh-nlh:speaker, or when the user says "Loa", "Loa tỉnh NhiLe", "chuyển việc tới đúng phiên". To set Loa up on a machine use the speaker command ("bật Loa").
+name: loa
+description: Instructions for Loa, the speaker session on this machine (channel speaker of plugin tinh-nlh). Use when the session receives <channel source="...speaker"> messages, when the Loa tỉnh NhiLe icon opens the session with /loop 10m /tinh-nlh:loa, or when the user says "Loa", "Loa tỉnh NhiLe", "chuyển việc tới đúng phiên". To set Loa up on a machine use the speaker command ("bật Loa").
 ---
 
 # Loa
@@ -21,7 +21,7 @@ Messages arrive as `<channel source="...speaker" action="…" kind="…" cell="�
 3. `kind` `you`: work waiting for the user themself (answer, sign). Print the sentence. Never forward, never act.
 4. `kind` `system`: the channel's own notice (no key, key rejected, another Loa running). Tell the user that sentence. For a missing or rejected key give exactly one path, nothing else: tạo khoá ở web tỉnh NhiLe (**Kết nối**, thẻ **Khoá cho Loa trên máy**, **Tạo khoá mới**), đóng cửa sổ Loa, bấm đúp biểu tượng **Loa tỉnh NhiLe**, dán khoá vào ô nhập ẩn chữ của cửa sổ. Never say to paste a key into chat or plugin settings.
 
-## Every 10 minutes (`/loop 10m /tinh-nlh:speaker`)
+## Every 10 minutes (`/loop 10m /tinh-nlh:loa`)
 
 First turn: print one line "Loa đang nghe; việc tồn để các ô tự đọc." and stop.
 

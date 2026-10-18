@@ -138,7 +138,7 @@ if [ ! -f "$DIR/opened.txt" ]; then
 fi
 echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 echo ''
-set -- '/loop 10m /tinh-nlh:speaker' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+set -- '/loop 10m /tinh-nlh:loa' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
