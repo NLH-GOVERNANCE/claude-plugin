@@ -3,13 +3,13 @@
 // sau khi tắt rồi bật; chỉ đọc khi NLH_TOWER=1; khoá không lộ ra stderr; một máy một Tháp.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { channelEvent, feedUrl, hubOrigin, nextEntries, seatedSession } from '../plugins/tinh-nlh/channel/tower.mjs';
+import { channelEvent, feedUrl, hubOrigin, KEY_FILE, nextEntries, savedKey, seatedSession } from '../plugins/tinh-nlh/channel/tower.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const SERVER = join(root, 'plugins/tinh-nlh/channel/tower.mjs');
@@ -20,6 +20,7 @@ const entry = (id, at, extra = {}) => ({ id, at, kind: 'your_cell', ticket_id: `
 describe('hàm thuần của kênh tower', () => {
   test('chỉ gửi khoá tới hub của tỉnh: https *.nlh.vn, hay http localhost khi thử', () => {
     assert.equal(hubOrigin(''), 'https://governance.nlh.vn');
+    assert.equal(hubOrigin('${user_config.hub_origin}'), 'https://governance.nlh.vn');
     assert.equal(hubOrigin('https://governance-dev.nlh.vn/'), 'https://governance-dev.nlh.vn');
     assert.equal(hubOrigin('http://127.0.0.1:9999'), 'http://127.0.0.1:9999');
     for (const bad of ['http://governance.nlh.vn', 'https://nlh.vn.evil.example', 'https://evilnlh.vn', 'khong-phai-url']) assert.equal(hubOrigin(bad), null, bad);
@@ -113,6 +114,25 @@ describe('hàm thuần của kênh tower', () => {
     assert.deepEqual(again.fresh.map((item) => item.id), ['c']);
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z'), 'https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z');
     assert.equal(feedUrl('https://x.nlh.vn', null, Date.parse('2026-10-18T05:00:00Z')), 'https://x.nlh.vn/tower/feed?since=2026-10-18T04%3A59%3A00.000Z');
+  });
+
+  test('khoá đã lưu (DPAPI): đúng dạng thì dùng; mở không được hay sai dạng thì xoá file để lần sau hỏi lại', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tower-key-'));
+    try {
+      const file = join(dir, KEY_FILE);
+      assert.equal(savedKey(dir, () => KEY), null, 'chưa có file thì không mở');
+      writeFileSync(file, 'dpapi');
+      assert.equal(savedKey(dir, () => `${KEY}\r\n`), KEY);
+      assert.ok(existsSync(file));
+      assert.equal(savedKey(dir, () => 'không phải khoá'), null);
+      assert.ok(!existsSync(file));
+      writeFileSync(file, 'dpapi');
+      assert.equal(savedKey(dir, () => { throw new Error('tài khoản Windows khác'); }), null);
+      assert.ok(!existsSync(file));
+      assert.equal(savedKey(null), null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -244,7 +264,7 @@ describe('server kênh tower chạy thật qua stdio', () => {
     await settle();
     assert.equal(rejected.pushed().length, 1);
     assert.equal(rejected.pushed()[0].meta.kind, 'system');
-    assert.match(rejected.pushed()[0].content, /Tạo khoá mới/);
+    assert.match(rejected.pushed()[0].content, /Khoá hết hạn hoặc đã thu hồi, mở lại Tháp để dán khoá mới/);
     await rejected.close();
 
     status = 200;
@@ -252,9 +272,20 @@ describe('server kênh tower chạy thật qua stdio', () => {
     const noKey = open(stateDir(), { TOWER_KEY: '' });
     await until(() => noKey.pushed().length >= 1);
     assert.match(noKey.pushed()[0].content, /chưa có khoá/);
-    assert.match(noKey.pushed()[0].content, /\/plugin, tab Installed, Tỉnh NhiLe, Configure options/);
+    assert.match(noKey.pushed()[0].content, /mở lại bằng lối tắt Tháp tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
+    assert.doesNotMatch(noKey.pushed()[0].content, /Configure options/);
     assert.equal(requests.length, 0);
     await noKey.close();
+
+    // Cấu hình plugin còn nguyên chữ ${user_config…} và file khoá hỏng: coi như chưa có khoá, xoá file, không gọi hub.
+    const brokenDir = stateDir();
+    writeFileSync(join(brokenDir, KEY_FILE), 'không phải DPAPI');
+    const broken = open(brokenDir, { TOWER_KEY: '${user_config.tower_key}' });
+    await until(() => broken.pushed().length >= 1);
+    assert.match(broken.pushed()[0].content, /chưa có khoá/);
+    assert.ok(!existsSync(join(brokenDir, KEY_FILE)));
+    assert.equal(requests.length, 0);
+    await broken.close();
 
     const dir = stateDir();
     feed = [];
@@ -306,5 +337,21 @@ describe('plugin.json và Thap.cmd', () => {
     assert.match(ps, /finally \{[\s\S]*Remove-Item -LiteralPath \$temp/, 'đổi tên hỏng thì xoá file tạm');
     assert.match(ps, /CreateShortcut\(\$temp\)[\s\S]*Move-Item -LiteralPath \$temp -Destination \$link/, 'lưu tên tạm ASCII rồi đổi tên: WScript.Shell không lưu được tên có chữ "ỉ"');
     assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i);
+  });
+
+  test('tower-key.ps1: chưa có khoá thì hỏi ô ẩn chữ, kiểm dạng khoá, lưu DPAPI vào thư mục dữ liệu plugin; Thap.cmd gọi trước Claude', () => {
+    const raw = readFileSync(join(root, 'scripts/tower-key.ps1'));
+    assert.deepEqual([...raw.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 có BOM cho PowerShell 5.1');
+    const ps = raw.toString('utf8');
+    assert.match(ps, /Read-Host -AsSecureString 'Dán khoá cho Tháp \(lấy ở web tỉnh NhiLe, Kết nối, Khoá cho Tháp trên máy\)'/);
+    assert.match(ps, /\$secure \| ConvertFrom-SecureString \| Set-Content/, 'không -Key: DPAPI của tài khoản Windows');
+    assert.doesNotMatch(ps, /ConvertFrom-SecureString -Key|AsPlainText|Write-Host \$/);
+    assert.ok(ps.includes("'^nlh_tower_[0-9a-f]{64}$'"));
+    assert.ok(ps.includes('.claude\\plugins\\data\\tinh-nlh-nlh-governance'));
+    assert.ok(ps.includes(`'${KEY_FILE}'`));
+    assert.match(ps, /ZeroFreeBSTR/);
+    const cmd = readFileSync(join(root, 'Thap.cmd'), 'utf8');
+    assert.ok(cmd.includes('tower-key.ps1"\r\nif errorlevel 1 (pause & exit /b 1)\r\n'), 'chưa lưu được khoá thì không mở Claude');
+    assert.ok(cmd.indexOf('tower-key.ps1') < cmd.indexOf('\r\nclaude '));
   });
 });

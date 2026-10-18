@@ -6,6 +6,9 @@ rem (research preview), nen phai noi ro "toi dang thu kenh nay". Co chi bo qua d
 rem plugin:tinh-nlh@nlh-governance, sau mot hop hoi. Quyen duyet, dang nhap, luat to chuc giu nguyen.
 rem Loi tat "Thap tinh NhiLe" tren Desktop (tao lan dau) va dong nhac trong cua so: scripts\tower-window.ps1.
 rem Khong tu bat chay cung Windows.
+rem Chua co khoa Thap da luu thi hoi mot lan trong o nhap an chu, luu bang DPAPI (scripts\tower-key.ps1). Khong dan khoa vao chat.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\tower-key.ps1"
+if errorlevel 1 (pause & exit /b 1)
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\tower-window.ps1"
 rem NLH_TOWER=1: chi phien nay doc luong viec; cac phien Claude Code khac tren may khong doc.
 set NLH_TOWER=1
