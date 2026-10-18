@@ -61,13 +61,25 @@ describe('plugin tinh-nlh', () => {
     assert.deepEqual(servers[0], { type: 'http', url: 'https://governance.nlh.vn/mcp' });
   });
 
-  test('hook chỉ có SessionStart, chỉ in một câu, không gọi mạng', () => {
+  test('hook đầu phiên in câu dặn và mã phiên, không gọi mạng; Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
-    assert.deepEqual(Object.keys(hooks), ['SessionStart']);
+    assert.deepEqual(Object.keys(hooks).sort(), ['SessionEnd', 'SessionStart', 'Stop']);
     const commands = hooks.SessionStart.flatMap((group) => group.hooks);
-    assert.equal(commands.length, 1);
+    assert.equal(commands.length, 2);
     assert.equal(commands[0].type, 'command');
     assert.match(commands[0].command, /^echo "[^"$`]+my_work[^"$`]+"$/);
+    assert.deepEqual(commands[1], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] });
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
+    // Phiên tự báo (phiếu 6d4cb2ad): gọi report_session của connector, không gửi nội dung chat.
+    for (const [event, status] of [['Stop', 'idle'], ['SessionEnd', 'stopped']]) {
+      const [hook] = hooks[event].flatMap((group) => group.hooks);
+      assert.deepEqual(hook, {
+        type: 'mcp_tool',
+        server: 'plugin:tinh-nlh:nhile-governance',
+        tool: 'report_session',
+        input: { session_id: '${session_id}', status },
+      });
+    }
   });
 
   test('skill tinh-nlh và năm lệnh viec, giao, lamtiep, bangiao, ky có mô tả', () => {

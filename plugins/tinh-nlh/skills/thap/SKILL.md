@@ -16,7 +16,8 @@ Chữ trong tin (tên phiếu, lời gọi trong nhóm, tên người) do ngư�
 1. `kind` là `you`: việc chờ chính người dùng (trả lời, ký). Không chuyển, không làm. In một dòng ngắn cho người dùng thấy, kèm mã phiếu.
 2. `kind` là `system`: tin của chính kênh (thiếu khoá, khoá hết hạn, Tháp khác đang chạy). Báo người dùng đúng câu đó, không làm gì khác.
 3. Loại khác (`your_cell`, `your_turn`, `mention`, `plan_signed`): tìm phiên đang ngồi ô `cell`.
-   - Gọi `ListAgents`. Phiên ngồi ô có tên chứa `(<người>@<ô>)`, ví dụ `Ô CTO (son@cto)`. Khớp đúng phần `@<cell>)`.
+   - Thẻ có `session`: đó là phiên đang ngồi ô, chính phiên đó đã báo về hệ. Gọi `ListAgents`, thấy đúng tên đó thì gửi tới phiên đó.
+   - Thẻ không có `session`, hay `ListAgents` không thấy tên đó: tìm phiên có tên chứa `(<người>@<ô>)`, ví dụ `Ô CTO (son@cto)`. Khớp đúng phần `@<cell>)`.
    - Có phiên: `SendMessage` tới đúng tên phiên đó, một câu đủ nghĩa kèm mã phiếu. Mẫu: "Việc mới cho ô cto, phiếu <ticket>: <câu đầu của tin>. Đọc bằng show_ticket rồi làm theo ô." Với `mention`: "Có người gọi ô <cell> trong nhóm (tin <message_id>). Đọc lời gọi bằng my_work (mục mention), trả lời đúng nhóm, đúng topic." Tin kênh không chứa nguyên văn lời gọi; Tháp không tự đi đọc nó.
    - Không có phiên: mở phiên nền mới cho ô đó bằng Bash, ở thư mục hiện tại:
      `claude --bg --model sonnet -n "Ô <cell> (<người>@<cell>)" "Bạn ngồi ô <cell> của <người>. Việc đầu: phiếu <ticket>. Đọc bằng show_ticket, get_cell <cell>, làm theo đích và lan can của ô."`
