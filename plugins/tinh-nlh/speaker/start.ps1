@@ -155,7 +155,7 @@ if (-not (Test-Path -LiteralPath $opened)) {
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/loop 10m /tinh-nlh:speaker', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
+$arguments = @('/loop 10m /tinh-nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
 # Fallback without the dev channel flag: the server still reads the hub, resumes and opens sessions; only sends wait
 # for the 10-minute loop.
 $fallback = $arguments[0..($arguments.Count - 3)]
