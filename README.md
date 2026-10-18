@@ -14,7 +14,7 @@ Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo riêng tư, chỉ 
 
 Xong thì xem việc của mình:
 
-- Trên app Claude (web, máy tính) và điện thoại: gõ `/viec`.
+- Trên app Claude (web, máy tính) và điện thoại: gõ `/work`.
 - Ở Claude Code và Cowork: mở phiên mới là Claude tự nạp bối cảnh của bạn (ô, dự án đang dở, việc đang chờ) và kể việc đang chờ (hook đầu phiên chỉ chạy ở hai nơi này).
 - Ở đâu cũng hỏi được "tôi đang làm gì dở": Claude trả lời ngay, không phải hỏi lại.
 
@@ -24,10 +24,10 @@ Telegram là tuỳ chọn, chỉ để ký ngay trong nhóm. Plugin tự cập n
 
 Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối tắt.
 
-- "Việc của tôi hôm nay?" (gồm việc chờ tôi ký) · `/viec`
-- "Giao cho chị Thùy: …, xong khi …" · `/giao`
-- "Làm tiếp việc …", ở máy nào cũng được · `/lamtiep`
-- "Tôi dừng đây": Claude tự ghi bàn giao lên phiếu · `/bangiao`
+- "Việc của tôi hôm nay?" (gồm việc chờ tôi ký) · `/work`
+- "Giao cho chị Thùy: …, xong khi …" · `/assign`
+- "Làm tiếp việc …", ở máy nào cũng được · `/tinh-nlh:resume`
+- "Tôi dừng đây": Claude tự ghi bàn giao lên phiếu · `/handoff`
 - "Góp ý: …" khi vướng hay khó dùng, Claude ghi lại cho Tech Lead
 - Xem tình hình trên Telegram hay governance.nlh.vn/app
 
