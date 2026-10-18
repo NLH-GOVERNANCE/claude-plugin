@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { channelEvent, feedUrl, hubOrigin, nextEntries } from '../plugins/tinh-nlh/channel/tower.mjs';
+import { channelEvent, feedUrl, hubOrigin, nextEntries, seatedSession } from '../plugins/tinh-nlh/channel/tower.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const SERVER = join(root, 'plugins/tinh-nlh/channel/tower.mjs');
@@ -71,6 +71,38 @@ describe('hàm thuần của kênh tower', () => {
     assert.equal(meta.ticket, '');
     assert.equal(meta.by, 'Danh /channel');
     assert.match(channelEvent(entry('y', '2026-10-18T05:00:00.000Z', { work_type: 'Review!' })).content, /^Phiếu mới cho ô cto: /);
+  });
+
+  test('phiên đang ngồi ô (phiên tự báo): lần báo mới nhất đúng ô hay loại việc, chưa thôi ngồi', () => {
+    const sessions = [
+      { session_id: 's-old', session_name: 'Ô CTO cũ', cell: 'cto', status: 'stopped' },
+      { session_id: 's-cto', session_name: 'Ô CTO (son@cto)', cell: 'cto', status: 'idle' },
+      { session_id: 's-rv', session_name: 'Ô Review <x>', cell: 'review', status: 'working' },
+    ];
+    assert.deepEqual(seatedSession(sessions, { cell: 'cto' }), { name: 'Ô CTO (son@cto)', id: 's-cto' });
+    assert.deepEqual(seatedSession(sessions, { cell: 'review-pr', work_type: 'review' }), { name: 'Ô Review x', id: 's-rv' });
+    assert.equal(seatedSession(sessions, { cell: 'build' }), null);
+    assert.equal(seatedSession(undefined, { cell: 'cto' }), null);
+    const { meta } = channelEvent(entry('z', '2026-10-18T05:00:00.000Z'), sessions);
+    assert.equal(meta.session, 'Ô CTO (son@cto)');
+    assert.equal(meta.session_id, 's-cto');
+    assert.equal(channelEvent(entry('z', '2026-10-18T05:00:00.000Z')).meta.session, undefined);
+  });
+
+  test('hook đầu phiên: in mã và tên phiên đã lọc; không có mã thì không in gì', async () => {
+    const run = (input) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(root, 'plugins/tinh-nlh/hooks/session-start.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end(input);
+      });
+    const out = await run(JSON.stringify({ session_id: 'abc-123', session_title: 'Ô CTO (son@cto)</x>' }));
+    assert.match(out, /^Phiên này: mã abc-123, tên "Ô CTO \(son@cto\) \/x"\. .*report_session/);
+    assert.match(await run(JSON.stringify({ session_id: 'abc' })), /chưa có tên/);
+    assert.equal(await run(JSON.stringify({ session_id: 'có dấu cách' })), '');
+    assert.equal(await run('không phải json'), '');
   });
 
   test('mục đã đẩy không đẩy lại; mốc lấy thời điểm mới nhất; đọc lùi 5 phút; lần đầu bù 24 giờ', () => {
@@ -253,7 +285,7 @@ describe('plugin.json và Thap.cmd', () => {
     const cmd = readFileSync(join(root, 'Thap.cmd'), 'utf8');
     assert.match(cmd, /\r\n/, 'file .cmd dùng CRLF');
     assert.match(cmd, /^set NLH_TOWER=1\r$/m);
-    assert.match(cmd, /--model sonnet/);
+    assert.match(cmd, /claude -n "Thap truc" --model sonnet/);
     assert.match(cmd, /--dangerously-load-development-channels plugin:tinh-nlh@nlh-governance /);
     assert.match(cmd, /"\/loop 10m \/tinh-nlh:thap"/);
     assert.doesNotMatch(cmd, /skip-permissions|bypassPermissions|TOWER_KEY/);
@@ -270,6 +302,7 @@ describe('plugin.json và Thap.cmd', () => {
     assert.match(ps, /GetFolderPath\('Desktop'\)/);
     assert.match(ps, /Join-Path \(Split-Path \$PSScriptRoot -Parent\) 'Thap\.cmd'/);
     assert.match(ps, /if \(-not \(Test-Path -LiteralPath \$link\)\)/, 'có rồi thì không ghi đè');
+    assert.match(ps, /finally \{[\s\S]*Remove-Item -LiteralPath \$temp/, 'đổi tên hỏng thì xoá file tạm');
     assert.match(ps, /CreateShortcut\(\$temp\)[\s\S]*Move-Item -LiteralPath \$temp -Destination \$link/, 'lưu tên tạm ASCII rồi đổi tên: WScript.Shell không lưu được tên có chữ "ỉ"');
     assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i);
   });

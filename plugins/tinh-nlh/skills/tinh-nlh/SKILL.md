@@ -23,6 +23,10 @@ Chưa đăng nhập connector thì chỉ người dùng mở Customize, mục Pl
 
 Ô là một trợ lý làm trọn một việc, người hay máy nào ngồi vào cũng làm được. Trước khi làm việc của một ô, `get_cell` lấy đủ ô đó rồi làm theo đích và lan can của ô.
 
+## Báo phiên (khi ngồi ô)
+
+Nhận ngồi một ô, hay đổi sang phiếu khác: gọi `report_session` với `session_id`, `session_name`, `cell`, `ticket_id`, để Tháp trên máy chuyển việc của ô đó tới đúng phiên này. Mã và tên phiên lấy từ dòng đầu phiên "Phiên này: mã …, tên …". Không có dòng đó (app Claude trên web, điện thoại): tự đặt một mã ngắn giữ suốt phiên, tên dạng "Ô CTO (son@cto)". Thôi ngồi ô thì báo `status` `stopped`. Không báo nội dung chat.
+
 ## Người mới
 
 Người dùng nói mới vào, hay chưa có ô riêng nào: làm theo phần "Người mới vào" trong lời dặn của server (gọi `how_to_use` nếu chưa thấy).
