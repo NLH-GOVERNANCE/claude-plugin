@@ -127,4 +127,12 @@ describe('plugin tinh-nlh', () => {
     assert.match(skill, /## Góp ý/);
     assert.match(skill, /ô `tech-lead-son`, tiêu đề bắt đầu bằng "Góp ý:"/);
   });
+
+  test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {
+    // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /viec (phiếu bdec651d).
+    const promise = /(mở|mở claude|mở chat)[^.\n"]{0,20}là thấy việc/i;
+    const files = [join(root, 'README.md'), join(root, '.claude-plugin/marketplace.json'), ...filesUnder(pluginDir)];
+    for (const path of files) assert.doesNotMatch(readFileSync(path, 'utf8').replace(/Không hứa "mở chat là thấy việc"/g, ''), promise, relative(root, path));
+  });
 });
+
