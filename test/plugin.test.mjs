@@ -89,13 +89,16 @@ describe('plugin tinh-nlh', () => {
     }
   });
 
-  test('skill tinh-nlh và bảy lệnh viec, giao, lamtiep, bangiao, ky, khongluu, batthap có mô tả', () => {
+  test('skill tinh-nlh và sáu lệnh tiếng Anh (work, assign, sign, resume, handoff, no-save) có mô tả kèm câu tiếng Việt người dùng hay nói; không còn tên lệnh cũ', () => {
     const skill = frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md'));
     assert.equal(skill.name, 'tinh-nlh');
     assert.ok(skill.description);
-    const commands = ['bangiao', 'batthap', 'giao', 'khongluu', 'ky', 'lamtiep', 'viec'];
-    assert.deepEqual(readdirSync(join(pluginDir, 'commands')).sort(), commands.map((name) => `${name}.md`));
-    for (const name of commands) assert.ok(frontMatter(join(pluginDir, `commands/${name}.md`)).description);
+    const files = readdirSync(join(pluginDir, 'commands'));
+    for (const old of ['viec', 'giao', 'ky', 'lamtiep', 'bangiao', 'khongluu']) assert.ok(!files.includes(`${old}.md`), old);
+    for (const name of ['work', 'assign', 'sign', 'resume', 'handoff', 'no-save']) {
+      // Mô tả tiếng Anh, kèm câu người dùng nói để Claude nhận ra (phiếu 98bd8b93, dòng eb46f01f).
+      assert.match(frontMatter(join(pluginDir, `commands/${name}.md`)).description, /Use when the user says "[^"]*[^\u0000-\u007f][^"]*"/, name);
+    }
   });
 
   test('lan can: không có bin/ (claude.ai từ chối cả gói), không có gì trông như khoá hay token', () => {
@@ -162,7 +165,7 @@ describe('plugin tinh-nlh', () => {
       },
     ]);
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
-    const command = readFileSync(join(pluginDir, 'commands/khongluu.md'), 'utf8');
+    const command = readFileSync(join(pluginDir, 'commands/no-save.md'), 'utf8');
     assert.match(command, /`save_chat`.*`role` `opt_out`/);
     const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
     assert.match(skill, /## Lưu chat/);
@@ -187,17 +190,17 @@ describe('plugin tinh-nlh', () => {
   });
 
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {
-    // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /viec (phiếu bdec651d).
+    // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /work (phiếu bdec651d).
     const promise = /(mở|mở claude|mở chat)[^.\n"]{0,20}là thấy việc/i;
     const files = [join(root, 'README.md'), join(root, '.claude-plugin/marketplace.json'), ...filesUnder(pluginDir)];
-    for (const path of files) assert.doesNotMatch(readFileSync(path, 'utf8').replace(/Không hứa "mở chat là thấy việc"/g, ''), promise, relative(root, path));
+    for (const path of files) assert.doesNotMatch(readFileSync(path, 'utf8').replace(/(Không hứa|Never promise) "mở chat là thấy việc"/g, ''), promise, relative(root, path));
   });
 
-  test('/lamtiep chỉ nhận việc chờ chính người dùng; việc đã giao cho ô khác thì hỏi trước, không tự claim', () => {
-    const lamtiep = readFileSync(join(pluginDir, 'commands/lamtiep.md'), 'utf8');
-    assert.match(lamtiep, /Chỉ nhận \(`claim`\) việc đang chờ chính người dùng/);
-    assert.match(lamtiep, /mục `assigned` của `my_desk`\): chỉ đọc bàn giao và kể lại, không tự `claim`/);
-    assert.match(lamtiep, /"Muốn tôi làm thay không\?"/);
+  test('/resume chỉ nhận việc chờ chính người dùng; việc đã giao cho ô khác thì hỏi trước, không tự claim', () => {
+    const resume = readFileSync(join(pluginDir, 'commands/resume.md'), 'utf8');
+    assert.match(resume, /Only claim \(`claim`\) work waiting for the user themself/);
+    assert.match(resume, /\(`assigned` in `my_desk`\): only read the handoff and tell it back, do not `claim`/);
+    assert.match(resume, /"Muốn tôi làm thay không\?"/);
   });
 });
 
