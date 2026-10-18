@@ -137,6 +137,7 @@ describe('plugin tinh-nlh', () => {
     const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
     assert.match(frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md')).description, /câu đầu mỗi cuộc trò chuyện, kể cả trên web và điện thoại/);
     assert.match(skill, /1\. Gọi `my_context` một lần/);
+    assert.match(skill, /Connector chưa có `my_context` \(hub bản cũ\) thì gọi `my_work` thay/);
     assert.match(skill, /"tôi đang làm gì dở".+không hỏi lại, không tra thêm/);
     assert.match(skill, /tài khoản cá nhân thì không mở hay chép vào cuộc trò chuyện dữ liệu loại 3–4/);
   });

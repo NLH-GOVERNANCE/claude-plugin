@@ -11,7 +11,7 @@ Hệ là trung tâm. Plugin này chỉ là cửa mỏng: nó không chứa luậ
 
 Trước khi làm gì khác:
 
-1. Gọi `my_context` một lần: người dùng là ai, ô của họ, dự án đang dở kèm dòng sổ tay mới nhất, việc đang chờ, việc đã giao, mục lục quyết định đã ký. Ở Claude Code và Cowork, hook đầu phiên đã nạp sẵn kết quả này sau `/clear` hay khi gọn ngữ cảnh: có rồi thì không gọi lại.
+1. Gọi `my_context` một lần: người dùng là ai, ô của họ, dự án đang dở kèm dòng sổ tay mới nhất, việc đang chờ, việc đã giao, mục lục quyết định đã ký. Ở Claude Code và Cowork, hook đầu phiên đã nạp sẵn kết quả này sau `/clear` hay khi gọn ngữ cảnh: có rồi thì không gọi lại. Connector chưa có `my_context` (hub bản cũ) thì gọi `my_work` thay.
 2. Tóm tắt bằng lời thường, vài câu ngắn:
    - việc đang chờ người dùng (ký, trả lời, quyết);
    - việc người dùng đã giao đang tới đâu: ai đang giữ, đã có biên nhận chưa, còn chờ gì.
