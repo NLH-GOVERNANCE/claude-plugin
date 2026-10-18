@@ -4,6 +4,9 @@ rem Kenh "thap" cua plugin tinh-nlh day viec moi vao phien nay; phien chuyen moi
 rem Co --dangerously-load-development-channels: kenh tu lam chua nam trong danh sach kenh Anthropic duyet san
 rem (research preview), nen phai noi ro "toi dang thu kenh nay". Co chi bo qua danh sach do cho dung kenh
 rem plugin:tinh-nlh@nlh-governance, sau mot hop hoi. Quyen duyet, dang nhap, luat to chuc giu nguyen.
+rem Loi tat "Thap tinh NhiLe" tren Desktop (tao lan dau) va dong nhac trong cua so: scripts\thap-window.ps1.
+rem Khong tu bat chay cung Windows.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\thap-window.ps1"
 rem NLH_THAP=1: chi phien nay doc luong viec; cac phien Claude Code khac tren may khong doc.
 set NLH_THAP=1
 cd /d "%~dp0.."

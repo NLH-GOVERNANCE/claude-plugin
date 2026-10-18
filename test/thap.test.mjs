@@ -253,5 +253,18 @@ describe('plugin.json và Thap.cmd', () => {
     assert.match(cmd, /"\/loop 10m \/tinh-nlh:thap"/);
     assert.doesNotMatch(cmd, /skip-permissions|bypassPermissions|THAP_KEY/);
     assert.match(cmd, /^[\x00-\x7f]*$/, 'cmd chỉ ký tự ASCII');
+    assert.match(cmd, /powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\\thap-window\.ps1"\r\nrem [^\r]*\r\nset NLH_THAP=1/);
+  });
+
+  test('thap-window.ps1: lối tắt "Tháp tỉnh NhiLe" trên Desktop trỏ tới Thap.cmd, dòng nhắc lời thường; không tự chạy cùng Windows', () => {
+    const raw = readFileSync(join(root, 'scripts/thap-window.ps1'));
+    assert.deepEqual([...raw.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 có BOM cho PowerShell 5.1');
+    const ps = raw.toString('utf8');
+    assert.match(ps, /\$name = 'Tháp tỉnh NhiLe'/);
+    assert.match(ps, /'Tháp đang nghe tỉnh NhiLe\. Đừng đóng cửa sổ này\.'/);
+    assert.match(ps, /GetFolderPath\('Desktop'\)/);
+    assert.match(ps, /Join-Path \(Split-Path \$PSScriptRoot -Parent\) 'Thap\.cmd'/);
+    assert.match(ps, /if \(-not \(Test-Path -LiteralPath \$link\)\)/, 'có rồi thì không ghi đè');
+    assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i);
   });
 });
