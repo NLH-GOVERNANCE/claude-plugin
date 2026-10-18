@@ -14,7 +14,7 @@ Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo riêng tư, chỉ 
 
 Xong thì xem việc của mình:
 
-- Trên app Claude (web, máy tính) và điện thoại: gõ `/viec`.
+- Trên app Claude (web, máy tính) và điện thoại: gõ `/work`.
 - Ở Claude Code và Cowork: mở phiên mới là Claude tự nạp bối cảnh của bạn (ô, dự án đang dở, việc đang chờ) và kể việc đang chờ (hook đầu phiên chỉ chạy ở hai nơi này).
 - Ở đâu cũng hỏi được "tôi đang làm gì dở": Claude trả lời ngay, không phải hỏi lại.
 
@@ -24,10 +24,10 @@ Telegram là tuỳ chọn, chỉ để ký ngay trong nhóm. Plugin tự cập n
 
 Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối tắt.
 
-- "Việc của tôi hôm nay?" (gồm việc chờ tôi ký) · `/viec`
-- "Giao cho chị Thùy: …, xong khi …" · `/giao`
-- "Làm tiếp việc …", ở máy nào cũng được · `/lamtiep`
-- "Tôi dừng đây": Claude tự ghi bàn giao lên phiếu · `/bangiao`
+- "Việc của tôi hôm nay?" (gồm việc chờ tôi ký) · `/work`
+- "Giao cho chị Thùy: …, xong khi …" · `/assign`
+- "Làm tiếp việc …", ở máy nào cũng được · `/tinh-nlh:resume`
+- "Tôi dừng đây": Claude tự ghi bàn giao lên phiếu · `/handoff`
 - "Góp ý: …" khi vướng hay khó dùng, Claude ghi lại cho Tech Lead
 - Xem tình hình trên Telegram hay governance.nlh.vn/app
 
@@ -38,16 +38,25 @@ Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối
 /plugin install tinh-nlh@nlh-governance
 ```
 
-### Tháp hệ thống trên máy (Claude Code, Windows)
+### Bật Loa trên máy (Windows và Mac)
 
-Một phiên Claude Code chạy Sonnet ngồi ô Tháp hệ thống: hệ đẩy việc mới qua kênh `tower` của plugin, phiên chuyển việc tới đúng phiên đang ngồi ô đó (hay mở phiên nền mới) trong khoảng 15 giây. Mỗi 10 phút gọi `my_work` để bù tin sót. Chỉ cần ở một máy.
+Loa ngồi trên máy của bạn: có việc mới cho một ô, Loa báo một câu tới đúng phiên Claude đang ngồi ô đó trong khoảng 15 giây; phiên đã tắt thì Loa mở lại. Mỗi máy làm một lần, ba bước:
 
-1. Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Tháp trên máy**, bấm **Tạo khoá mới**, chép khoá (chỉ hiện một lần, hạn 30 ngày).
-2. Trong Claude Code: `/plugin marketplace update nlh-governance`, rồi `/plugin`, tab **Installed**, `tinh-nlh`, cập nhật lên bản mới nhất.
-3. Bấm đúp lối tắt **Tháp tỉnh NhiLe** trên Desktop (chưa có thì bấm đúp `Thap.cmd` ở gốc repo này một lần, nó tự tạo lối tắt). Cửa sổ ghi "Tháp đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này." Lần đầu cửa sổ hỏi khoá trong ô nhập ẩn chữ: dán khoá, Enter. Khoá lưu bằng DPAPI của Windows (chỉ tài khoản Windows này mở được), không qua chat; hub từ chối khoá thì lần mở sau hỏi lại. Không dán khoá vào chat. Hộp cảnh báo kênh thử hiện ra: chọn **I am using this for local development**. Tháp chưa tự chạy cùng Windows.
-4. Lần đầu, trong cửa sổ Tháp gõ `/mcp`, chọn `plugin:tinh-nlh:nhile-governance`, **Authenticate**, đăng nhập tỉnh NhiLe. Chỉ làm một lần; chưa đăng nhập thì Tháp không đọc được việc, và các hook của plugin báo "not connected" ở cuối mỗi lượt (Claude Code chưa có cách cho hook này im khi chưa đăng nhập).
+1. Cài app Claude cho máy tính ở [claude.ai/download](https://claude.ai/download) và plugin Tỉnh NhiLe như mục trên; máy đã có thì bỏ qua.
+2. Trong app Claude, mở mục **Code**, gõ **bật Loa**, bấm cho phép khi được hỏi: biểu tượng **Loa tỉnh NhiLe** hiện trên màn hình chính.
+3. Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới** và chép khoá, rồi bấm đúp biểu tượng Loa, dán khoá khi cửa sổ hỏi và bấm Enter.
 
-Cờ `--dangerously-load-development-channels` trong `Thap.cmd` làm gì: kênh tự làm chưa nằm trong danh sách kênh Anthropic duyệt sẵn (research preview), nên Claude Code chỉ nạp nó khi mình nói rõ đang thử. Cờ chỉ bỏ qua danh sách đó, chỉ cho đúng `plugin:tinh-nlh@nlh-governance`, và hỏi lại mỗi lần mở. Vì sao an toàn: kênh do repo này viết, chỉ đọc việc của chính bạn bằng khoá có hạn, chỉ gửi khoá tới `*.nlh.vn`; không có công cụ trả lời, không nhận duyệt quyền từ xa, nên hộp hỏi quyền vẫn do bạn bấm trên máy; luật của tổ chức (`channelsEnabled`) vẫn áp dụng. Tắt Tháp: đóng cửa sổ.
+Khi dán, chữ không hiện ra: đó là bình thường. Lần đầu, cửa sổ Loa tự cài phần còn thiếu trong một hai phút, rồi mở trình duyệt để bạn đăng nhập Claude. Mỗi lần mở, cửa sổ hỏi một câu tiếng Anh: chọn dòng **I am using this for local development**, bấm Enter. Để cửa sổ mở là Loa làm việc, máy không ngủ khi Loa mở; đóng cửa sổ là tắt. Từ lần sau Loa tự mở khi bạn đăng nhập máy, chỉ cần chọn dòng tiếng Anh như trên. Khoá tự gia hạn khi Loa chạy, chỉ hết hạn sau 30 ngày không dùng. Không dán khoá vào chat.
+
+#### Cho người bảo trì
+
+- Trong plugin, Loa có tên tiếng Anh là speaker; hub gọi là tower (đường `/tower/feed`, khoá `nlh_tower_…`): tower = speaker.
+- Lệnh `/tinh-nlh:speaker` chạy `speaker/setup.ps1` (Windows) hay `speaker/setup.sh` (macOS): chép Loa sang `~/.tinh-nlh/speaker` và tạo lối tắt "Loa tỉnh NhiLe" trên Desktop. Đã có lối tắt cùng tên trỏ chỗ khác thì giữ nguyên; lối tắt cũ "Tháp tỉnh NhiLe" hay "Loa tỉnh NhiLe" trỏ tới bản Loa cũ của mình (`~/.tinh-nlh`) thì tự thay.
+- Lối tắt mở `speaker/start.ps1` hay `speaker/start.sh`: lấy bản mới nhất của Loa từ plugin đã cài, tự cài Claude Code (`claude.ai/install.ps1`, `install.sh`) và Node (`nodejs.org`, kiểm SHA-256) khi thiếu, hỏi khoá trong ô nhập ẩn chữ, lưu bằng DPAPI (Windows) hay Keychain (macOS), rồi mở Claude Code chạy Sonnet ở `~/TinhNhiLe`.
+- Cách báo (`speaker/speaker.mjs`): hub gắn vào mỗi việc mã phiên đã ngồi ô đó (`report_session`). Kênh tra mã trong `claude agents --json --all`: phiên đang chạy thì phiên Loa gửi bằng `SendMessage`; phiên đã tắt thì `claude --bg --resume <mã>` ở thư mục cũ của phiên; không còn thì mở phiên nền mới cho ô. Mỗi lần báo ghi một dòng sổ (`POST /tower/forwards`: phiếu, ô, phiên, cách báo, được hay hỏng, không nội dung); `show_stats` đếm theo ngày. Câu báo chỉ nói ô và phiếu; Loa không đọc nội dung phiếu.
+- Tự mở khi đăng nhập: setup đăng ký tác vụ "Loa tỉnh NhiLe" của chính người dùng ở Task Scheduler (Windows, không cần quyền quản trị) hay LaunchAgent `vn.nlh.tinh-nlh.speaker` (macOS). Khi Loa mở, máy không ngủ (`SetThreadExecutionState` trên Windows, `caffeinate` trên macOS). Claude thoát trong một phút đầu (kênh bị chặn, hay bấm không ở hộp kênh thử) thì lối mở chạy lại không cờ kênh, chỉ nhịp 10 phút qua công cụ `pending`, in một dòng.
+- Kênh `speaker` nạp qua `--mcp-config` với `--dangerously-load-development-channels server:speaker`, không qua tên plugin: plugin cài từ claude.ai mang tên `tinh-nlh@synced`, Claude Code chỉ nhận kênh của plugin cài từ chợ. `NLH_TOWER=1` chỉ nằm trong cấu hình kênh, nên các phiên khác trên máy không đọc luồng việc.
+- Cờ `--dangerously-load-development-channels`: kênh tự làm chưa nằm trong danh sách kênh Anthropic duyệt sẵn (research preview), nên Claude Code chỉ nạp khi mình nói rõ đang thử, hỏi lại mỗi lần mở. Vì sao an toàn: kênh do repo này viết, chỉ đọc việc của chính bạn bằng khoá riêng, chỉ gửi khoá tới `*.nlh.vn`; không nhận duyệt quyền từ xa; luật của tổ chức (`channelsEnabled`) vẫn áp dụng. Một máy chỉ chạy một Loa.
 
 ### Khi có tổ chức Team hoặc Enterprise
 
