@@ -36,6 +36,10 @@ const FIRST_LOOKBACK_MS = 60 * 1000;
 const SEEN_MAX = 1000;
 // At most one new session per cell in this window; later items for that cell go to the session just opened.
 const NEW_SESSION_GAP_MS = 10 * 60 * 1000;
+// A send the Loa session never confirmed (forwarded) is dropped after this and recorded as failed.
+const PENDING_MAX_MS = 3 * 60 * 60 * 1000;
+// Claude Code session ids are uuids; anything else is never passed to claude.
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_ORIGIN = 'https://governance.nlh.vn';
 // Same as MCP SDK 1.32 (the thap-test trial): Claude Code does not accept a channel speaking protocol 2026-07-28.
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024-10-07'];
@@ -146,10 +150,10 @@ export function transcriptCwd(id, projects = join(homedir(), '.claude', 'project
 export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.now() }) {
   if (!sentence(entry)) return null;
   const cell = cellsOf(entry.cell)[0] ?? 'khac';
-  const id = ref(entry.session_id);
+  const id = SESSION_ID.test(String(entry.session_id ?? '')) ? String(entry.session_id) : '';
   if (id) {
     const found = findSession(sessions, id);
-    if (found?.live && found.name) return { via: 'send', to: found.name, sessionId: id };
+    if (found?.live) return found.name ? { via: 'send', to: found.name, sessionId: id } : null;
     const cwd = found?.cwd ?? cwdOf(id);
     if (cwd) return { via: 'resume', sessionId: id, cwd };
   }
@@ -376,12 +380,12 @@ export function startServer({
     const plan = route(entry, { sessions: machineSessions(run), cwdOf, recent });
     if (!plan || !item.entry_id) return;
     if (plan.via === 'send') {
-      const pending = { ...item, session_id: plan.sessionId ?? '', to: plan.to, text };
+      const pending = { ...item, session_id: plan.sessionId ?? '', to: plan.to, text, queued_at: Date.now() };
       state.pending = [...state.pending.filter((other) => other.entry_id !== item.entry_id), pending];
       return push(text, { action: 'send', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, to: plan.to, ...(plan.sessionId ? { session_id: plan.sessionId } : {}) });
     }
     if (plan.via === 'resume') {
-      const ok = await spawnClaude(['--bg', '--resume', plan.sessionId, text], plan.cwd);
+      const ok = await spawnClaude(['--bg', `--resume=${plan.sessionId}`, text], plan.cwd);
       await record({ ...item, session_id: plan.sessionId }, 'resume', ok);
       if (ok) return push(`Đã mở lại phiên đang ngồi ô ${item.cell} và báo phiếu ${item.ticket || 'mới'}.`, { action: 'resumed', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, session_id: plan.sessionId });
     }
@@ -424,6 +428,10 @@ export function startServer({
     const { fresh, state: next } = nextEntries(state, data.entries);
     state = next;
     for (const entry of fresh) await deliver(entry);
+    // Sends never confirmed within PENDING_MAX_MS: drop them, one failed row each.
+    const stale = state.pending.filter((item) => !(Date.now() - (item.queued_at ?? 0) < PENDING_MAX_MS));
+    state.pending = state.pending.filter((item) => !stale.includes(item));
+    for (const item of stale) await record(item, 'send', false);
     if (dir) saveState(dir, state);
     if (data.more && fresh.length) await tick();
   }

@@ -33,6 +33,11 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const SERVER = join(root, 'plugins/tinh-nlh/speaker/speaker.mjs');
 const KEY = `nlh_tower_${'ab'.repeat(32)}`;
 const TICKET = '98bd8b93-6474-450c-a908-d14d6c1b3c1b';
+// Mã phiên Claude Code là uuid.
+const LIVE = '5e22aee8-b510-4a5b-b071-046ba1d93b23';
+const STOPPED = 'dacabf8a-f95b-4623-a1af-45292a3780c1';
+const CLOSED = 'beb593c8-2321-4e8e-8003-0390cfb9851e';
+const GONE = '99999999-0000-4000-8000-000000000099';
 
 const entry = (id, at, extra = {}) => ({ id, at, kind: 'your_cell', ticket_id: TICKET, cell: 'cto', title: `Việc ${id}`, reason: 'Nhận phiếu, đọc ô.', by_name: 'Danh', ...extra });
 const temps = [];
@@ -98,22 +103,26 @@ describe('hàm thuần của Loa', () => {
 
   test('chọn cách báo theo mã phiên ô đã tự báo: đang chạy thì gửi; đã tắt thì mở lại đúng phiên; không còn thì mở mới', () => {
     const sessions = [
-      { pid: 1, kind: 'interactive', sessionId: 's-live', name: 'Ô CTO (son/cto)' },
-      { kind: 'background', sessionId: 's-stopped', name: 'Ô Review (son/review)', state: 'stopped', cwd: 'C:\\r' },
+      { pid: 1, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto)' },
+      { kind: 'background', sessionId: STOPPED, name: 'Ô Review (son/review)', state: 'stopped', cwd: 'C:\\r' },
     ];
-    const cwdOf = (id) => (id === 's-closed' ? 'C:\\w' : null);
+    const cwdOf = (id) => (id === CLOSED ? 'C:\\w' : null);
     const at = '2026-10-18T05:00:00.000Z';
-    assert.deepEqual(route(entry('a', at, { session_id: 's-live' }), { sessions, cwdOf }), { via: 'send', to: 'Ô CTO (son/cto)', sessionId: 's-live' });
-    assert.deepEqual(route(entry('b', at, { session_id: 's-stopped' }), { sessions, cwdOf }), { via: 'resume', sessionId: 's-stopped', cwd: 'C:\\r' });
+    assert.deepEqual(route(entry('a', at, { session_id: LIVE }), { sessions, cwdOf }), { via: 'send', to: 'Ô CTO (son/cto)', sessionId: LIVE });
+    assert.deepEqual(route(entry('b', at, { session_id: STOPPED }), { sessions, cwdOf }), { via: 'resume', sessionId: STOPPED, cwd: 'C:\\r' });
     // Phiên app hay cửa sổ lệnh đã đóng: không có trong danh sách, nhưng bản ghi trò chuyện còn.
-    assert.deepEqual(route(entry('c', at, { session_id: 's-closed' }), { sessions, cwdOf }), { via: 'resume', sessionId: 's-closed', cwd: 'C:\\w' });
+    assert.deepEqual(route(entry('c', at, { session_id: CLOSED }), { sessions, cwdOf }), { via: 'resume', sessionId: CLOSED, cwd: 'C:\\w' });
     // Đã xoá: mở phiên mới, giữ tên phiên ô đã báo, bỏ @.
-    assert.deepEqual(route(entry('d', at, { session_id: 's-gone', session_name: 'Ô CTO (son@cto)' }), { sessions, cwdOf }), { via: 'new', name: 'Ô CTO (son/cto)' });
+    assert.deepEqual(route(entry('d', at, { session_id: GONE, session_name: 'Ô CTO (son@cto)' }), { sessions, cwdOf }), { via: 'new', name: 'Ô CTO (son/cto)' });
     assert.deepEqual(route(entry('e', at), { sessions: null, cwdOf }), { via: 'new', name: 'Ô cto' });
     // Vừa mở phiên mới cho ô này: việc sau gửi vào phiên đó, không mở thêm.
     const recent = new Map([['cto', { name: 'Ô cto', at: Date.now() }]]);
     assert.deepEqual(route(entry('f', at), { sessions, cwdOf, recent }), { via: 'send', to: 'Ô cto', sessionId: null });
     assert.equal(route(entry('g', at, { kind: 'you' }), { sessions, cwdOf }), null);
+    // Phiên đang chạy mà không có tên: không gửi được, cũng không mở lại (tạo bản sao); ô tự thấy việc trong hộp việc.
+    assert.equal(route(entry('h', at, { session_id: LIVE }), { sessions: [{ pid: 1, kind: 'interactive', sessionId: LIVE, name: '' }], cwdOf }), null);
+    // Mã không phải uuid (ví dụ bắt đầu bằng --) không bao giờ thành đối số của claude.
+    assert.deepEqual(route(entry('i', at, { session_id: '--dangerously-skip-permissions' }), { sessions, cwdOf: () => 'C:\w' }), { via: 'new', name: 'Ô cto' });
   });
 
   test('mục đã đẩy không đẩy lại; mốc lấy thời điểm mới nhất; đọc lùi 5 phút; lần đầu chỉ việc từ lúc bật', () => {
@@ -205,13 +214,13 @@ describe('Loa báo việc (server trong tiến trình)', () => {
 
   test('phiên đang chạy: đẩy một câu cho phiên Loa gửi bằng SendMessage; forwarded ghi một dòng sổ không nội dung', async () => {
     const loa = inProcess({
-      feed: () => [entry('your_cell:t:1', at, { session_id: 's-live', session_name: 'Ô CTO (son/cto)' })],
-      sessions: [{ pid: 7, kind: 'interactive', sessionId: 's-live', name: 'Ô CTO (son/cto) trên máy anh Sơn' }],
+      feed: () => [entry('your_cell:t:1', at, { session_id: LIVE, session_name: 'Ô CTO (son/cto)' })],
+      sessions: [{ pid: 7, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto) trên máy anh Sơn' }],
     });
     await loa.server.tick();
     const [event] = loa.pushed();
     assert.equal(event.content, `Loa báo: ô cto có việc mới, phiếu ${TICKET}. Mở phiếu, nhận việc nếu chưa ai nhận, rồi làm theo ô.`);
-    assert.deepEqual(event.meta, { action: 'send', kind: 'your_cell', cell: 'cto', ticket: TICKET, entry_id: 'your_cell:t:1', to: 'Ô CTO (son/cto) trên máy anh Sơn', session_id: 's-live' });
+    assert.deepEqual(event.meta, { action: 'send', kind: 'your_cell', cell: 'cto', ticket: TICKET, entry_id: 'your_cell:t:1', to: 'Ô CTO (son/cto) trên máy anh Sơn', session_id: LIVE });
     for (const [key, value] of Object.entries(event.meta)) {
       assert.match(key, /^[A-Za-z0-9_]+$/);
       assert.equal(typeof value, 'string');
@@ -219,7 +228,7 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.equal(loa.rows.length, 0, 'chưa ghi sổ khi phiên Loa chưa gửi');
     assert.deepEqual(JSON.parse((await loa.call(2, 'pending', {})).result.content[0].text), [{ entry_id: 'your_cell:t:1', to: 'Ô CTO (son/cto) trên máy anh Sơn', text: event.content }]);
     assert.equal((await loa.call(3, 'forwarded', { entry_id: 'your_cell:t:1', ok: true })).result.content[0].text, 'Recorded.');
-    assert.deepEqual(loa.rows, [{ entry_id: 'your_cell:t:1', kind: 'your_cell', ticket_id: TICKET, cell: 'cto', session_id: 's-live', via: 'send', ok: true }]);
+    assert.deepEqual(loa.rows, [{ entry_id: 'your_cell:t:1', kind: 'your_cell', ticket_id: TICKET, cell: 'cto', session_id: LIVE, via: 'send', ok: true }]);
     assert.ok(!JSON.stringify(loa.rows).includes('Việc'), 'không tiêu đề phiếu');
     assert.deepEqual(JSON.parse((await loa.call(4, 'pending', {})).result.content[0].text), []);
     assert.equal((await loa.call(5, 'forwarded', { entry_id: 'your_cell:t:1', ok: true })).result.isError, true, 'không ghi hai lần');
@@ -229,20 +238,20 @@ describe('Loa báo việc (server trong tiến trình)', () => {
 
   test('phiên đã tắt: mở lại đúng phiên đó theo mã ở thư mục cũ, kèm câu báo; ghi sổ resume', async () => {
     const loa = inProcess({
-      feed: () => [entry('your_turn:t:2', at, { kind: 'your_turn', session_id: 's-closed' })],
-      cwdOf: (id) => (id === 's-closed' ? 'C:\\Users\\Admin\\NLH-GOVERNANCE' : null),
+      feed: () => [entry('your_turn:t:2', at, { kind: 'your_turn', session_id: CLOSED })],
+      cwdOf: (id) => (id === CLOSED ? 'C:\\Users\\Admin\\NLH-GOVERNANCE' : null),
     });
     await loa.server.tick();
-    assert.deepEqual(loa.spawned, [{ args: ['--bg', '--resume', 's-closed', sentence(entry('x', at, { kind: 'your_turn' }))], cwd: 'C:\\Users\\Admin\\NLH-GOVERNANCE' }]);
-    assert.deepEqual(loa.rows, [{ entry_id: 'your_turn:t:2', kind: 'your_turn', ticket_id: TICKET, cell: 'cto', session_id: 's-closed', via: 'resume', ok: true }]);
+    assert.deepEqual(loa.spawned, [{ args: ['--bg', `--resume=${CLOSED}`, sentence(entry('x', at, { kind: 'your_turn' }))], cwd: 'C:\\Users\\Admin\\NLH-GOVERNANCE' }]);
+    assert.deepEqual(loa.rows, [{ entry_id: 'your_turn:t:2', kind: 'your_turn', ticket_id: TICKET, cell: 'cto', session_id: CLOSED, via: 'resume', ok: true }]);
     assert.equal(loa.pushed()[0].meta.action, 'resumed');
     loa.close();
   });
 
   test('mở lại hỏng: mở phiên mới cho ô ở thư mục của Loa; ghi cả hai dòng; mở mới cũng hỏng thì báo một câu', async () => {
-    const loa = inProcess({ feed: () => [entry('your_cell:t:3', at, { session_id: 's-closed', session_name: 'Ô CTO (son/cto)' })], cwdOf: () => 'C:\\w', spawnOk: false });
+    const loa = inProcess({ feed: () => [entry('your_cell:t:3', at, { session_id: CLOSED, session_name: 'Ô CTO (son/cto)' })], cwdOf: () => 'C:\\w', spawnOk: false });
     await loa.server.tick();
-    assert.deepEqual(loa.spawned.map((item) => item.args.slice(0, 2)), [['--bg', '--resume'], ['--bg', '--model']]);
+    assert.deepEqual(loa.spawned.map((item) => item.args.slice(0, 2)), [['--bg', `--resume=${CLOSED}`], ['--bg', '--model']]);
     assert.deepEqual(loa.spawned[1], { args: ['--bg', '--model', 'sonnet', '-n', 'Ô CTO (son/cto)', sentence(entry('x', at))], cwd: 'C:\\TinhNhiLe' });
     assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['resume', false], ['new', false]]);
     assert.equal(loa.pushed().at(-1).meta.action, 'failed');
@@ -268,6 +277,34 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     // Việc đang chờ gửi còn sau khi Loa tắt rồi bật (lưu trong file trạng thái).
     assert.equal(JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8')).pending.length, 1);
     loa.close();
+  });
+
+  test('việc chờ gửi mà phiên Loa không xác nhận quá 3 giờ: bỏ, ghi một dòng hỏng', async () => {
+    const dir = temp('loa');
+    const old = Date.now() - 4 * 60 * 60 * 1000;
+    writeFileSync(join(dir, 'tower-state.json'), JSON.stringify({ since: null, seen: [], pending: [{ entry_id: 'your_cell:t:9', kind: 'your_cell', ticket: TICKET, cell: 'cto', session_id: LIVE, to: 'Ô CTO', text: 'x', queued_at: old }] }));
+    const rows = [];
+    const input = new PassThrough();
+    const server = startServer({
+      input,
+      output: new PassThrough(),
+      env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, TOWER_POLL_MS: '999999' },
+      fetchImpl: async (url, init = {}) => (url.includes('/tower/forwards') ? (rows.push(JSON.parse(init.body)), Response.json({}, { status: 201 })) : Response.json({ entries: [] })),
+      run: () => '[]',
+      spawnClaude: async () => true,
+      log: () => {},
+      onClose: () => {},
+    });
+    input.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })}
+`);
+    input.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}
+`);
+    await until(() => rows.length === 1);
+    assert.deepEqual([rows[0].entry_id, rows[0].via, rows[0].ok], ['your_cell:t:9', 'send', false]);
+    await server.tick();
+    assert.equal(rows.length, 1, 'không ghi lại');
+    assert.equal(JSON.parse(readFileSync(join(dir, 'tower-state.json'), 'utf8')).pending.length, 0);
+    input.end();
   });
 });
 
