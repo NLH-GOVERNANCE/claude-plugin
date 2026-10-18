@@ -7,8 +7,8 @@ Turn on Loa (the speaker that tells the right session on this machine about new 
 Only works in Claude Code on a computer (Claude app, Code tab; or a Claude Code terminal). In web chat, on the phone or in Cowork, say exactly one sentence: mở mục Code trong app Claude trên máy tính rồi gõ lại "bật Loa".
 
 1. Run exactly one command for the machine's OS, nothing added or changed:
-   - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/tower/setup.ps1"`
-   - macOS: `/bin/bash "${CLAUDE_PLUGIN_ROOT}/tower/setup.sh"`
+   - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/speaker/setup.ps1"`
+   - macOS: `/bin/bash "${CLAUDE_PLUGIN_ROOT}/speaker/setup.sh"`
 2. Repeat the line it printed, then give the two remaining steps in plain Vietnamese, no commands, no codes:
    - Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới**, chép khoá.
    - Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính, dán khoá khi cửa sổ hỏi (chữ không hiện ra), bấm Enter. Lần đầu cửa sổ tự cài phần còn thiếu và mở trình duyệt để đăng nhập Claude. Đừng đóng cửa sổ Loa.

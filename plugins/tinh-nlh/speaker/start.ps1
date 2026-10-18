@@ -1,11 +1,11 @@
 ﻿# Loa tỉnh NhiLe on Windows. The "Loa tỉnh NhiLe" desktop shortcut (made by the "bật Loa" command, setup.ps1) opens
-# this file from the copy in ~\.tinh-nlh\thap, so a plugin installed from claude.ai or from GitHub both work, no repo.
+# this file from the copy in ~\.tinh-nlh\speaker, so a plugin installed from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
 # hash checked); ask for the key in a hidden prompt if none is saved (DPAPI); then open Claude Code on Sonnet as Loa.
-# The tower channel loads through --mcp-config (server:tower), not by plugin name: a plugin installed from claude.ai is
+# The speaker channel loads through --mcp-config (server:speaker), not by plugin name: a plugin installed from claude.ai is
 # named @synced and cannot declare channels. File saved as UTF-8 with BOM so PowerShell 5.1 reads Vietnamese text.
 param(
-  [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\thap'),
+  [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\speaker'),
   [string]$Work = (Join-Path $env:USERPROFILE 'TinhNhiLe'),
   # Tests only: print the Claude command line instead of running it.
   [switch]$DryRun
@@ -33,7 +33,7 @@ foreach ($pattern in @('cache\*\tinh-nlh\*\.claude-plugin\plugin.json', 'synced\
   foreach ($file in @(Get-ChildItem -Path (Join-Path $plugins $pattern) -File -ErrorAction SilentlyContinue)) {
     try { $manifest = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
     $root = Split-Path $file.DirectoryName -Parent
-    if ($manifest.name -ne 'tinh-nlh' -or -not (Test-Path -LiteralPath (Join-Path $root 'tower\thap.ps1'))) { continue }
+    if ($manifest.name -ne 'tinh-nlh' -or -not (Test-Path -LiteralPath (Join-Path $root 'speaker\start.ps1'))) { continue }
     try { $version = [version]$manifest.version } catch { continue }
     if (-not $best -or $version -gt $best.Version) { $best = @{ Version = $version; Root = $root } }
   }
@@ -42,12 +42,12 @@ $versionFile = Join-Path $Dir 'version.txt'
 $current = $null
 if (Test-Path -LiteralPath $versionFile) { try { $current = [version](Get-Content -LiteralPath $versionFile -Raw).Trim() } catch { } }
 if ($best -and (-not $current -or $best.Version -ge $current)) {
-  Copy-Item -LiteralPath (Join-Path $best.Root 'channel\tower.mjs') -Destination (Join-Path $Dir 'tower.mjs') -Force
-  Copy-Item -LiteralPath (Join-Path $best.Root 'tower\thap.ps1') -Destination (Join-Path $Dir 'thap.ps1') -Force
+  Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
+  Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\start.ps1') -Destination (Join-Path $Dir 'start.ps1') -Force
   Set-Content -LiteralPath $versionFile -Value $best.Version.ToString() -Encoding ascii
 }
-$tower = Join-Path $Dir 'tower.mjs'
-if (-not (Test-Path -LiteralPath $tower)) { Stop-Loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
+$speaker = Join-Path $Dir 'speaker.mjs'
+if (-not (Test-Path -LiteralPath $speaker)) { Stop-Loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
 
 # 2. Claude Code. The official installer (claude.ai/install.ps1) puts claude.exe in ~\.local\bin without touching PATH;
 # on machines with HOME set (Git users) ~ is HOME.
@@ -72,7 +72,7 @@ if (-not $claude) {
   }
 }
 
-# 3. Node (the tower channel is one JavaScript file). Use Node 18+ if present; otherwise download node.exe from
+# 3. Node (the speaker channel is one JavaScript file). Use Node 18+ if present; otherwise download node.exe from
 # nodejs.org into $Dir\node once, checking SHA-256 against that release's SHASUMS256.txt.
 $node = $null
 $found = Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -104,10 +104,11 @@ if (-not $node) {
 
 # 4. Loa key: if none, ask in a hidden prompt, check its shape, save with Windows DPAPI (only this Windows account on
 # this machine can open it). The key never goes through chat, the screen or an environment variable. A key the hub
-# rejects is deleted by the channel and asked again next launch. A key at the old place (Thap.cmd) is copied over.
+# rejects is deleted by the channel and asked again next launch. A key at an old place (~\.tinh-nlh\thap before Loa
+# was named speaker, or Thap.cmd) is copied over.
 $keyFile = Join-Path $Dir 'tower-key.dpapi'
-$legacy = Join-Path $plugins 'data\tinh-nlh-nlh-governance\tower-key.dpapi'
-if (-not (Test-Path -LiteralPath $keyFile) -and (Test-Path -LiteralPath $legacy)) { Copy-Item -LiteralPath $legacy -Destination $keyFile }
+$legacy = @((Join-Path $env:USERPROFILE '.tinh-nlh\thap\tower-key.dpapi'), (Join-Path $plugins 'data\tinh-nlh-nlh-governance\tower-key.dpapi')) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not (Test-Path -LiteralPath $keyFile) -and $legacy) { Copy-Item -LiteralPath $legacy -Destination $keyFile }
 if (-not (Test-Path -LiteralPath $keyFile)) {
   Write-Host ''
   Write-Host 'Lấy khoá ở web tỉnh NhiLe: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
@@ -133,12 +134,12 @@ if (-not (Test-Path -LiteralPath $keyFile)) {
 }
 
 # 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine
-# (nor the plugin's own tower server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
+# (nor the plugin's own speaker server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
 # and open sessions. TOWER_ORIGIN (dev hub, trials) is passed on when set.
 $envs = @{ NLH_TOWER = '1'; NLH_TOWER_DIR = $Dir; NLH_TOWER_WORK = $Work; CLAUDE_BIN = $claude }
 if ($env:TOWER_ORIGIN) { $envs.TOWER_ORIGIN = $env:TOWER_ORIGIN }
-$config = Join-Path $Dir 'tower-mcp.json'
-$json = @{ mcpServers = @{ tower = @{ command = $node; args = @($tower); env = $envs } } } | ConvertTo-Json -Depth 5
+$config = Join-Path $Dir 'speaker-mcp.json'
+$json = @{ mcpServers = @{ speaker = @{ command = $node; args = @($speaker); env = $envs } } } | ConvertTo-Json -Depth 5
 [IO.File]::WriteAllText($config, $json, (New-Object Text.UTF8Encoding $false))
 
 # 6. Open Claude Code in its own work folder (new cell sessions open here too). claude and node go on the session PATH
@@ -154,7 +155,7 @@ if (-not (Test-Path -LiteralPath $opened)) {
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/loop 10m /tinh-nlh:thap', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:tower')
+$arguments = @('/loop 10m /tinh-nlh:speaker', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
 if ($DryRun) {
   Write-Host "DRYRUN $claude $($arguments -join ' | ')"
   exit 0
