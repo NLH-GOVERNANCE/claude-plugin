@@ -7,10 +7,11 @@ Gói gồm:
 - connector NhiLe Governance (`https://governance.nlh.vn/mcp`), mỗi người đăng nhập một lần bằng email công ty;
 - skill `tinh-nlh`: đầu phiên gọi `my_work`, tóm tắt việc đang chờ và việc mình đã giao;
 - năm lệnh: `/tinh-nlh:viec` (hộp việc), `/tinh-nlh:giao` (giao việc cho một ô), `/tinh-nlh:lamtiep` (làm tiếp một việc), `/tinh-nlh:bangiao` (ghi bàn giao), `/tinh-nlh:ky` (phiếu chờ ký). Trên app Claude và điện thoại, gõ `/viec`, `/giao`, `/ky` (hay nói "xem việc của tôi", "giao việc", "tôi ký");
+- kênh `tower` (chỉ Claude Code, chỉ khi mở bằng `Thap.cmd`): server trên máy đọc việc mới của chính người dùng từ hub mỗi 15 giây bằng khoá riêng có hạn, đẩy vào phiên Tháp hệ thống; skill `tower` dặn phiên đó chuyển việc tới đúng phiên đang ngồi ô. Cách bật: README ở gốc repo, mục "Tháp hệ thống trên máy";
 - hook đầu phiên (chỉ chạy ở Claude Code và Cowork): in một câu dặn Claude gọi `my_work` trước. Hook không gọi mạng, không giữ token.
 
 Plugin không chứa secret, không chép luật hay ô: mọi thứ đọc từ hệ sau khi đăng nhập. Plugin không tạo việc định kỳ; muốn ô làm việc cả khi không mở Claude thì bật thêm việc định kỳ hay máy dự phòng.
 
 ## Dữ liệu
 
-Plugin không lưu gì. Mọi việc đi qua connector tới `governance.nlh.vn`, dưới tài khoản công ty của chính người dùng.
+Plugin không lưu gì, trừ kênh `tower`: mốc đọc và mã các việc đã đẩy nằm trong thư mục dữ liệu của plugin trên máy (`tower-state.json`), khoá nằm trong kho bí mật của máy, không trong file. Mọi việc đi qua connector tới `governance.nlh.vn`, dưới tài khoản công ty của chính người dùng.
