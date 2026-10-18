@@ -4,23 +4,26 @@
 // đẩy bằng notifications/claude/channel, meta có ticket, cell, kind. Không trùng: nhớ mã các mục đã đẩy. Khởi động thì
 // đọc lại từ mốc đã lưu, nên bù được tin sót lúc tắt máy.
 //
-// Chỉ chạy khi NLH_TOWER=1 (Thap.cmd đặt). Phiên Claude Code khác trên máy cũng nạp server này qua plugin, nhưng không
-// có biến đó thì không khai kênh, không gọi mạng, không đọc khoá: chỉ một phiên Tháp đọc luồng việc, không phiên nào
-// khác "ăn" mất tin. Một máy chỉ một Tháp (file khoá tower.lock).
+// Chỉ chạy khi NLH_TOWER=1. Lối mở Tháp (tower/thap.ps1, tower/thap.sh) nạp file này qua --mcp-config với NLH_TOWER=1
+// và NLH_TOWER_DIR (thư mục Tháp, ~/.tinh-nlh/thap); Thap.cmd ở gốc repo (máy người bảo trì) đặt NLH_TOWER=1 cho cả
+// phiên và dùng server của plugin. Phiên Claude Code khác trên máy cũng nạp server này qua plugin, nhưng không có biến
+// đó thì không khai kênh, không gọi mạng, không đọc khoá: chỉ một phiên Tháp đọc luồng việc, không phiên nào khác "ăn"
+// mất tin. Một máy chỉ một Tháp (file khoá tower.lock).
 //
 // Một chiều: không có công cụ trả lời, không khai claude/channel/permission (nút duyệt không đi qua kênh). Không thư
 // viện: MCP qua stdio là JSON-RPC, mỗi dòng một tin. Khoá không ghi ra đâu, kể cả stderr.
 //
-// Khoá: Thap.cmd hỏi trong ô nhập ẩn chữ (scripts/tower-key.ps1) và lưu bằng DPAPI của Windows vào file tower-key.dpapi
-// ở thư mục dữ liệu của plugin; kênh mở file đó bằng PowerShell của chính tài khoản Windows. Hub từ chối khoá thì xoá
-// file để lần mở Tháp sau hỏi lại. TOWER_KEY (cấu hình plugin) nếu có thì dùng trước.
+// Khoá: lối mở Tháp hỏi trong ô nhập ẩn chữ. Windows lưu bằng DPAPI vào file tower-key.dpapi ở thư mục Tháp, kênh mở
+// file đó bằng PowerShell của chính tài khoản Windows. macOS lưu vào Keychain (dịch vụ tinh-nlh-tower), kênh đọc bằng
+// /usr/bin/security. Hub từ chối khoá thì xoá để lần mở Tháp sau hỏi lại. TOWER_KEY (cấu hình plugin) nếu có thì dùng
+// trước.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Đọc lùi một chút so với mốc: mục ghi cùng lúc với lần đọc trước vẫn tới. Mã đã đẩy chặn trùng.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -144,19 +147,56 @@ function dpapiOpen(file) {
   });
 }
 
-// Khoá đã lưu trên máy, hay null. File hỏng, của tài khoản khác hay không đúng dạng khoá thì xoá để lần sau hỏi lại.
-export function savedKey(dir, open = dpapiOpen) {
-  if (!dir) return null;
-  const file = join(dir, KEY_FILE);
-  if (!existsSync(file)) return null;
-  let key = '';
+// macOS: Keychain của tài khoản, đúng dịch vụ và tài khoản mà tower/thap.sh lưu. security theo đường dẫn tuyệt đối; khoá
+// chỉ đi ra stdout của tiến trình con, không vào dòng lệnh.
+export const KEYCHAIN = { service: 'tinh-nlh-tower', account: 'tinh-nlh' };
+const SECURITY = '/usr/bin/security';
+const keychain = (action, extra = []) =>
+  execFileSync(SECURITY, [action, '-s', KEYCHAIN.service, '-a', KEYCHAIN.account, ...extra], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 15_000,
+  });
+
+// Chỗ giữ khoá theo hệ điều hành: read trả khoá, null khi chưa có; forget xoá để lần mở Tháp sau hỏi lại.
+export const KEY_STORES = {
+  win32: {
+    read: (dir) => (dir && existsSync(join(dir, KEY_FILE)) ? dpapiOpen(join(dir, KEY_FILE)) : null),
+    forget: (dir) => dir && rmSync(join(dir, KEY_FILE), { force: true }),
+  },
+  darwin: {
+    read: () => {
+      try {
+        keychain('find-generic-password');
+      } catch {
+        return null;
+      }
+      return keychain('find-generic-password', ['-w']);
+    },
+    forget: () => {
+      try {
+        keychain('delete-generic-password');
+      } catch {
+        // chưa có mục thì thôi
+      }
+    },
+  },
+};
+const defaultStore = () => KEY_STORES[process.platform] ?? KEY_STORES.win32;
+
+// Khoá đã lưu trên máy, hay null. Mở không được (hỏng, của tài khoản khác) hay không đúng dạng khoá thì xoá để lần sau
+// hỏi lại.
+export function savedKey(dir, store = defaultStore()) {
+  let key;
   try {
-    key = String(open(file)).trim();
+    key = store.read(dir);
   } catch {
     key = '';
   }
+  if (key === null || key === undefined) return null;
+  key = String(key).trim();
   if (TOWER_KEY.test(key)) return key;
-  rmSync(file, { force: true });
+  store.forget(dir);
   return null;
 }
 
@@ -199,12 +239,13 @@ export function startServer({
   output = process.stdout,
   env = process.env,
   fetchImpl = fetch,
-  openKey = dpapiOpen,
+  keyStore = defaultStore(),
   log = (line) => process.stderr.write(`tower: ${line}\n`),
   onClose = () => process.exit(0),
 } = {}) {
   const enabled = env.NLH_TOWER === '1';
-  const dir = env.CLAUDE_PLUGIN_DATA || env.TOWER_STATE_DIR || null;
+  // Thư mục Tháp do lối mở đặt trước; Thap.cmd ở gốc repo dùng thư mục dữ liệu của plugin.
+  const dir = env.NLH_TOWER_DIR || env.CLAUDE_PLUGIN_DATA || env.TOWER_STATE_DIR || null;
   const send = (message) => output.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
   const push = (content, meta) => send({ method: 'notifications/claude/channel', params: { content, meta } });
   const said = new Set();
@@ -222,7 +263,7 @@ export function startServer({
     // Cấu hình plugin chưa có giá trị thì Claude Code có thể để nguyên chữ ${user_config…}: coi như trống.
     const configured = env.TOWER_KEY && !env.TOWER_KEY.startsWith('${') ? env.TOWER_KEY : '';
     // Mở file khoá một lần rồi giữ trong bộ nhớ (mỗi lần mở là một tiến trình PowerShell).
-    if (!configured && !fileKey) fileKey = savedKey(dir, openKey);
+    if (!configured && !fileKey) fileKey = savedKey(dir, keyStore);
     const key = configured || fileKey;
     const origin = hubOrigin(env.TOWER_ORIGIN);
     if (!key) return said.has('rejected') ? undefined : notice('no_key', 'Kênh Tháp chưa có khoá. Đóng cửa sổ Tháp rồi mở lại bằng lối tắt Tháp tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ. Không dán khoá vào chat.');
@@ -235,7 +276,7 @@ export function startServer({
       return;
     }
     if (response.status === 401) {
-      if (!configured && dir) rmSync(join(dir, KEY_FILE), { force: true });
+      if (!configured) keyStore.forget(dir);
       fileKey = null;
       return notice('rejected', 'Khoá hết hạn hoặc đã thu hồi, mở lại Tháp để dán khoá mới.');
     }

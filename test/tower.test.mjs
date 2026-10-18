@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { channelEvent, feedUrl, hubOrigin, KEY_FILE, nextEntries, savedKey, seatedSession } from '../plugins/tinh-nlh/channel/tower.mjs';
+import { channelEvent, feedUrl, hubOrigin, KEY_FILE, KEY_STORES, KEYCHAIN, nextEntries, savedKey, seatedSession } from '../plugins/tinh-nlh/channel/tower.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const SERVER = join(root, 'plugins/tinh-nlh/channel/tower.mjs');
@@ -116,20 +116,25 @@ describe('hàm thuần của kênh tower', () => {
     assert.equal(feedUrl('https://x.nlh.vn', null, Date.parse('2026-10-18T05:00:00Z')), 'https://x.nlh.vn/tower/feed?since=2026-10-18T04%3A59%3A00.000Z');
   });
 
-  test('khoá đã lưu (DPAPI): đúng dạng thì dùng; mở không được hay sai dạng thì xoá file để lần sau hỏi lại', () => {
+  test('khoá đã lưu (DPAPI trên Windows, Keychain trên macOS): đúng dạng thì dùng; mở không được hay sai dạng thì xoá để lần sau hỏi lại', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tower-key-'));
     try {
       const file = join(dir, KEY_FILE);
-      assert.equal(savedKey(dir, () => KEY), null, 'chưa có file thì không mở');
+      // Chỗ giữ khoá giả: như Windows, khoá nằm trong file; read trả null khi chưa có file.
+      const store = (open) => ({ read: (at) => (existsSync(join(at, KEY_FILE)) ? open() : null), forget: (at) => rmSync(join(at, KEY_FILE), { force: true }) });
+      assert.equal(savedKey(dir, store(() => KEY)), null, 'chưa có file thì không mở');
       writeFileSync(file, 'dpapi');
-      assert.equal(savedKey(dir, () => `${KEY}\r\n`), KEY);
+      assert.equal(savedKey(dir, store(() => `${KEY}\r\n`)), KEY);
       assert.ok(existsSync(file));
-      assert.equal(savedKey(dir, () => 'không phải khoá'), null);
+      assert.equal(savedKey(dir, store(() => 'không phải khoá')), null);
       assert.ok(!existsSync(file));
       writeFileSync(file, 'dpapi');
-      assert.equal(savedKey(dir, () => { throw new Error('tài khoản Windows khác'); }), null);
+      assert.equal(savedKey(dir, store(() => { throw new Error('tài khoản Windows khác'); })), null);
       assert.ok(!existsSync(file));
-      assert.equal(savedKey(null), null);
+      assert.equal(savedKey(null, KEY_STORES.win32), null);
+      // macOS: đọc và xoá đúng mục Keychain mà tower/thap.sh lưu.
+      assert.deepEqual(KEYCHAIN, { service: 'tinh-nlh-tower', account: 'tinh-nlh' });
+      assert.deepEqual(Object.keys(KEY_STORES).sort(), ['darwin', 'win32']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -255,6 +260,18 @@ describe('server kênh tower chạy thật qua stdio', () => {
     assert.equal(requests.length, 0);
     assert.equal(other.pushed().length, 0);
     await other.close();
+  });
+
+  test('lối mở Tháp đặt NLH_TOWER_DIR: mốc đọc nằm ở thư mục Tháp, không ở thư mục dữ liệu của plugin', async () => {
+    status = 200;
+    feed = [entry('d', '2026-10-18T05:03:00.000Z')];
+    const towerDir = stateDir();
+    const pluginData = stateDir();
+    const tower = open(pluginData, { NLH_TOWER_DIR: towerDir, CLAUDE_PLUGIN_DATA: pluginData });
+    await until(() => tower.pushed().length >= 1);
+    await tower.close();
+    assert.ok(existsSync(join(towerDir, 'tower-state.json')));
+    assert.ok(!existsSync(join(pluginData, 'tower-state.json')));
   });
 
   test('hub chặn khoá: báo đúng một tin system; thiếu khoá thì báo mà không gọi hub; một máy một Tháp', async () => {

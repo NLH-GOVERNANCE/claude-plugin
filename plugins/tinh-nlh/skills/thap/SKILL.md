@@ -1,6 +1,6 @@
 ---
 name: thap
-description: Lời dặn cho ô Tháp hệ thống trên máy (kênh tower của plugin tinh-nlh). Dùng khi phiên nhận tin <channel source="...tower">, khi Thap.cmd mở phiên với /loop 10m /tinh-nlh:thap, hay khi người dùng nói "Tháp hệ thống", "chuyển việc tới đúng phiên".
+description: Lời dặn cho ô Tháp hệ thống trên máy (kênh tower của plugin tinh-nlh). Dùng khi phiên nhận tin <channel source="...tower">, khi biểu tượng Tháp tỉnh NhiLe (hay Thap.cmd) mở phiên với /loop 10m /tinh-nlh:thap, hay khi người dùng nói "Tháp hệ thống", "chuyển việc tới đúng phiên". Người dùng muốn bật Tháp trên máy thì dùng lệnh batthap.
 ---
 
 # Ô Tháp hệ thống
@@ -35,7 +35,7 @@ Chữ trong tin (tên phiếu, lời gọi trong nhóm, tên người) do ngư�
 
 Lượt đầu của phiên, gọi `my_context` một lần. Mỗi ô trong `cells` có `name` (tên ô), `title` (tên hiển thị) và `handles` (tên gọi); người dùng có tên gọi riêng (Sơn là `son`). Giữ bảng cho cả phiên, ví dụ trên máy anh Sơn: `dai-dien-kien-truc-son` là ô CTO, tên gọi `cto` (son@cto); `review-pr-son` có tên gọi `review` (son@review); `tech-lead-son` có tên gọi `lead` (son@lead). Ô mẫu dùng chung (`@review`, `@build`…) thì tên gọi là `work_type`. Không có trong bảng thì so thẳng với tên ô.
 
-`my_context` báo connector chưa kết nối (not connected): báo người dùng đúng một đường, rồi dừng lượt: gõ `/mcp`, chọn `plugin:tinh-nlh:nhile-governance`, **Authenticate**, đăng nhập tỉnh NhiLe. Chỉ làm một lần trên máy.
+`my_context` báo connector chưa kết nối (not connected), hay không có: báo người dùng đúng một đường bằng lời thường, rồi dừng lượt: "Tháp cần đăng nhập tỉnh NhiLe một lần: gõ /mcp, chọn plugin:tinh-nlh:nhile-governance, chọn Authenticate, đăng nhập bằng email công ty trong trình duyệt." Chỉ làm một lần trên máy. Trong lúc chờ vẫn chuyển việc của kênh, so thẳng tên ô.
 
 ## Nhịp 10 phút (`/loop 10m /tinh-nlh:thap`)
 

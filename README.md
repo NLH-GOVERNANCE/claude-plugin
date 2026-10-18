@@ -38,16 +38,24 @@ Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối
 /plugin install tinh-nlh@nlh-governance
 ```
 
-### Tháp hệ thống trên máy (Claude Code, Windows)
+### Bật Tháp trên máy (Windows và Mac)
 
-Một phiên Claude Code chạy Sonnet ngồi ô Tháp hệ thống: hệ đẩy việc mới qua kênh `tower` của plugin, phiên chuyển việc tới đúng phiên đang ngồi ô đó (hay mở phiên nền mới) trong khoảng 15 giây. Mỗi 10 phút gọi `my_work` để bù tin sót. Chỉ cần ở một máy.
+Tháp ngồi trên máy của bạn, đưa việc mới tới đúng chỗ trong khoảng 15 giây. Mỗi máy làm một lần, ba bước:
 
-1. Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Tháp trên máy**, bấm **Tạo khoá mới**, chép khoá (chỉ hiện một lần, hạn 30 ngày).
-2. Trong Claude Code: `/plugin marketplace update nlh-governance`, rồi `/plugin`, tab **Installed**, `tinh-nlh`, cập nhật lên bản mới nhất.
-3. Bấm đúp lối tắt **Tháp tỉnh NhiLe** trên Desktop (chưa có thì bấm đúp `Thap.cmd` ở gốc repo này một lần, nó tự tạo lối tắt). Cửa sổ ghi "Tháp đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này." Lần đầu cửa sổ hỏi khoá trong ô nhập ẩn chữ: dán khoá, Enter. Khoá lưu bằng DPAPI của Windows (chỉ tài khoản Windows này mở được), không qua chat; hub từ chối khoá thì lần mở sau hỏi lại. Không dán khoá vào chat. Hộp cảnh báo kênh thử hiện ra: chọn **I am using this for local development**. Tháp chưa tự chạy cùng Windows.
-4. Lần đầu, trong cửa sổ Tháp gõ `/mcp`, chọn `plugin:tinh-nlh:nhile-governance`, **Authenticate**, đăng nhập tỉnh NhiLe. Chỉ làm một lần; chưa đăng nhập thì Tháp không đọc được việc, và các hook của plugin báo "not connected" ở cuối mỗi lượt (Claude Code chưa có cách cho hook này im khi chưa đăng nhập).
+1. Cài app Claude cho máy tính ở [claude.ai/download](https://claude.ai/download) và plugin Tỉnh NhiLe như mục trên; máy đã có thì bỏ qua.
+2. Trong app Claude, mở mục **Code**, gõ **bật Tháp**, bấm cho phép khi được hỏi: biểu tượng **Tháp tỉnh NhiLe** hiện trên màn hình chính.
+3. Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Tháp trên máy**, bấm **Tạo khoá mới** và chép khoá, rồi bấm đúp biểu tượng Tháp, dán khoá khi cửa sổ hỏi và bấm Enter.
 
-Cờ `--dangerously-load-development-channels` trong `Thap.cmd` làm gì: kênh tự làm chưa nằm trong danh sách kênh Anthropic duyệt sẵn (research preview), nên Claude Code chỉ nạp nó khi mình nói rõ đang thử. Cờ chỉ bỏ qua danh sách đó, chỉ cho đúng `plugin:tinh-nlh@nlh-governance`, và hỏi lại mỗi lần mở. Vì sao an toàn: kênh do repo này viết, chỉ đọc việc của chính bạn bằng khoá có hạn, chỉ gửi khoá tới `*.nlh.vn`; không có công cụ trả lời, không nhận duyệt quyền từ xa, nên hộp hỏi quyền vẫn do bạn bấm trên máy; luật của tổ chức (`channelsEnabled`) vẫn áp dụng. Tắt Tháp: đóng cửa sổ.
+Khi dán, chữ không hiện ra: đó là bình thường. Lần đầu, cửa sổ Tháp tự cài phần còn thiếu trong một hai phút, rồi mở trình duyệt để bạn đăng nhập Claude. Mỗi lần mở, cửa sổ hỏi một câu tiếng Anh: chọn dòng **I am using this for local development**, bấm Enter. Tháp nhắc đăng nhập tỉnh NhiLe thì làm đúng câu Tháp nhắc, một lần. Để cửa sổ mở là Tháp làm việc; đóng cửa sổ là tắt. Không dán khoá vào chat.
+
+#### Cho người bảo trì
+
+- Lệnh `/tinh-nlh:batthap` chạy `tower/setup.ps1` (Windows) hay `tower/setup.sh` (macOS): chép Tháp sang `~/.tinh-nlh/thap` và tạo lối tắt trên Desktop. Đã có lối tắt cùng tên trỏ chỗ khác thì giữ nguyên.
+- Lối tắt mở `tower/thap.ps1` hay `tower/thap.sh`: lấy bản mới nhất của Tháp từ plugin đã cài, tự cài Claude Code (`claude.ai/install.ps1`, `install.sh`) và Node (`nodejs.org`, kiểm SHA-256) khi thiếu, hỏi khoá trong ô nhập ẩn chữ, lưu bằng DPAPI (Windows) hay Keychain (macOS), rồi mở Claude Code chạy Sonnet ở `~/TinhNhiLe`.
+- Kênh `tower` nạp qua `--mcp-config` với `--dangerously-load-development-channels server:tower`, không qua tên plugin: plugin cài từ claude.ai mang tên `tinh-nlh@synced`, Claude Code chỉ nhận kênh của plugin cài từ chợ. `NLH_TOWER=1` chỉ nằm trong cấu hình kênh, nên các phiên khác trên máy không đọc luồng việc.
+- Cờ `--dangerously-load-development-channels`: kênh tự làm chưa nằm trong danh sách kênh Anthropic duyệt sẵn (research preview), nên Claude Code chỉ nạp khi mình nói rõ đang thử, hỏi lại mỗi lần mở. Vì sao an toàn: kênh do repo này viết, chỉ đọc việc của chính bạn bằng khoá có hạn, chỉ gửi khoá tới `*.nlh.vn`; không có công cụ trả lời, không nhận duyệt quyền từ xa; luật của tổ chức (`channelsEnabled`) vẫn áp dụng.
+- Lần đầu, connector `plugin:tinh-nlh:nhile-governance` trong cửa sổ Tháp có thể cần đăng nhập: `/mcp`, chọn nó, **Authenticate**. Chưa đăng nhập thì Tháp vẫn chuyển việc của kênh, chỉ chưa đọc được tên gọi của các ô.
+- `Thap.cmd` và `scripts/tower-*.ps1` ở gốc repo là đường cũ cho máy đã clone repo (dùng kênh của plugin `tinh-nlh@nlh-governance`). Một máy chỉ chạy một Tháp.
 
 ### Khi có tổ chức Team hoặc Enterprise
 
