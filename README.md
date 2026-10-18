@@ -15,7 +15,8 @@ Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo riêng tư, chỉ 
 Xong thì xem việc của mình:
 
 - Trên app Claude (web, máy tính) và điện thoại: gõ `/viec`.
-- Ở Claude Code và Cowork: mở phiên mới là Claude tự kể việc đang chờ (hook đầu phiên chỉ chạy ở hai nơi này).
+- Ở Claude Code và Cowork: mở phiên mới là Claude tự nạp bối cảnh của bạn (ô, dự án đang dở, việc đang chờ) và kể việc đang chờ (hook đầu phiên chỉ chạy ở hai nơi này).
+- Ở đâu cũng hỏi được "tôi đang làm gì dở": Claude trả lời ngay, không phải hỏi lại.
 
 Telegram là tuỳ chọn, chỉ để ký ngay trong nhóm. Plugin tự cập nhật theo repo (bấm **Check for updates**, hoặc bật **Sync automatically**). Plugin cũng tự có trong Claude Code ở phiên sau, cùng tài khoản.
 
