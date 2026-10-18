@@ -372,3 +372,53 @@ describe('plugin.json và Thap.cmd', () => {
     assert.ok(cmd.indexOf('tower-key.ps1') < cmd.indexOf('\r\nclaude '));
   });
 });
+
+describe('lời dặn Tháp: tìm phiên đang ngồi ô trước rồi mới mở mới', () => {
+  // Bỏ CR: Windows lấy file về với CRLF.
+  const skill = readFileSync(join(root, 'plugins/tinh-nlh/skills/thap/SKILL.md'), 'utf8').replace(/\r/g, '');
+
+  // Lỗi 18/10 14:33: việc cho ô dai-dien-kien-truc-son (son@cto) đã có phiên ghim "Ô CTO (son@cto) trên máy anh Sơn",
+  // Tháp vẫn mở phiên mới "Ô dai-dien-kien-truc-son (son@dai-dien-kien-truc-son)". Rồi mở thêm 3 phiên review-pr-son vì
+  // SendMessage không nhận tên có "@".
+  test('khớp cả tên ô lẫn tên gọi, theo hai nguồn: phiên tự báo rồi ListAgents', () => {
+    assert.match(skill, /tìm phiên đang ngồi ô `cell` trước; chỉ khi không có phiên nào mới mở phiên mới/);
+    assert.match(skill, /ô `dai-dien-kien-truc-son` có tên gọi `cto`, nên phiên "Ô CTO \(son@cto\) trên máy anh Sơn" là phiên của ô đó/);
+    assert.match(skill, /1\. Phiên tự báo: thẻ có `session`/);
+    assert.match(skill, /2\. Dòng có tên chứa `\(<người>@<tên>\)` hay `\(<người>\/<tên>\)`/);
+    assert.match(skill, /Chưa có danh bạ thì gọi `my_context` trước; chưa có danh bạ thì không mở phiên mới/);
+  });
+
+  test('có phiên mà gửi không được (tên có @): không mở phiên mới, báo người dùng đổi tên', () => {
+    assert.match(skill, /Có phiên mà tên có `@`, hay `SendMessage` báo không gửi được: `SendMessage` không nhận tên có `@`\. Không mở phiên mới\./);
+    assert.match(skill, /Không mở phiên mới cho một ô khi `ListAgents` còn phiên của ô đó, kể cả phiên gửi không được/);
+  });
+
+  test('phiên mới đặt tên theo tên hiển thị của ô, không dùng mã ô, không có @', () => {
+    const open = skill.match(/`claude --bg --model sonnet -n "([^"]+)"/);
+    assert.equal(open?.[1], 'Ô <tên hiển thị> (<người>/<tên gọi>)');
+    assert.doesNotMatch(skill, /-n "Ô <cell>/);
+    assert.match(skill, /Ví dụ: "Ô CTO \(son\/cto\)", không phải "Ô dai-dien-kien-truc-son \(son@dai-dien-kien-truc-son\)"/);
+  });
+
+  test('phiên ô tự báo đúng tên ô trong sổ, không phải tên gọi, để kênh khớp được phiên tự báo', () => {
+    const hook = readFileSync(join(root, 'plugins/tinh-nlh/hooks/session-start.mjs'), 'utf8');
+    assert.match(hook, /cell \(tên ô trong sổ, ví dụ dai-dien-kien-truc-son, không phải tên gọi cto\)/);
+    const sessions = [{ session_id: 's-cto', session_name: 'Ô CTO (son/cto)', cell: 'dai-dien-kien-truc-son', status: 'idle' }];
+    assert.deepEqual(seatedSession(sessions, { cell: 'dai-dien-kien-truc-son' }), { name: 'Ô CTO (son/cto)', id: 's-cto' });
+  });
+
+  test('phiên ô đặt tên dạng người/ô ngay từ đầu; hook nhắc đổi tên khi tên có @', async () => {
+    const own = readFileSync(join(root, 'plugins/tinh-nlh/skills/tinh-nlh/SKILL.md'), 'utf8').replace(/\r/g, '');
+    assert.match(own, /Tên phiên ngồi ô dạng "Ô <tên hiển thị> \(<người>\/<tên gọi>\)", ví dụ "Ô CTO \(son\/cto\)": không dùng `@`/);
+    const run = (title) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(root, 'plugins/tinh-nlh/hooks/session-start.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end(JSON.stringify({ session_id: 'abc', session_title: title }));
+      });
+    assert.match(await run('Ô CTO (son@cto) trên máy anh Sơn'), /Tên phiên có @ nên Tháp không gửi việc tới được: nhắc người dùng đổi tên dạng "Ô CTO \(son\/cto\)"\.\n$/);
+    assert.doesNotMatch(await run('Ô CTO (son/cto) trên máy anh Sơn'), /Tên phiên có @/);
+  });
+});
