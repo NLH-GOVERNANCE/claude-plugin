@@ -146,9 +146,16 @@ describe('plugin tinh-nlh', () => {
     assert.deepEqual(save('Stop'), [{ ...base, input: { session_id: '${session_id}', role: 'assistant', text: '${last_assistant_message}' }, timeout: 5 }]);
     assert.deepEqual(save('SessionEnd'), []);
     // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
+    // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
+    const matcher = new RegExp(hooks.PostToolUse[0].matcher);
+    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__my_work'), true);
+    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__save_chat'), true);
+    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__my_context'), false);
+    assert.equal(matcher.test('mcp__other__my_work'), false);
+    assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse, [
       {
-        matcher: 'mcp__plugin_tinh-nlh_nhile-governance__.*',
+        matcher: '^mcp__plugin_tinh-nlh_nhile-governance__(?!my_context$)',
         hooks: [{ type: 'mcp_tool', server: 'plugin:tinh-nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } }],
       },
     ]);

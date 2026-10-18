@@ -94,7 +94,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__plugin_tinh-nlh_nhile-governance__.*",
+        "matcher": "^mcp__plugin_tinh-nlh_nhile-governance__(?!my_context$)",
         "hooks": [
           {
             "type": "mcp_tool",
