@@ -102,6 +102,28 @@ describe('plugin tinh-nlh', () => {
     }
   });
 
+  // Lệnh và skill cùng tên thì lệnh thắng, skill không bao giờ nạp: Loa từng chạy lệnh cài mỗi 10 phút (18/10).
+  const skillNames = () =>
+    readdirSync(join(pluginDir, 'skills')).map((dir) => {
+      assert.equal(frontMatter(join(pluginDir, 'skills', dir, 'SKILL.md')).name, dir, `skills/${dir}: name khác tên thư mục`);
+      return dir;
+    });
+  const commandNames = () => readdirSync(join(pluginDir, 'commands')).map((file) => file.replace(/\.md$/, ''));
+
+  test('không có skill và lệnh nào trùng tên', () => {
+    const commands = commandNames();
+    for (const name of skillNames()) assert.ok(!commands.includes(name), `skill và lệnh cùng tên ${name}`);
+  });
+
+  test('lời mở của start.ps1 và start.sh trỏ tới một skill có thật, không phải lệnh', () => {
+    for (const file of ['speaker/start.ps1', 'speaker/start.sh']) {
+      const target = readFileSync(join(pluginDir, file), 'utf8').match(/'\/loop 10m \/tinh-nlh:([a-z0-9-]+)'/)?.[1];
+      assert.ok(target, `${file}: không thấy lời mở /loop 10m /tinh-nlh:…`);
+      assert.ok(skillNames().includes(target), `${file}: không có skill ${target}`);
+      assert.ok(!commandNames().includes(target), `${file}: ${target} là lệnh`);
+    }
+  });
+
   test('hook đầu phiên (tiếng Anh): in mã và tên phiên đã lọc, nhắc đổi tên khi có @; không có mã thì không in gì', async () => {
     const run = (input) =>
       new Promise((resolve) => {
