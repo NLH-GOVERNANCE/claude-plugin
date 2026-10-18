@@ -61,15 +61,20 @@ describe('plugin tinh-nlh', () => {
     assert.deepEqual(servers[0], { type: 'http', url: 'https://governance.nlh.vn/mcp' });
   });
 
-  test('hook đầu phiên in câu dặn và mã phiên, không gọi mạng; Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
+  test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     assert.deepEqual(Object.keys(hooks).sort(), ['SessionEnd', 'SessionStart', 'Stop']);
-    const commands = hooks.SessionStart.flatMap((group) => group.hooks);
-    assert.equal(commands.length, 2);
-    assert.equal(commands[0].type, 'command');
-    assert.match(commands[0].command, /^echo "[^"$`]+my_work[^"$`]+"$/);
-    assert.deepEqual(commands[1], { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] });
+    const byMatcher = Object.fromEntries(hooks.SessionStart.map((group) => [group.matcher, group.hooks]));
+    assert.deepEqual(Object.keys(byMatcher).sort(), ['clear|compact', 'startup', 'startup|clear']);
+    // Lúc mở phiên, hook mcp_tool bị bỏ qua (máy chủ MCP chưa nối), nên chỉ in lời dặn; echo không gọi mạng.
+    assert.equal(byMatcher.startup.length, 1);
+    assert.equal(byMatcher.startup[0].type, 'command');
+    assert.match(byMatcher.startup[0].command, /^echo "[^"$`]+my_context[^"$`]+"$/);
+    assert.deepEqual(byMatcher['startup|clear'], [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] }]);
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
+    // Sau /clear hay gọn ngữ cảnh: gọi thẳng công cụ, đúng tên máy chủ có phạm vi plugin, không truyền gì thêm.
+    const [server] = Object.keys(readJson('plugins/tinh-nlh/.mcp.json').mcpServers);
+    assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:tinh-nlh:${server}`, tool: 'my_context', timeout: 30 }]);
     // Phiên tự báo (phiếu 6d4cb2ad): gọi report_session của connector, không gửi nội dung chat.
     for (const [event, status] of [['Stop', 'idle'], ['SessionEnd', 'stopped']]) {
       const [hook] = hooks[event].flatMap((group) => group.hooks);
@@ -138,6 +143,15 @@ describe('plugin tinh-nlh', () => {
     assert.match(skill, /kind `handoff`/);
     assert.match(skill, /## Góp ý/);
     assert.match(skill, /ô `tech-lead-son`, tiêu đề bắt đầu bằng "Góp ý:"/);
+  });
+
+  test('skill: câu đầu mỗi cuộc trò chuyện gọi my_context, trả lời "tôi đang làm gì dở" không tra thêm, giữ bảng mức nhạy', () => {
+    const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
+    assert.match(frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md')).description, /câu đầu mỗi cuộc trò chuyện, kể cả trên web và điện thoại/);
+    assert.match(skill, /1\. Gọi `my_context` một lần/);
+    assert.match(skill, /Connector chưa có `my_context` \(hub bản cũ\) thì gọi `my_work` thay/);
+    assert.match(skill, /"tôi đang làm gì dở".+không hỏi lại, không tra thêm/);
+    assert.match(skill, /tài khoản cá nhân thì không mở hay chép vào cuộc trò chuyện dữ liệu loại 3–4/);
   });
 
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {
