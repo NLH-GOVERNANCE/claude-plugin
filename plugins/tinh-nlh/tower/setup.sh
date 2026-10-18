@@ -1,8 +1,8 @@
 #!/bin/bash
-# Lệnh "bật Tháp" (/tinh-nlh:batthap) chạy file này trên macOS, một lần mỗi máy. Chép Tháp từ plugin sang
-# ~/.tinh-nlh/thap (chỗ cố định, plugin cập nhật không làm mất), rồi tạo "Tháp tỉnh NhiLe.command" trên Desktop: bấm đúp
-# là Terminal mở Tháp. Đã có tệp cùng tên trỏ chỗ khác thì giữ nguyên, không ghi đè. Không tự chạy cùng máy, không hỏi
-# khoá: khoá hỏi lúc bấm đúp Tháp lần đầu. Cùng cách với setup.ps1 của Windows.
+# The "bật Loa" command (/tinh-nlh:batthap) runs this on macOS, once per machine. Copies Loa from the plugin to
+# ~/.tinh-nlh/thap (a fixed place plugin updates do not wipe), then makes "Loa tỉnh NhiLe.command" on the Desktop:
+# double-click opens Loa in Terminal. A file of the same name pointing elsewhere is kept; the old "Tháp tỉnh
+# NhiLe.command" that pointed to Loa's earlier launcher is removed. Never asks for the key. Same steps as setup.ps1.
 set -eu
 
 DIR="${THAP_DIR:-$HOME/.tinh-nlh/thap}"
@@ -17,15 +17,20 @@ chmod +x "$DIR/thap.sh"
 cp "$PLUGIN/channel/tower.mjs" "$DIR/tower.mjs"
 printf '%s\n' "$version" > "$DIR/version.txt"
 
-name='Tháp tỉnh NhiLe'
+name='Loa tỉnh NhiLe'
 link="$DESKTOP/$name.command"
+old="$DESKTOP/Tháp tỉnh NhiLe.command"
+if [ -e "$old" ] && grep -qF "$DIR/thap.sh" "$old"; then
+  rm -f "$old"
+  echo 'Đã bỏ biểu tượng cũ Tháp tỉnh NhiLe.'
+fi
 if [ -e "$link" ] && ! grep -qF "$DIR/thap.sh" "$link"; then
   echo "Trên màn hình chính đã có lối tắt $name khác, giữ nguyên lối tắt đó."
   exit 0
 fi
 cat > "$link" <<EOF
 #!/bin/bash
-# Bấm đúp để mở Tháp tỉnh NhiLe. Tệp này do lệnh "bật Tháp" của plugin tinh-nlh tạo.
+# Double-click to open Loa tỉnh NhiLe. Made by the "bật Loa" command of plugin tinh-nlh.
 exec /bin/bash "$DIR/thap.sh"
 EOF
 chmod +x "$link"

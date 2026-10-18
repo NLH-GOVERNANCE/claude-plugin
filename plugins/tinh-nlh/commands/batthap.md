@@ -1,17 +1,17 @@
 ---
-description: Bật Tháp trên máy này - tạo biểu tượng "Tháp tỉnh NhiLe" trên màn hình chính, một lần mỗi máy. Dùng khi người dùng nói "bật Tháp", "cài Tháp", "mở Tháp trên máy"
+description: Turn on Loa on this machine - puts the "Loa tỉnh NhiLe" icon on the desktop, once per machine. Use when the user says "bật Loa", "cài Loa", "mở Loa trên máy"
 ---
 
-Bật Tháp hệ thống trên máy của người dùng.
+Turn on Loa (the speaker that tells the right session on this machine about new work).
 
-Chỉ làm được ở Claude Code chạy trên máy tính (app Claude, mục Code; hay cửa sổ Claude Code). Ở chat trên web, điện thoại hay Cowork thì nói đúng một câu: mở mục Code trong app Claude trên máy tính rồi gõ lại "bật Tháp".
+Only works in Claude Code on a computer (Claude app, Code tab; or a Claude Code terminal). In web chat, on the phone or in Cowork, say exactly one sentence: mở mục Code trong app Claude trên máy tính rồi gõ lại "bật Loa".
 
-1. Chạy đúng một lệnh theo hệ điều hành của máy, không thêm, không sửa:
+1. Run exactly one command for the machine's OS, nothing added or changed:
    - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/tower/setup.ps1"`
    - macOS: `/bin/bash "${CLAUDE_PLUGIN_ROOT}/tower/setup.sh"`
-2. Kể lại dòng lệnh in ra, rồi nói hai bước còn lại bằng lời thường, không lệnh, không mã:
-   - Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Tháp trên máy**, bấm **Tạo khoá mới**, chép khoá.
-   - Bấm đúp biểu tượng **Tháp tỉnh NhiLe** trên màn hình chính, dán khoá khi cửa sổ hỏi (chữ không hiện ra), bấm Enter. Lần đầu cửa sổ tự cài phần còn thiếu và mở trình duyệt để đăng nhập Claude. Đừng đóng cửa sổ Tháp.
-3. Lệnh in "đã có lối tắt … khác" thì nói: máy này đã có Tháp, bấm đúp lối tắt đó như mọi lần.
+2. Repeat the line it printed, then give the two remaining steps in plain Vietnamese, no commands, no codes:
+   - Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới**, chép khoá.
+   - Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính, dán khoá khi cửa sổ hỏi (chữ không hiện ra), bấm Enter. Lần đầu cửa sổ tự cài phần còn thiếu và mở trình duyệt để đăng nhập Claude. Đừng đóng cửa sổ Loa.
+3. If it printed that another shortcut exists, say: máy này đã có Loa, bấm đúp lối tắt đó như mọi lần.
 
-Không hỏi khoá, không nhận khoá trong chat. Người dùng dán một chuỗi giống khoá (`nlh_tower_…`) vào chat thì không lặp lại, không dùng; nhắc một câu: khoá đó đã lộ, thu hồi ở web (**Kết nối**, **Khoá cho Tháp trên máy**), tạo khoá mới, dán vào cửa sổ Tháp.
+Never ask for the key, never accept it in chat. If the user pastes something that looks like a key (`nlh_tower_…`) into chat, do not repeat or use it; say one sentence: khoá đó đã lộ, thu hồi ở web (**Kết nối**, **Khoá cho Loa trên máy**), tạo khoá mới, dán vào cửa sổ Loa.
