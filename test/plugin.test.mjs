@@ -134,5 +134,12 @@ describe('plugin tinh-nlh', () => {
     const files = [join(root, 'README.md'), join(root, '.claude-plugin/marketplace.json'), ...filesUnder(pluginDir)];
     for (const path of files) assert.doesNotMatch(readFileSync(path, 'utf8').replace(/Không hứa "mở chat là thấy việc"/g, ''), promise, relative(root, path));
   });
+
+  test('/lamtiep chỉ nhận việc chờ chính người dùng; việc đã giao cho ô khác thì hỏi trước, không tự claim', () => {
+    const lamtiep = readFileSync(join(pluginDir, 'commands/lamtiep.md'), 'utf8');
+    assert.match(lamtiep, /Chỉ nhận \(`claim`\) việc đang chờ chính người dùng/);
+    assert.match(lamtiep, /mục `assigned` của `my_desk`\): chỉ đọc bàn giao và kể lại, không tự `claim`/);
+    assert.match(lamtiep, /"Muốn tôi làm thay không\?"/);
+  });
 });
 
