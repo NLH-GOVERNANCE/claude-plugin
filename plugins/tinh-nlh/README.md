@@ -6,9 +6,9 @@ Gói gồm:
 
 - connector NhiLe Governance (`https://governance.nlh.vn/mcp`), mỗi người đăng nhập một lần bằng email công ty;
 - skill `tinh-nlh`: đầu phiên gọi `my_work`, tóm tắt việc đang chờ và việc mình đã giao;
-- năm lệnh: `/tinh-nlh:viec` (hộp việc), `/tinh-nlh:giao` (giao việc cho một ô), `/tinh-nlh:lamtiep` (làm tiếp một việc), `/tinh-nlh:bangiao` (ghi bàn giao), `/tinh-nlh:ky` (phiếu chờ ký). Trên app Claude và điện thoại, gõ `/viec`, `/giao`, `/ky` (hay nói "xem việc của tôi", "giao việc", "tôi ký");
+- sáu lệnh: `/tinh-nlh:khongluu` (thôi lưu phiên này vào sổ), `/tinh-nlh:viec` (hộp việc), `/tinh-nlh:giao` (giao việc cho một ô), `/tinh-nlh:lamtiep` (làm tiếp một việc), `/tinh-nlh:bangiao` (ghi bàn giao), `/tinh-nlh:ky` (phiếu chờ ký). Trên app Claude và điện thoại, gõ `/viec`, `/giao`, `/ky` (hay nói "xem việc của tôi", "giao việc", "tôi ký");
 - kênh `tower` (chỉ Claude Code, chỉ khi mở bằng `Thap.cmd`): server trên máy đọc việc mới của chính người dùng từ hub mỗi 15 giây bằng khoá riêng có hạn, đẩy vào phiên Tháp hệ thống; skill `thap` dặn phiên đó chuyển việc tới đúng phiên đang ngồi ô. Cách bật: README ở gốc repo, mục "Tháp hệ thống trên máy";
-- hook (chỉ chạy ở Claude Code và Cowork): đầu phiên in một câu dặn Claude gọi `my_work` trước, kèm mã và tên của phiên; cuối mỗi lượt và lúc đóng phiên, Claude Code gọi `report_session` của connector với mã phiên và trạng thái, để Tháp trên máy biết phiên nào đang ngồi ô nào (phiên tự báo). Hook không giữ token, không gửi nội dung chat.
+- hook (chỉ chạy ở Claude Code và Cowork): đầu phiên in một câu dặn Claude gọi `my_work` trước, kèm mã và tên của phiên; cuối mỗi lượt và lúc đóng phiên, Claude Code gọi `report_session` của connector với mã phiên và trạng thái, để Tháp trên máy biết phiên nào đang ngồi ô nào (phiên tự báo). Hook không giữ token. Lưu chat: lúc người dùng gửi lời và lúc Claude trả lời xong, Claude Code gọi `save_chat` của connector với đúng lượt đó (không kèm kết quả công cụ); sổ che số nhạy và không lưu nguyên văn lượt về tiền, hợp đồng, nhân sự, khách hàng.
 
 Plugin không chứa secret, không chép luật hay ô: mọi thứ đọc từ hệ sau khi đăng nhập. Plugin không tạo việc định kỳ; muốn ô làm việc cả khi không mở Claude thì bật thêm việc định kỳ hay máy dự phòng.
 
