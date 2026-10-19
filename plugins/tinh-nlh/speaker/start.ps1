@@ -29,11 +29,11 @@ New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 # 1. Newest Loa from the installed plugin (the plugin updates itself). Copy over the one in $Dir, used from this launch.
 $plugins = Join-Path $env:USERPROFILE '.claude\plugins'
 $best = $null
-foreach ($pattern in @('cache\*\tinh-nlh\*\.claude-plugin\plugin.json', 'synced\*\*\.claude-plugin\plugin.json')) {
+foreach ($pattern in @('cache\*\nlh\*\.claude-plugin\plugin.json', 'synced\*\*\.claude-plugin\plugin.json')) {
   foreach ($file in @(Get-ChildItem -Path (Join-Path $plugins $pattern) -File -ErrorAction SilentlyContinue)) {
     try { $manifest = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
     $root = Split-Path $file.DirectoryName -Parent
-    if ($manifest.name -ne 'tinh-nlh' -or -not (Test-Path -LiteralPath (Join-Path $root 'speaker\start.ps1'))) { continue }
+    if ($manifest.name -ne 'nlh' -or -not (Test-Path -LiteralPath (Join-Path $root 'speaker\start.ps1'))) { continue }
     try { $version = [version]$manifest.version } catch { continue }
     if (-not $best -or $version -gt $best.Version) { $best = @{ Version = $version; Root = $root } }
   }
@@ -155,7 +155,7 @@ if (-not (Test-Path -LiteralPath $opened)) {
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/loop 10m /tinh-nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
+$arguments = @('/loop 10m /nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
 # Fallback without the dev channel flag: the server still reads the hub, resumes and opens sessions; only sends wait
 # for the 10-minute loop.
 $fallback = $arguments[0..($arguments.Count - 3)]

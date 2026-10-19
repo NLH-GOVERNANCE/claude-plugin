@@ -10,4 +10,4 @@ Use the NhiLe Governance connector. Resume: $ARGUMENTS
 3. Summarise in 3-5 plain Vietnamese lines: how far it got, what is left, next step, where it is stuck.
 4. Only claim (`claim`) work waiting for the user themself: items from `my_work`, or tickets sent to the user or their own cell. After claiming, `get_cell` that cell and follow its goal and guardrails. A ticket held elsewhere: say who holds it, do not take it.
    Work the user assigned to another cell (`assigned` in `my_desk`): only read the handoff and tell it back, do not `claim`. Ask one question: "Muốn tôi làm thay không?". Only if the user says yes, `claim` and work as above.
-5. Carry on. When stopping midway, write a handoff as the tinh-nlh skill says.
+5. Carry on. When stopping midway, write a handoff as the nep skill says.
