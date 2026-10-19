@@ -1,14 +1,18 @@
 {
   "name": "nlh-governance",
-  "description": "Nếp (trước gọi là tỉnh NhiLe) của NhiLe Holding cho Claude",
+  "description": "Nếp của NhiLe Holding cho Claude",
   "owner": {
     "name": "NhiLe Holding"
   },
   "plugins": [
     {
-      "name": "tinh-nlh",
+      "name": "nlh",
+      "displayName": "Nếp",
       "source": "./plugins/tinh-nlh",
-      "description": "Làm việc trong Nếp từ Claude: xem việc (gõ /work), giao việc cho ô, ký"
+      "description": "Nếp là nơi công ty giao việc, theo dõi việc và ký duyệt. Cài xong, hỏi Claude \"việc của tôi hôm nay?\" hoặc gõ /work."
     }
-  ]
+  ],
+  "renames": {
+    "tinh-nlh": "nlh"
+  }
 }

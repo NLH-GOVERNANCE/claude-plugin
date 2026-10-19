@@ -33,9 +33,9 @@ mkdir -p "$DIR"
 # 1. Newest Loa from the installed plugin (the plugin updates itself). Copy over the one in $DIR, used from this launch.
 best=""
 best_root=""
-for file in "$PLUGINS"/cache/*/tinh-nlh/*/.claude-plugin/plugin.json "$PLUGINS"/synced/*/*/.claude-plugin/plugin.json; do
+for file in "$PLUGINS"/cache/*/nlh/*/.claude-plugin/plugin.json "$PLUGINS"/synced/*/*/.claude-plugin/plugin.json; do
   [ -f "$file" ] || continue
-  grep -q '"name": *"tinh-nlh"' "$file" || continue
+  grep -q '"name": *"nlh"' "$file" || continue
   root="$(dirname "$(dirname "$file")")"
   [ -f "$root/speaker/start.sh" ] || continue
   version="$(sed -n 's/^ *"version": *"\([0-9.]*\)".*/\1/p' "$file" | head -n 1)"
@@ -138,7 +138,7 @@ if [ ! -f "$DIR/opened.txt" ]; then
 fi
 echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 echo ''
-set -- '/loop 10m /tinh-nlh:speaker-loop' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+set -- '/loop 10m /nlh:speaker-loop' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"

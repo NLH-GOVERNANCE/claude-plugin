@@ -1,5 +1,5 @@
 ---
-name: tinh-nlh
+name: nep
 description: How to work in Nếp (old name tỉnh NhiLe; also NhiLe Governance, tỉnh NLH). Use at the first turn of every conversation, including web and phone, to load the user's context; when the user asks "tôi đang làm gì dở", "tới đâu rồi"; when the user mentions việc, phiếu, ô, hộp việc, giao việc, làm tiếp, ký, bảng chung, or says "tôi mới vào"; when the user says dừng, chuyển việc, or the session is about to end; and when the user gives feedback ("góp ý", "vướng", "khó dùng") or complains about the system.
 ---
 
@@ -55,12 +55,12 @@ User says "góp ý", "vướng", "khó dùng", or complains about the system (ho
 
 Commands are shortcuts; plain sentences work too.
 
-- `/tinh-nlh:work`: my work today, including what waits for my signature.
-- `/tinh-nlh:assign`: assign work to a cell.
-- `/tinh-nlh:resume`: resume a piece of work, on any machine. In Claude Code type the full `/tinh-nlh:resume`, because `/resume` is Claude Code's own command.
-- `/tinh-nlh:handoff`: write a handoff now.
-- `/tinh-nlh:sign`: tickets waiting for the user's signature.
-- `/tinh-nlh:no-save`: stop saving this session.
-- `/tinh-nlh:speaker`: turn on Loa on this machine.
+- `/nlh:work`: my work today, including what waits for my signature.
+- `/nlh:assign`: assign work to a cell.
+- `/nlh:resume`: resume a piece of work, on any machine. In Claude Code type the full `/nlh:resume`, because `/resume` is Claude Code's own command.
+- `/nlh:handoff`: write a handoff now.
+- `/nlh:sign`: tickets waiting for the user's signature.
+- `/nlh:no-save`: stop saving this session.
+- `/nlh:speaker`: turn on Loa on this machine.
 
 In the web and phone app the session-start hook does not run: this skill says to call `my_context` on the first turn; the user can also type `/work` (or say "xem việc của tôi"). Never promise "mở chat là thấy việc".

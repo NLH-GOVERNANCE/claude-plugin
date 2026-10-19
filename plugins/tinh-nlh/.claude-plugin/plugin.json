@@ -1,8 +1,8 @@
 {
-  "name": "tinh-nlh",
+  "name": "nlh",
   "displayName": "Nếp",
-  "version": "0.12.0",
-  "description": "Cửa vào Nếp (trước gọi là tỉnh NhiLe, hệ NhiLe Governance) trong Claude: xem việc đang chờ và việc mình đã giao (gõ /work; Claude Code và Cowork tự kể khi mở phiên), giao việc cho một ô, ký phiếu. Luật và ô đọc từ hệ sau khi đăng nhập, plugin không chép.",
+  "version": "0.13.0",
+  "description": "Nếp là nơi công ty giao việc, theo dõi việc và ký duyệt. Cài xong, hỏi Claude \"việc của tôi hôm nay?\" hoặc gõ /work.",
   "author": {
     "name": "NhiLe Holding"
   },
