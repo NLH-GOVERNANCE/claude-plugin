@@ -1,5 +1,5 @@
 ---
-description: Tickets waiting for my signature in tỉnh NhiLe. Use when the user says "tôi ký", "chờ tôi ký", "ký phiếu"
+description: Phiếu đang chờ tôi ký trong Nếp. Dùng khi người dùng nói "tôi ký", "chờ tôi ký", "ký phiếu"
 ---
 
 Use the NhiLe Governance connector.

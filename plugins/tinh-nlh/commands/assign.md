@@ -1,5 +1,5 @@
 ---
-description: Assign work to a cell in tỉnh NhiLe. Use when the user says "giao việc", "giao cho …", "nhờ ô …"
+description: Giao việc cho một ô trong Nếp. Dùng khi người dùng nói "giao việc", "giao cho …", "nhờ ô …"
 argument-hint: "[việc cần làm]"
 ---
 

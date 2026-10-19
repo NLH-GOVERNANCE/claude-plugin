@@ -1,6 +1,6 @@
 {
   "name": "nlh-governance",
-  "description": "Plugin của NhiLe Governance (tỉnh NhiLe) cho Claude",
+  "description": "Nếp (trước gọi là tỉnh NhiLe) của NhiLe Holding cho Claude",
   "owner": {
     "name": "NhiLe Holding"
   },
@@ -8,7 +8,7 @@
     {
       "name": "tinh-nlh",
       "source": "./plugins/tinh-nlh",
-      "description": "Làm việc trong tỉnh NhiLe từ Claude: xem việc (gõ /work), giao việc cho ô, ký"
+      "description": "Làm việc trong Nếp từ Claude: xem việc (gõ /work), giao việc cho ô, ký"
     }
   ]
 }

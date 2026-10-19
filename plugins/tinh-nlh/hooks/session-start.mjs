@@ -25,6 +25,6 @@ if (id) {
   // Names with "@" cannot receive SendMessage, so Loa cannot forward to a session named like "Ô CTO (son@cto)".
   const rename = title.includes('@') ? ' The name has @, so Loa cannot forward work to it: ask the user to rename it like "Ô CTO (son/cto)".' : '';
   process.stdout.write(
-    `This session: id ${id}, ${name}. When this session takes a tỉnh NhiLe cell or switches ticket, call report_session of the NhiLe Governance connector with session_id ${id}${title ? ' and session_name exactly as above' : ''}, cell (the ledger cell name, e.g. dai-dien-kien-truc-son, not the handle cto) and ticket_id, so Loa on this machine forwards that cell's work here.${rename}\n`,
+    `This session: id ${id}, ${name}. When this session takes a Nếp cell or switches ticket, call report_session of the NhiLe Governance connector with session_id ${id}${title ? ' and session_name exactly as above' : ''}, cell (the ledger cell name, e.g. dai-dien-kien-truc-son, not the handle cto) and ticket_id, so Loa on this machine forwards that cell's work here.${rename}\n`,
   );
 }

@@ -159,7 +159,7 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     assert.equal(first.status, 0, first.stdout + first.stderr);
     assert.match(first.stdout, /Chuỗi vừa dán không phải khoá Loa/);
     assert.match(first.stdout, /Đã lưu khoá Loa trên máy này\./);
-    assert.match(first.stdout, /Loa đang nghe tỉnh NhiLe\. Đừng đóng cửa sổ này\./);
+    assert.match(first.stdout, /Loa đang nghe Nếp\. Đừng đóng cửa sổ này\./);
     assert.match(first.stdout, /Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn./);
     const dir = join(home, '.tinh-nlh/speaker');
     const dry = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN '));

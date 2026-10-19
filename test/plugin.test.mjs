@@ -51,6 +51,8 @@ describe('plugin tinh-nlh', () => {
   test('manifest plugin.json: tên trùng tên trong danh mục, có version, mô tả, tác giả', () => {
     const manifest = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
     assert.equal(manifest.name, 'tinh-nlh');
+    // Người dùng thấy tên Nếp (D-0055); tên kỹ thuật giữ nguyên để máy đã cài không phải cài lại (phiếu 36cdb8bc).
+    assert.equal(manifest.displayName, 'Nếp');
     assert.ok(manifest.version);
     assert.ok(manifest.description);
     assert.ok(manifest.author?.name);
@@ -90,15 +92,18 @@ describe('plugin tinh-nlh', () => {
     }
   });
 
-  test('skill tinh-nlh và sáu lệnh tiếng Anh (work, assign, sign, resume, handoff, no-save) có mô tả kèm câu tiếng Việt người dùng hay nói; không còn tên lệnh cũ', () => {
+  test('skill tinh-nlh và sáu lệnh tên tiếng Anh (work, assign, sign, resume, handoff, no-save) có mô tả tiếng Việt, tên Nếp, kèm câu người dùng hay nói; không còn tên lệnh cũ', () => {
     const skill = frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md'));
     assert.equal(skill.name, 'tinh-nlh');
     assert.ok(skill.description);
     const files = readdirSync(join(pluginDir, 'commands'));
     for (const old of ['viec', 'giao', 'ky', 'lamtiep', 'bangiao', 'khongluu']) assert.ok(!files.includes(`${old}.md`), old);
     for (const name of ['work', 'assign', 'sign', 'resume', 'handoff', 'no-save']) {
-      // Mô tả tiếng Anh, kèm câu người dùng nói để Claude nhận ra (phiếu 98bd8b93, dòng eb46f01f).
-      assert.match(frontMatter(join(pluginDir, `commands/${name}.md`)).description, /Use when the user says "[^"]*[^\u0000-\u007f][^"]*"/, name);
+      // Người dùng thấy mô tả trong danh sách lệnh: tiếng Việt, tên Nếp, kèm câu người dùng nói để Claude nhận ra (phiếu 36cdb8bc).
+      const { description } = frontMatter(join(pluginDir, `commands/${name}.md`));
+      assert.match(description, /Nếp/, name);
+      assert.match(description, /Dùng khi người dùng nói "[^"]*[^\u0000-\u007f][^"]*"/, name);
+      assert.doesNotMatch(description, /tỉnh NhiLe|Use when/, name);
     }
   });
 

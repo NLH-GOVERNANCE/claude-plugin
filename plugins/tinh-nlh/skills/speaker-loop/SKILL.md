@@ -19,7 +19,7 @@ Messages arrive as `<channel source="...speaker" action="…" kind="…" cell="�
    - `SendMessage` refuses (name not found, two sessions share the name): `forwarded` with `ok` false, then one line for the user: "Chưa báo được ô <cell> tới phiên "<to>"; ô vẫn tự thấy việc trong hộp việc."
 2. `action` `resumed`, `opened` or `failed`: the server already acted and wrote the ledger row. Print the sentence as one line. Nothing else.
 3. `kind` `you`: work waiting for the user themself (answer, sign). Print the sentence. Never forward, never act.
-4. `kind` `system`: the channel's own notice (no key, key rejected, another Loa running). Tell the user that sentence. For a missing or rejected key give exactly one path, nothing else: tạo khoá ở web tỉnh NhiLe (**Kết nối**, thẻ **Khoá cho Loa trên máy**, **Tạo khoá mới**), đóng cửa sổ Loa, bấm đúp biểu tượng **Loa tỉnh NhiLe**, dán khoá vào ô nhập ẩn chữ của cửa sổ. Never say to paste a key into chat or plugin settings.
+4. `kind` `system`: the channel's own notice (no key, key rejected, another Loa running). Tell the user that sentence. For a missing or rejected key give exactly one path, nothing else: tạo khoá ở web Nếp (**Kết nối**, thẻ **Khoá cho Loa trên máy**, **Tạo khoá mới**), đóng cửa sổ Loa, bấm đúp biểu tượng **Loa tỉnh NhiLe**, dán khoá vào ô nhập ẩn chữ của cửa sổ. Never say to paste a key into chat or plugin settings.
 
 ## Every 10 minutes (`/loop 10m /tinh-nlh:speaker-loop`)
 
@@ -27,7 +27,7 @@ First turn: print one line "Loa đang nghe; việc tồn để các ô tự đ�
 
 Later turns: call the speaker tool `pending`. Empty list: stop without printing. Each item (`entry_id`, `to`, `text`): deliver as in step 1. This also covers fallback mode, when the channel did not load: the server still reads the hub, resumes and opens sessions; only sends wait for this loop.
 
-The speaker tools are missing (server not loaded): print one line "Loa chưa nối được với tỉnh NhiLe; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại." and stop.
+The speaker tools are missing (server not loaded): print one line "Loa chưa nối được với Nếp; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại." and stop.
 
 ## Guardrails
 
