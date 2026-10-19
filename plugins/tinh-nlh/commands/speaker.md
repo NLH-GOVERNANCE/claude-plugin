@@ -1,5 +1,5 @@
 ---
-description: Bật Loa trên máy này: đặt biểu tượng "Loa tỉnh NhiLe" lên màn hình chính, mỗi máy một lần. Dùng khi người dùng nói "bật Loa", "cài Loa", "mở Loa trên máy"
+description: Bật Loa trên máy này, đặt biểu tượng "Loa tỉnh NhiLe" lên màn hình chính, mỗi máy một lần. Dùng khi người dùng nói "bật Loa", "cài Loa", "mở Loa trên máy"
 ---
 
 Turn on Loa (the speaker that tells the right session on this machine about new work).

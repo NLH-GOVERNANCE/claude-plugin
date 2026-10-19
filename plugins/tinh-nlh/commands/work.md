@@ -1,5 +1,5 @@
 ---
-description: Việc của tôi trong Nếp: việc đang chờ tôi và việc tôi đã giao tới đâu. Dùng khi người dùng nói "việc của tôi", "xem việc", "hôm nay có gì"
+description: Việc của tôi trong Nếp, gồm việc đang chờ tôi và việc tôi đã giao tới đâu. Dùng khi người dùng nói "việc của tôi", "xem việc", "hôm nay có gì"
 ---
 
 Use the NhiLe Governance connector.

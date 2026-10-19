@@ -115,6 +115,19 @@ describe('plugin tinh-nlh', () => {
     });
   const commandNames = () => readdirSync(join(pluginDir, 'commands')).map((file) => file.replace(/\.md$/, ''));
 
+  // YAML không nhận ": " trong giá trị không đặt trong ngoặc: Claude bỏ cả frontmatter, lệnh mất mô tả (lỗi từ #31).
+  test('frontmatter của lệnh và skill: giá trị không ngoặc không có ": "', () => {
+    const files = [
+      ...readdirSync(join(pluginDir, 'commands')).map((file) => join(pluginDir, 'commands', file)),
+      ...readdirSync(join(pluginDir, 'skills')).map((dir) => join(pluginDir, 'skills', dir, 'SKILL.md')),
+    ];
+    for (const path of files) {
+      for (const [key, value] of Object.entries(frontMatter(path))) {
+        if (!/^["']/.test(value)) assert.doesNotMatch(value, /: /, `${relative(root, path)}: ${key}`);
+      }
+    }
+  });
+
   test('không có skill và lệnh nào trùng tên', () => {
     const commands = commandNames();
     for (const name of skillNames()) assert.ok(!commands.includes(name), `skill và lệnh cùng tên ${name}`);
