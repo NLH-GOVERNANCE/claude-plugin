@@ -1,5 +1,5 @@
 ---
-description: Turn on Loa on this machine - puts the "Loa tỉnh NhiLe" icon on the desktop, once per machine. Use when the user says "bật Loa", "cài Loa", "mở Loa trên máy"
+description: Bật Loa trên máy này: đặt biểu tượng "Loa tỉnh NhiLe" lên màn hình chính, mỗi máy một lần. Dùng khi người dùng nói "bật Loa", "cài Loa", "mở Loa trên máy"
 ---
 
 Turn on Loa (the speaker that tells the right session on this machine about new work).
@@ -10,7 +10,7 @@ Only works in Claude Code on a computer (Claude app, Code tab; or a Claude Code 
    - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/speaker/setup.ps1"`
    - macOS: `/bin/bash "${CLAUDE_PLUGIN_ROOT}/speaker/setup.sh"`
 2. Repeat the line it printed, then give the two remaining steps in plain Vietnamese, no commands, no codes:
-   - Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới**, chép khoá.
+   - Ở web Nếp, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới**, chép khoá.
    - Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính, dán khoá khi cửa sổ hỏi (chữ không hiện ra), bấm Enter. Lần đầu cửa sổ tự cài phần còn thiếu và mở trình duyệt để đăng nhập Claude. Đừng đóng cửa sổ Loa.
 3. If it printed that Loa will open at login, add one sentence: từ lần sau Loa tự mở khi bạn đăng nhập máy, chỉ cần chọn dòng "I am using this for local development" khi cửa sổ hỏi.
 4. If it printed that another shortcut exists, say: máy này đã có Loa, bấm đúp lối tắt đó như mọi lần.

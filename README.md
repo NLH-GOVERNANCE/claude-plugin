@@ -1,6 +1,6 @@
 # claude-plugin
 
-Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo công khai, chỉ chứa plugin: ai cũng cài được, không cần tài khoản GitHub; code của hệ nằm ở repo riêng.
+Plugin Nếp (trước gọi là tỉnh NhiLe, hệ NhiLe Governance) cho Claude. Repo công khai, chỉ chứa plugin: ai cũng cài được, không cần tài khoản GitHub; code của hệ nằm ở repo riêng.
 
 - `.claude-plugin/marketplace.json`: danh mục, liệt kê plugin `tinh-nlh`.
 - `plugins/tinh-nlh/`: plugin. Nội dung xem [README của plugin](plugins/tinh-nlh/README.md).
@@ -9,7 +9,7 @@ Plugin của tỉnh NhiLe (NhiLe Governance) cho Claude. Repo công khai, chỉ 
 ## Cài cho mỗi người (tài khoản Claude cá nhân)
 
 1. Trong Claude (claude.ai hoặc ứng dụng Claude), vào [Customize > Plugins](https://claude.ai/customize/plugins), bấm **Add**, rồi **Add marketplace**, gõ `NLH-GOVERNANCE/claude-plugin`.
-2. Cài plugin **Tỉnh NhiLe** (`tinh-nlh`).
+2. Cài plugin **Nếp** (`tinh-nlh`).
 3. Mở tab **Connectors** của plugin, bấm **Add** rồi **Connect**, bấm **Đồng ý và đăng nhập** bằng email công ty. Chỉ đăng nhập một lần.
 
 Xong thì xem việc của mình:
@@ -42,9 +42,9 @@ Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối
 
 Loa ngồi trên máy của bạn: có việc mới cho một ô, Loa báo một câu tới đúng phiên Claude đang ngồi ô đó trong khoảng 15 giây; phiên đã tắt thì Loa mở lại. Mỗi máy làm một lần, ba bước:
 
-1. Cài app Claude cho máy tính ở [claude.ai/download](https://claude.ai/download) và plugin Tỉnh NhiLe như mục trên; máy đã có thì bỏ qua.
+1. Cài app Claude cho máy tính ở [claude.ai/download](https://claude.ai/download) và plugin Nếp như mục trên; máy đã có thì bỏ qua.
 2. Trong app Claude, mở mục **Code**, gõ **bật Loa**, bấm cho phép khi được hỏi: biểu tượng **Loa tỉnh NhiLe** hiện trên màn hình chính.
-3. Ở web tỉnh NhiLe, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới** và chép khoá, rồi bấm đúp biểu tượng Loa, dán khoá khi cửa sổ hỏi và bấm Enter.
+3. Ở web Nếp, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới** và chép khoá, rồi bấm đúp biểu tượng Loa, dán khoá khi cửa sổ hỏi và bấm Enter.
 
 Khi dán, chữ không hiện ra: đó là bình thường. Lần đầu, cửa sổ Loa tự cài phần còn thiếu trong một hai phút, rồi mở trình duyệt để bạn đăng nhập Claude. Mỗi lần mở, cửa sổ hỏi một câu tiếng Anh: chọn dòng **I am using this for local development**, bấm Enter. Để cửa sổ mở là Loa làm việc, máy không ngủ khi Loa mở; đóng cửa sổ là tắt. Từ lần sau Loa tự mở khi bạn đăng nhập máy, chỉ cần chọn dòng tiếng Anh như trên. Khoá tự gia hạn khi Loa chạy, chỉ hết hạn sau 30 ngày không dùng. Không dán khoá vào chat.
 
@@ -77,5 +77,7 @@ node --test test/*.test.mjs
 claude plugin validate .
 claude plugin validate ./plugins/tinh-nlh
 ```
+
+Tên người dùng thấy là Nếp (D-0055); tên kỹ thuật `tinh-nlh`, `nlh-governance` và tên Loa trên máy giữ nguyên để máy đã cài không phải cài lại.
 
 Đổi plugin thì tăng `version` trong `plugins/tinh-nlh/.claude-plugin/plugin.json`, để người đã cài nhận bản mới.

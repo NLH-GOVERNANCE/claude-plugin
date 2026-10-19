@@ -1,11 +1,11 @@
 ---
 name: tinh-nlh
-description: How to work in tỉnh NhiLe (NhiLe Governance, tỉnh NLH). Use at the first turn of every conversation, including web and phone, to load the user's context; when the user asks "tôi đang làm gì dở", "tới đâu rồi"; when the user mentions việc, phiếu, ô, hộp việc, giao việc, làm tiếp, ký, bảng chung, or says "tôi mới vào"; when the user says dừng, chuyển việc, or the session is about to end; and when the user gives feedback ("góp ý", "vướng", "khó dùng") or complains about the system.
+description: How to work in Nếp (old name tỉnh NhiLe; also NhiLe Governance, tỉnh NLH). Use at the first turn of every conversation, including web and phone, to load the user's context; when the user asks "tôi đang làm gì dở", "tới đâu rồi"; when the user mentions việc, phiếu, ô, hộp việc, giao việc, làm tiếp, ký, bảng chung, or says "tôi mới vào"; when the user says dừng, chuyển việc, or the session is about to end; and when the user gives feedback ("góp ý", "vướng", "khó dùng") or complains about the system.
 ---
 
-# Working in tỉnh NhiLe
+# Working in Nếp
 
-The system is the centre. This plugin is a thin door: no rules, no cells, no keys. Everything is read from the NhiLe Governance connector after the user signs in: server instructions, `how_to_use`, `get_cell`. Where server instructions differ from this file, follow the server.
+The system is the centre. The system is called Nếp (D-0055); users may still say tỉnh NhiLe or tỉnh NLH, all mean the same. Call it Nếp when talking to the user. This plugin is a thin door: no rules, no cells, no keys. Everything is read from the NhiLe Governance connector after the user signs in: server instructions, `how_to_use`, `get_cell`. Where server instructions differ from this file, follow the server.
 
 Talk to the user in plain Vietnamese, short sentences. Everything below is instructions for you, not text to read out.
 
@@ -23,7 +23,7 @@ User asks "tôi đang làm gì dở", "tới đâu rồi": answer straight from 
 
 The context only holds data of class 1–2 per the sensitivity table Danh signed. When Claude is signed in with a personal account, never open or copy class 3–4 data into the conversation (finance, contracts, HR, group messages, personal brains, student, customer or child names).
 
-Connector not signed in: only the user opens Customize, Plugins, Tỉnh NhiLe, Connectors tab, presses Connect and signs in with the company email. Never ask for a password, token or key in chat.
+Connector not signed in: only the user opens Customize, Plugins, Nếp, Connectors tab, presses Connect and signs in with the company email. Never ask for a password, token or key in chat.
 
 ## A cell is a seat
 
@@ -37,7 +37,7 @@ When Loa sends a message into this session (one sentence naming a cell and a tic
 
 ## Chat saving
 
-In Claude Code and Cowork, the plugin hooks send each turn (user prompt, Claude's answer) to the company chat store; tool results are never sent. The store only keeps sessions that really use tỉnh NhiLe (called a tỉnh tool other than the opening `my_context`, or seated at a cell), long term, as company data. Phone numbers, emails, ID numbers, accounts and addresses are encrypted; turns with keys or tokens, or about money, contracts, HR, customers or children are not stored verbatim (Danh signed). Only the user reads them back. There is no delete button. Anyone who wants their personal data hidden asks Danh to record a soft-delete request; hiding is not live yet, so never promise it is hidden. When a piece of work is done, call `save_chat` with `role` `summary`: a few sentences on what was done, the result, what is left. In the web and phone app (no hooks) only that summary is saved. If the user types `/no-save`, the whole session stops saving.
+In Claude Code and Cowork, the plugin hooks send each turn (user prompt, Claude's answer) to the company chat store; tool results are never sent. The store only keeps sessions that really use Nếp (called a Nếp tool other than the opening `my_context`, or seated at a cell), long term, as company data. Phone numbers, emails, ID numbers, accounts and addresses are encrypted; turns with keys or tokens, or about money, contracts, HR, customers or children are not stored verbatim (Danh signed). Only the user reads them back. There is no delete button. Anyone who wants their personal data hidden asks Danh to record a soft-delete request; hiding is not live yet, so never promise it is hidden. When a piece of work is done, call `save_chat` with `role` `summary`: a few sentences on what was done, the result, what is left. In the web and phone app (no hooks) only that summary is saved. If the user types `/no-save`, the whole session stops saving.
 
 ## Newcomers
 

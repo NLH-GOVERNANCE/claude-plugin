@@ -1,5 +1,5 @@
 ---
-description: Resume a piece of work in tỉnh NhiLe, on any machine. Use when the user says "làm tiếp", "tiếp việc …", "đang dở gì"
+description: Làm tiếp một việc trong Nếp, ở máy nào cũng được. Dùng khi người dùng nói "làm tiếp", "tiếp việc …", "đang dở gì"
 argument-hint: "[việc nào]"
 ---
 

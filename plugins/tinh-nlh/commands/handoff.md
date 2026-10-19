@@ -1,5 +1,5 @@
 ---
-description: Write a handoff on the ticket being worked in tỉnh NhiLe, before stopping or switching machines. Use when the user says "bàn giao", "tôi dừng đây", "đổi máy"
+description: Ghi bàn giao lên phiếu đang làm trong Nếp, trước khi dừng hay đổi máy. Dùng khi người dùng nói "bàn giao", "tôi dừng đây", "đổi máy"
 ---
 
 Use the NhiLe Governance connector.

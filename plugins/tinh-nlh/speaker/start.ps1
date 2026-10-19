@@ -47,7 +47,7 @@ if ($best -and (-not $current -or $best.Version -ge $current)) {
   Set-Content -LiteralPath $versionFile -Value $best.Version.ToString() -Encoding ascii
 }
 $speaker = Join-Path $Dir 'speaker.mjs'
-if (-not (Test-Path -LiteralPath $speaker)) { Stop-Loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
+if (-not (Test-Path -LiteralPath $speaker)) { Stop-Loa 'Chưa thấy plugin Nếp trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
 
 # 2. Claude Code. The official installer (claude.ai/install.ps1) puts claude.exe in ~\.local\bin without touching PATH;
 # on machines with HOME set (Git users) ~ is HOME.
@@ -111,7 +111,7 @@ $legacy = @((Join-Path $env:USERPROFILE '.tinh-nlh\thap\tower-key.dpapi'), (Join
 if (-not (Test-Path -LiteralPath $keyFile) -and $legacy) { Copy-Item -LiteralPath $legacy -Destination $keyFile }
 if (-not (Test-Path -LiteralPath $keyFile)) {
   Write-Host ''
-  Write-Host 'Lấy khoá ở web tỉnh NhiLe: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
+  Write-Host 'Lấy khoá ở web Nếp: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
   Write-Host 'Chữ không hiện ra khi dán, đó là bình thường. Dán xong bấm Enter.'
   $saved = $false
   for ($try = 0; $try -lt 3 -and -not $saved; $try++) {
@@ -149,7 +149,7 @@ Set-Location -LiteralPath $Work
 $env:PATH = "$(Split-Path $claude -Parent);$(Split-Path $node -Parent);$env:PATH"
 $opened = Join-Path $Dir 'opened.txt'
 Write-Host ''
-Write-Host 'Loa đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này.'
+Write-Host 'Loa đang nghe Nếp. Đừng đóng cửa sổ này.'
 if (-not (Test-Path -LiteralPath $opened)) {
   Write-Host 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
 }
