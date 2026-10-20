@@ -66,7 +66,7 @@ describe('plugin nlh', () => {
     const { mcpServers } = readJson('plugins/tinh-nlh/.mcp.json');
     const servers = Object.values(mcpServers);
     assert.equal(servers.length, 1);
-    assert.deepEqual(servers[0], { type: 'http', url: 'https://governance.nlh.vn/mcp' });
+    assert.deepEqual(servers[0], { type: 'http', url: 'https://mcp.nlh.vn/mcp' });
   });
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
