@@ -1,5 +1,5 @@
 ---
-description: Work inbox in tỉnh NhiLe - what is waiting for me, and how the work I assigned is going. Use when the user says "việc của tôi", "xem việc", "hôm nay có gì"
+description: Việc của tôi trong Nếp, gồm việc đang chờ tôi và việc tôi đã giao tới đâu. Dùng khi người dùng nói "việc của tôi", "xem việc", "hôm nay có gì"
 ---
 
 Use the NhiLe Governance connector.

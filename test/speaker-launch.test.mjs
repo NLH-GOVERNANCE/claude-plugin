@@ -27,11 +27,11 @@ after(() => {
   for (const dir of temps) rmSync(dir, { recursive: true, force: true });
 });
 
-// Một thư mục người dùng giả có plugin tinh-nlh đã cài từ GitHub (cache/<chợ>/tinh-nlh/<bản>). name: tên người dùng,
+// Một thư mục người dùng giả có plugin nlh đã cài từ GitHub (cache/<chợ>/nlh/<bản>). name: tên người dùng,
 // có thể có dấu như trên máy thật.
 function fakeHome(name = 'user') {
   const home = join(temp('thap-home'), name);
-  const installed = join(home, '.claude/plugins/cache/nlh-governance/tinh-nlh', version);
+  const installed = join(home, '.claude/plugins/cache/nlh-governance/nlh', version);
   for (const path of ['.claude-plugin/plugin.json', 'speaker/speaker.mjs', 'speaker/start.ps1', 'speaker/start.sh']) {
     mkdirSync(dirname(join(installed, path)), { recursive: true });
     cpSync(join(plugin, path), join(installed, path));
@@ -40,10 +40,10 @@ function fakeHome(name = 'user') {
 }
 
 // Hai lối mở cùng mở Claude một cách: câu mở đầu trước, Sonnet, kênh tower qua --mcp-config, cờ dev chỉ cho server:tower.
-const CLAUDE_ARGS = ['/loop 10m /tinh-nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
+const CLAUDE_ARGS = ['/loop 10m /nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
 
 describe('lệnh "bật Loa" và các file của lối mở', () => {
-  test('lệnh /tinh-nlh:speaker chạy đúng file setup có trong plugin, theo hệ điều hành; không hỏi khoá trong chat', () => {
+  test('lệnh /nlh:speaker chạy đúng file setup có trong plugin, theo hệ điều hành; không hỏi khoá trong chat', () => {
     const command = read('commands/speaker.md');
     assert.match(command, /"bật Loa"/);
     assert.match(command, /biểu tượng \*\*Loa tỉnh NhiLe\*\*/);
@@ -159,7 +159,7 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     assert.equal(first.status, 0, first.stdout + first.stderr);
     assert.match(first.stdout, /Chuỗi vừa dán không phải khoá Loa/);
     assert.match(first.stdout, /Đã lưu khoá Loa trên máy này\./);
-    assert.match(first.stdout, /Loa đang nghe tỉnh NhiLe\. Đừng đóng cửa sổ này\./);
+    assert.match(first.stdout, /Loa đang nghe Nếp\. Đừng đóng cửa sổ này\./);
     assert.match(first.stdout, /Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn./);
     const dir = join(home, '.tinh-nlh/speaker');
     const dry = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN '));

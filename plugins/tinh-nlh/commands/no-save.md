@@ -1,5 +1,5 @@
 ---
-description: Stop saving this conversation to the tỉnh NhiLe chat store, from this turn on. Use when the user says "đừng lưu", "thôi lưu", "không lưu phiên này"
+description: Thôi lưu cuộc trò chuyện này vào kho chat của Nếp, từ lượt này. Dùng khi người dùng nói "đừng lưu", "thôi lưu", "không lưu phiên này"
 ---
 
 Use the NhiLe Governance connector.

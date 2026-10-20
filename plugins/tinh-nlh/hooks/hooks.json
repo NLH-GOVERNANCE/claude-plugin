@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"Plugin tinh-nlh (tỉnh NhiLe) is on. First turn of the session, before anything else: call my_context of the NhiLe Governance connector once (who the user is, their cells, open projects, work waiting, work assigned), then tell the user in plain Vietnamese what is waiting for them. If the user asks what they left unfinished, answer from that result without more lookups.\""
+            "command": "echo \"Plugin Nếp (nlh) is on. Call the system Nếp when talking to the user; the old name tỉnh NhiLe means the same. First turn of the session, before anything else: call my_context of the NhiLe Governance connector once (who the user is, their cells, open projects, work waiting, work assigned), then tell the user in plain Vietnamese what is waiting for them. If the user asks what they left unfinished, answer from that result without more lookups.\""
           }
         ]
       },
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:tinh-nlh:nhile-governance",
+            "server": "plugin:nlh:nhile-governance",
             "tool": "my_context",
             "timeout": 30
           }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:tinh-nlh:nhile-governance",
+            "server": "plugin:nlh:nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -48,7 +48,7 @@
           },
           {
             "type": "mcp_tool",
-            "server": "plugin:tinh-nlh:nhile-governance",
+            "server": "plugin:nlh:nhile-governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -65,7 +65,7 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:tinh-nlh:nhile-governance",
+            "server": "plugin:nlh:nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:tinh-nlh:nhile-governance",
+            "server": "plugin:nlh:nhile-governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -94,11 +94,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^mcp__plugin_tinh-nlh_nhile-governance__(?!my_context$)",
+        "matcher": "^mcp__plugin_nlh_nhile-governance__(?!my_context$)",
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:tinh-nlh:nhile-governance",
+            "server": "plugin:nlh:nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",

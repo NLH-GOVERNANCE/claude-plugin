@@ -1,4 +1,4 @@
-// Phép thử plugin tinh-nlh (phiếu "1/4 Plugin tinh-nlh"): dạng JSON của danh mục và manifest, và các lan can
+// Phép thử plugin nlh, tên cũ tinh-nlh (phiếu "1/4 Plugin tinh-nlh"): dạng JSON của danh mục và manifest, và các lan can
 // của gói: không secret, không bin/, hook không gọi mạng, connector đúng địa chỉ bản chính. Chỉ đọc file.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -34,23 +34,28 @@ function frontMatter(path) {
   );
 }
 
-describe('plugin tinh-nlh', () => {
-  test('danh mục .claude-plugin/marketplace.json: tên, chủ, một plugin tinh-nlh đường dẫn tương đối từ gốc repo', () => {
+describe('plugin nlh', () => {
+  test('danh mục .claude-plugin/marketplace.json: tên, chủ, một plugin nlh đường dẫn tương đối từ gốc repo', () => {
     const marketplace = readJson('.claude-plugin/marketplace.json');
     assert.match(marketplace.name, KEBAB);
     assert.equal(typeof marketplace.owner?.name, 'string');
     assert.equal(marketplace.plugins.length, 1);
     const [entry] = marketplace.plugins;
-    assert.equal(entry.name, 'tinh-nlh');
+    assert.equal(entry.name, 'nlh');
     // Đồng bộ của tổ chức chỉ nhận đường dẫn viết đủ, bắt đầu bằng ./, không có ..
     assert.equal(entry.source, './plugins/tinh-nlh');
     assert.ok(existsSync(join(root, entry.source)));
     assert.ok(entry.description);
+    // Tên kỹ thuật nlh, tên hiển thị Nếp (anh Sơn chốt 19/10). Ai đang cài tinh-nlh tự chuyển sang nlh, không mất plugin.
+    assert.equal(entry.displayName, 'Nếp');
+    assert.deepEqual(marketplace.renames, { 'tinh-nlh': 'nlh' });
   });
 
   test('manifest plugin.json: tên trùng tên trong danh mục, có version, mô tả, tác giả', () => {
     const manifest = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
-    assert.equal(manifest.name, 'tinh-nlh');
+    assert.equal(manifest.name, 'nlh');
+    // Người dùng thấy tên Nếp (D-0055), không có chữ "plugin" trong tên.
+    assert.equal(manifest.displayName, 'Nếp');
     assert.ok(manifest.version);
     assert.ok(manifest.description);
     assert.ok(manifest.author?.name);
@@ -61,7 +66,7 @@ describe('plugin tinh-nlh', () => {
     const { mcpServers } = readJson('plugins/tinh-nlh/.mcp.json');
     const servers = Object.values(mcpServers);
     assert.equal(servers.length, 1);
-    assert.deepEqual(servers[0], { type: 'http', url: 'https://governance.nlh.vn/mcp' });
+    assert.deepEqual(servers[0], { type: 'http', url: 'https://mcp.nlh.vn/mcp' });
   });
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
@@ -77,28 +82,31 @@ describe('plugin tinh-nlh', () => {
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
     // Sau /clear hay gọn ngữ cảnh: gọi thẳng công cụ, đúng tên máy chủ có phạm vi plugin, không truyền gì thêm.
     const [server] = Object.keys(readJson('plugins/tinh-nlh/.mcp.json').mcpServers);
-    assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:tinh-nlh:${server}`, tool: 'my_context', timeout: 30 }]);
+    assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:nlh:${server}`, tool: 'my_context', timeout: 30 }]);
     // Phiên tự báo (phiếu 6d4cb2ad): gọi report_session của connector, không gửi nội dung chat.
     for (const [event, status] of [['Stop', 'idle'], ['SessionEnd', 'stopped']]) {
       const hook = hooks[event].flatMap((group) => group.hooks).find((item) => item.tool === 'report_session');
       assert.deepEqual(hook, {
         type: 'mcp_tool',
-        server: 'plugin:tinh-nlh:nhile-governance',
+        server: 'plugin:nlh:nhile-governance',
         tool: 'report_session',
         input: { session_id: '${session_id}', status },
       });
     }
   });
 
-  test('skill tinh-nlh và sáu lệnh tiếng Anh (work, assign, sign, resume, handoff, no-save) có mô tả kèm câu tiếng Việt người dùng hay nói; không còn tên lệnh cũ', () => {
-    const skill = frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md'));
-    assert.equal(skill.name, 'tinh-nlh');
+  test('skill nep và sáu lệnh tên tiếng Anh (work, assign, sign, resume, handoff, no-save) có mô tả tiếng Việt, tên Nếp, kèm câu người dùng hay nói; không còn tên lệnh cũ', () => {
+    const skill = frontMatter(join(pluginDir, 'skills/nep/SKILL.md'));
+    assert.equal(skill.name, 'nep');
     assert.ok(skill.description);
     const files = readdirSync(join(pluginDir, 'commands'));
     for (const old of ['viec', 'giao', 'ky', 'lamtiep', 'bangiao', 'khongluu']) assert.ok(!files.includes(`${old}.md`), old);
     for (const name of ['work', 'assign', 'sign', 'resume', 'handoff', 'no-save']) {
-      // Mô tả tiếng Anh, kèm câu người dùng nói để Claude nhận ra (phiếu 98bd8b93, dòng eb46f01f).
-      assert.match(frontMatter(join(pluginDir, `commands/${name}.md`)).description, /Use when the user says "[^"]*[^\u0000-\u007f][^"]*"/, name);
+      // Người dùng thấy mô tả trong danh sách lệnh: tiếng Việt, tên Nếp, kèm câu người dùng nói để Claude nhận ra (phiếu 36cdb8bc).
+      const { description } = frontMatter(join(pluginDir, `commands/${name}.md`));
+      assert.match(description, /Nếp/, name);
+      assert.match(description, /Dùng khi người dùng nói "[^"]*[^\u0000-\u007f][^"]*"/, name);
+      assert.doesNotMatch(description, /tỉnh NhiLe|Use when/, name);
     }
   });
 
@@ -110,6 +118,19 @@ describe('plugin tinh-nlh', () => {
     });
   const commandNames = () => readdirSync(join(pluginDir, 'commands')).map((file) => file.replace(/\.md$/, ''));
 
+  // YAML không nhận ": " trong giá trị không đặt trong ngoặc: Claude bỏ cả frontmatter, lệnh mất mô tả (lỗi từ #31).
+  test('frontmatter của lệnh và skill: giá trị không ngoặc không có ": "', () => {
+    const files = [
+      ...readdirSync(join(pluginDir, 'commands')).map((file) => join(pluginDir, 'commands', file)),
+      ...readdirSync(join(pluginDir, 'skills')).map((dir) => join(pluginDir, 'skills', dir, 'SKILL.md')),
+    ];
+    for (const path of files) {
+      for (const [key, value] of Object.entries(frontMatter(path))) {
+        if (!/^["']/.test(value)) assert.doesNotMatch(value, /: /, `${relative(root, path)}: ${key}`);
+      }
+    }
+  });
+
   test('không có skill và lệnh nào trùng tên', () => {
     const commands = commandNames();
     for (const name of skillNames()) assert.ok(!commands.includes(name), `skill và lệnh cùng tên ${name}`);
@@ -117,8 +138,8 @@ describe('plugin tinh-nlh', () => {
 
   test('lời mở của start.ps1 và start.sh trỏ tới một skill có thật, không phải lệnh', () => {
     for (const file of ['speaker/start.ps1', 'speaker/start.sh']) {
-      const target = readFileSync(join(pluginDir, file), 'utf8').match(/'\/loop 10m \/tinh-nlh:([a-z0-9-]+)'/)?.[1];
-      assert.ok(target, `${file}: không thấy lời mở /loop 10m /tinh-nlh:…`);
+      const target = readFileSync(join(pluginDir, file), 'utf8').match(/'\/loop 10m \/nlh:([a-z0-9-]+)'/)?.[1];
+      assert.ok(target, `${file}: không thấy lời mở /loop 10m /nlh:…`);
       assert.ok(skillNames().includes(target), `${file}: không có skill ${target}`);
       assert.ok(!commandNames().includes(target), `${file}: ${target} là lệnh`);
     }
@@ -188,7 +209,7 @@ describe('plugin tinh-nlh', () => {
   test('lưu chat (phiếu abdcdd2f): lượt người lúc UserPromptSubmit, lượt Claude lúc Stop, qua save_chat của connector; không gửi kết quả công cụ', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const save = (event) => hooks[event].flatMap((group) => group.hooks).filter((hook) => hook.tool === 'save_chat');
-    const base = { type: 'mcp_tool', server: 'plugin:tinh-nlh:nhile-governance', tool: 'save_chat' };
+    const base = { type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'save_chat' };
     // Hạn chờ 5 giây: connector chậm thì Claude vẫn nhận lời ngay, lượt đó chỉ không được lưu.
     assert.deepEqual(save('UserPromptSubmit'), [{ ...base, input: { session_id: '${session_id}', role: 'user', text: '${prompt}' }, timeout: 5 }]);
     assert.deepEqual(save('Stop'), [{ ...base, input: { session_id: '${session_id}', role: 'assistant', text: '${last_assistant_message}' }, timeout: 5 }]);
@@ -196,27 +217,27 @@ describe('plugin tinh-nlh', () => {
     // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
     // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
     const matcher = new RegExp(hooks.PostToolUse[0].matcher);
-    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__my_work'), true);
-    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__save_chat'), true);
-    assert.equal(matcher.test('mcp__plugin_tinh-nlh_nhile-governance__my_context'), false);
+    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_work'), true);
+    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__save_chat'), true);
+    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_context'), false);
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse, [
       {
-        matcher: '^mcp__plugin_tinh-nlh_nhile-governance__(?!my_context$)',
-        hooks: [{ type: 'mcp_tool', server: 'plugin:tinh-nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } }],
+        matcher: '^mcp__plugin_nlh_nhile-governance__(?!my_context$)',
+        hooks: [{ type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } }],
       },
     ]);
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
     const command = readFileSync(join(pluginDir, 'commands/no-save.md'), 'utf8');
     assert.match(command, /`save_chat`.*`role` `opt_out`/);
-    const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
     assert.match(skill, /## Chat saving/);
     assert.match(skill, /`role` `summary`/);
   });
 
   test('skill dặn luôn bàn giao khi dừng, và mở phiếu góp ý cho Tech Lead', () => {
-    const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
     assert.match(skill, /## Handoff \(always\)/);
     assert.match(skill, /kind `handoff`/);
     assert.match(skill, /## Feedback/);
@@ -224,8 +245,8 @@ describe('plugin tinh-nlh', () => {
   });
 
   test('skill: câu đầu mỗi cuộc trò chuyện gọi my_context, trả lời "tôi đang làm gì dở" không tra thêm, giữ bảng mức nhạy', () => {
-    const skill = readFileSync(join(pluginDir, 'skills/tinh-nlh/SKILL.md'), 'utf8');
-    assert.match(frontMatter(join(pluginDir, 'skills/tinh-nlh/SKILL.md')).description, /first turn of every conversation, including web and phone/);
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+    assert.match(frontMatter(join(pluginDir, 'skills/nep/SKILL.md')).description, /first turn of every conversation, including web and phone/);
     assert.match(skill, /1\. Call `my_context` once/);
     assert.match(skill, /If the connector has no `my_context` \(old hub\), call `my_work` instead/);
     assert.match(skill, /"tôi đang làm gì dở".+no follow-up questions, no extra lookups/);

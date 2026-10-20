@@ -29,11 +29,11 @@ New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 # 1. Newest Loa from the installed plugin (the plugin updates itself). Copy over the one in $Dir, used from this launch.
 $plugins = Join-Path $env:USERPROFILE '.claude\plugins'
 $best = $null
-foreach ($pattern in @('cache\*\tinh-nlh\*\.claude-plugin\plugin.json', 'synced\*\*\.claude-plugin\plugin.json')) {
+foreach ($pattern in @('cache\*\nlh\*\.claude-plugin\plugin.json', 'synced\*\*\.claude-plugin\plugin.json')) {
   foreach ($file in @(Get-ChildItem -Path (Join-Path $plugins $pattern) -File -ErrorAction SilentlyContinue)) {
     try { $manifest = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
     $root = Split-Path $file.DirectoryName -Parent
-    if ($manifest.name -ne 'tinh-nlh' -or -not (Test-Path -LiteralPath (Join-Path $root 'speaker\start.ps1'))) { continue }
+    if ($manifest.name -ne 'nlh' -or -not (Test-Path -LiteralPath (Join-Path $root 'speaker\start.ps1'))) { continue }
     try { $version = [version]$manifest.version } catch { continue }
     if (-not $best -or $version -gt $best.Version) { $best = @{ Version = $version; Root = $root } }
   }
@@ -47,7 +47,7 @@ if ($best -and (-not $current -or $best.Version -ge $current)) {
   Set-Content -LiteralPath $versionFile -Value $best.Version.ToString() -Encoding ascii
 }
 $speaker = Join-Path $Dir 'speaker.mjs'
-if (-not (Test-Path -LiteralPath $speaker)) { Stop-Loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
+if (-not (Test-Path -LiteralPath $speaker)) { Stop-Loa 'Chưa thấy plugin Nếp trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
 
 # 2. Claude Code. The official installer (claude.ai/install.ps1) puts claude.exe in ~\.local\bin without touching PATH;
 # on machines with HOME set (Git users) ~ is HOME.
@@ -111,7 +111,7 @@ $legacy = @((Join-Path $env:USERPROFILE '.tinh-nlh\thap\tower-key.dpapi'), (Join
 if (-not (Test-Path -LiteralPath $keyFile) -and $legacy) { Copy-Item -LiteralPath $legacy -Destination $keyFile }
 if (-not (Test-Path -LiteralPath $keyFile)) {
   Write-Host ''
-  Write-Host 'Lấy khoá ở web tỉnh NhiLe: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
+  Write-Host 'Lấy khoá ở web Nếp: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
   Write-Host 'Chữ không hiện ra khi dán, đó là bình thường. Dán xong bấm Enter.'
   $saved = $false
   for ($try = 0; $try -lt 3 -and -not $saved; $try++) {
@@ -149,13 +149,13 @@ Set-Location -LiteralPath $Work
 $env:PATH = "$(Split-Path $claude -Parent);$(Split-Path $node -Parent);$env:PATH"
 $opened = Join-Path $Dir 'opened.txt'
 Write-Host ''
-Write-Host 'Loa đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này.'
+Write-Host 'Loa đang nghe Nếp. Đừng đóng cửa sổ này.'
 if (-not (Test-Path -LiteralPath $opened)) {
   Write-Host 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/loop 10m /tinh-nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
+$arguments = @('/loop 10m /nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
 # Fallback without the dev channel flag: the server still reads the hub, resumes and opens sessions; only sends wait
 # for the 10-minute loop.
 $fallback = $arguments[0..($arguments.Count - 3)]

@@ -1,17 +1,31 @@
-# Plugin tinh-nlh
+# Nếp
 
-The door to NhiLe Governance (tỉnh NhiLe) inside Claude. Install once. In the Claude app and on the phone, type `/work` to see your work; in Claude Code and Cowork, a new session tells you by itself. How to install: README at the root of `NLH-GOVERNANCE/claude-plugin`.
+Nếp là nơi cả công ty NhiLe giao việc, theo dõi việc và ký duyệt. Cài một lần, đăng nhập bằng email công ty.
 
-Contents:
+- Xem việc: hỏi Claude "việc của tôi hôm nay?" hoặc gõ `/work`. Ở Claude Code và Cowork, mở phiên mới là Claude tự kể.
+- Giao việc: "Giao cho chị Thùy: …, xong khi …" hoặc `/assign`.
+- Ký: "tôi ký" hoặc `/sign`.
 
-- the NhiLe Governance connector (`https://governance.nlh.vn/mcp`); everyone signs in once with the company email;
-- skill `tinh-nlh`: the first turn of every conversation calls `my_context` (who you are, your cells, open projects, work waiting, work assigned) and summarises it in plain Vietnamese;
-- seven commands: `/tinh-nlh:work` (inbox), `/tinh-nlh:assign` (assign work to a cell), `/tinh-nlh:resume` (resume a piece of work), `/tinh-nlh:handoff` (write a handoff), `/tinh-nlh:sign` (tickets waiting for your signature), `/tinh-nlh:no-save` (stop saving this session to the chat store), `/tinh-nlh:speaker` (turn on Loa on this machine: the "Loa tỉnh NhiLe" desktop icon). In the Claude app and on the phone type `/work`, `/assign`, `/sign` (or say "xem việc của tôi", "giao việc", "tôi ký");
+Cài trong Claude Code (bản 2.1.275 trở lên), một dòng:
+
+```
+/plugin install nlh --marketplace NLH-GOVERNANCE/claude-plugin
+```
+
+Cài trên claude.ai và bật Loa: xem README ở gốc repo `NLH-GOVERNANCE/claude-plugin`.
+
+## For maintainers
+
+Technical name `nlh` (old name `tinh-nlh`, migrated by `renames` in the marketplace), display name Nếp. Contents:
+
+- the NhiLe Governance connector (`https://mcp.nlh.vn/mcp`); everyone signs in once with the company email;
+- skill `nep`: the first turn of every conversation calls `my_context` (who you are, your cells, open projects, work waiting, work assigned) and summarises it in plain Vietnamese;
+- seven commands: `/nlh:work` (inbox), `/nlh:assign` (assign work to a cell), `/nlh:resume` (resume a piece of work), `/nlh:handoff` (write a handoff), `/nlh:sign` (tickets waiting for your signature), `/nlh:no-save` (stop saving this session to the chat store), `/nlh:speaker` (turn on Loa on this machine: the "Loa tỉnh NhiLe" desktop icon). In the Claude app and on the phone type `/work`, `/assign`, `/sign` (or say "xem việc của tôi", "giao việc", "tôi ký");
 - Loa, the speaker on the machine (channel `speaker` and its launchers in `speaker/`, Windows and macOS; Claude Code only, only when opened from the Loa icon): reads the user's new work from the hub every 15 seconds with a private key and tells the session seated at each cell in one sentence, by the session id that session reported; resumes a stopped session, or opens a new one; writes one ledger row per delivery, no content. Skill `speaker-loop` instructs the Loa session (named apart from the `speaker` command, which wins a shared name). The hub calls Loa tower: tower = speaker. Setup: root README, "Bật Loa trên máy";
-- hooks (Claude Code and Cowork only): at session start, print one line telling Claude to call `my_context` first, with this session's id and name; after `/clear` or compaction, call `my_context` through the signed-in connector and load the result; at the end of each turn and when the session closes, call `report_session` with the session id and status, so Loa knows which session sits at which cell. Hooks hold no token and send no chat content. Chat saving: when the user sends a prompt and when Claude finishes answering, call `save_chat` with that turn (never tool results); the store sits outside the ledger, only keeps sessions that really use tỉnh NhiLe (a tỉnh tool other than the opening `my_context`, reported by the PostToolUse hook; or seated at a cell), long term; phone numbers, emails, ID numbers and addresses are encrypted; turns with keys or about money, contracts, HR, customers or children are not stored verbatim; no delete button, soft delete only.
+- hooks (Claude Code and Cowork only): at session start, print one line telling Claude to call `my_context` first, with this session's id and name; after `/clear` or compaction, call `my_context` through the signed-in connector and load the result; at the end of each turn and when the session closes, call `report_session` with the session id and status, so Loa knows which session sits at which cell. Hooks hold no token and send no chat content. Chat saving: when the user sends a prompt and when Claude finishes answering, call `save_chat` with that turn (never tool results); the store sits outside the ledger, only keeps sessions that really use Nếp (a Nếp tool other than the opening `my_context`, reported by the PostToolUse hook; or seated at a cell), long term; phone numbers, emails, ID numbers and addresses are encrypted; turns with keys or about money, contracts, HR, customers or children are not stored verbatim; no delete button, soft delete only.
 
 The plugin holds no secret and copies no rules or cells: everything is read from the system after sign-in. It creates no scheduled tasks; for a cell to work while Claude is closed, turn on a scheduled task or a backup machine.
 
 ## Data
 
-The plugin stores nothing except for Loa: its launcher copy, read mark, seen ids and pending sends (`tower-state.json`) live in `~/.tinh-nlh/speaker` on the machine; the key is encrypted with DPAPI (Windows) or kept in the Keychain (macOS), readable only by that account on that machine. Everything else goes through the connector to `governance.nlh.vn`, under the user's own company account.
+The plugin stores nothing except for Loa: its launcher copy, read mark, seen ids and pending sends (`tower-state.json`) live in `~/.tinh-nlh/speaker` on the machine; the key is encrypted with DPAPI (Windows) or kept in the Keychain (macOS), readable only by that account on that machine. Loa reads from `api.nlh.vn`; everything else goes through the connector at `mcp.nlh.vn`, under the user's own company account.

@@ -33,9 +33,9 @@ mkdir -p "$DIR"
 # 1. Newest Loa from the installed plugin (the plugin updates itself). Copy over the one in $DIR, used from this launch.
 best=""
 best_root=""
-for file in "$PLUGINS"/cache/*/tinh-nlh/*/.claude-plugin/plugin.json "$PLUGINS"/synced/*/*/.claude-plugin/plugin.json; do
+for file in "$PLUGINS"/cache/*/nlh/*/.claude-plugin/plugin.json "$PLUGINS"/synced/*/*/.claude-plugin/plugin.json; do
   [ -f "$file" ] || continue
-  grep -q '"name": *"tinh-nlh"' "$file" || continue
+  grep -q '"name": *"nlh"' "$file" || continue
   root="$(dirname "$(dirname "$file")")"
   [ -f "$root/speaker/start.sh" ] || continue
   version="$(sed -n 's/^ *"version": *"\([0-9.]*\)".*/\1/p' "$file" | head -n 1)"
@@ -50,7 +50,7 @@ if [ -n "$best_root" ] && { [ -z "$current" ] || [ "$best" = "$current" ] || new
   printf '%s\n' "$best" > "$DIR/version.txt"
 fi
 SPEAKER="$DIR/speaker.mjs"
-[ -f "$SPEAKER" ] || stop_loa 'Chưa thấy plugin Tỉnh NhiLe trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
+[ -f "$SPEAKER" ] || stop_loa 'Chưa thấy plugin Nếp trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
 
 # 2. Claude Code. The official installer (claude.ai/install.sh) puts claude in ~/.local/bin.
 CLAUDE="$HOME/.local/bin/claude"
@@ -95,7 +95,7 @@ fi
 # A key the hub rejects is removed by the channel and asked again next launch.
 if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>&1; then
   echo ''
-  echo 'Lấy khoá ở web tỉnh NhiLe: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
+  echo 'Lấy khoá ở web Nếp: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
   echo 'Chữ không hiện ra khi dán, đó là bình thường. Dán xong bấm Enter.'
   saved=""
   for _ in 1 2 3; do
@@ -132,13 +132,13 @@ mkdir -p "$WORK"
 cd "$WORK" || stop_loa 'Chưa mở được thư mục làm việc của Loa.'
 export PATH="$(dirname "$CLAUDE"):$(dirname "$NODE"):$PATH"
 echo ''
-echo 'Loa đang nghe tỉnh NhiLe. Đừng đóng cửa sổ này.'
+echo 'Loa đang nghe Nếp. Đừng đóng cửa sổ này.'
 if [ ! -f "$DIR/opened.txt" ]; then
   echo 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
 fi
 echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 echo ''
-set -- '/loop 10m /tinh-nlh:speaker-loop' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+set -- '/loop 10m /nlh:speaker-loop' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
