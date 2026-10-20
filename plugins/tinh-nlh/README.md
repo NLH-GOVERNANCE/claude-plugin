@@ -18,7 +18,7 @@ Cài trên claude.ai và bật Loa: xem README ở gốc repo `NLH-GOVERNANCE/cl
 
 Technical name `nlh` (old name `tinh-nlh`, migrated by `renames` in the marketplace), display name Nếp. Contents:
 
-- the NhiLe Governance connector (`https://governance.nlh.vn/mcp`); everyone signs in once with the company email;
+- the NhiLe Governance connector (`https://mcp.nlh.vn/mcp`); everyone signs in once with the company email;
 - skill `nep`: the first turn of every conversation calls `my_context` (who you are, your cells, open projects, work waiting, work assigned) and summarises it in plain Vietnamese;
 - seven commands: `/nlh:work` (inbox), `/nlh:assign` (assign work to a cell), `/nlh:resume` (resume a piece of work), `/nlh:handoff` (write a handoff), `/nlh:sign` (tickets waiting for your signature), `/nlh:no-save` (stop saving this session to the chat store), `/nlh:speaker` (turn on Loa on this machine: the "Loa tỉnh NhiLe" desktop icon). In the Claude app and on the phone type `/work`, `/assign`, `/sign` (or say "xem việc của tôi", "giao việc", "tôi ký");
 - Loa, the speaker on the machine (channel `speaker` and its launchers in `speaker/`, Windows and macOS; Claude Code only, only when opened from the Loa icon): reads the user's new work from the hub every 15 seconds with a private key and tells the session seated at each cell in one sentence, by the session id that session reported; resumes a stopped session, or opens a new one; writes one ledger row per delivery, no content. Skill `speaker-loop` instructs the Loa session (named apart from the `speaker` command, which wins a shared name). The hub calls Loa tower: tower = speaker. Setup: root README, "Bật Loa trên máy";
@@ -28,4 +28,4 @@ The plugin holds no secret and copies no rules or cells: everything is read from
 
 ## Data
 
-The plugin stores nothing except for Loa: its launcher copy, read mark, seen ids and pending sends (`tower-state.json`) live in `~/.tinh-nlh/speaker` on the machine; the key is encrypted with DPAPI (Windows) or kept in the Keychain (macOS), readable only by that account on that machine. Everything else goes through the connector to `governance.nlh.vn`, under the user's own company account.
+The plugin stores nothing except for Loa: its launcher copy, read mark, seen ids and pending sends (`tower-state.json`) live in `~/.tinh-nlh/speaker` on the machine; the key is encrypted with DPAPI (Windows) or kept in the Keychain (macOS), readable only by that account on that machine. Loa reads from `api.nlh.vn`; everything else goes through the connector at `mcp.nlh.vn`, under the user's own company account.

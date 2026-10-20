@@ -44,7 +44,7 @@ const NEW_SESSION_GAP_MS = 10 * 60 * 1000;
 const PENDING_MAX_MS = 3 * 60 * 60 * 1000;
 // Claude Code session ids are uuids; anything else is never passed to claude.
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DEFAULT_ORIGIN = 'https://governance.nlh.vn';
+const DEFAULT_ORIGIN = 'https://api.nlh.vn';
 // Same as MCP SDK 1.32 (the thap-test trial): Claude Code does not accept a channel speaking protocol 2026-07-28.
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024-10-07'];
 

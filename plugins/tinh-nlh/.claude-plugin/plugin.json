@@ -1,7 +1,7 @@
 {
   "name": "nlh",
   "displayName": "Nếp",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Nếp là nơi công ty giao việc, theo dõi việc và ký duyệt. Cài xong, hỏi Claude \"việc của tôi hôm nay?\" hoặc gõ /work.",
   "author": {
     "name": "NhiLe Holding"
@@ -39,8 +39,8 @@
         "hub_origin": {
           "type": "string",
           "title": "Địa chỉ hub",
-          "description": "Nơi tạo khoá. Bản chính https://governance.nlh.vn, bản dev https://governance-dev.nlh.vn.",
-          "default": "https://governance.nlh.vn"
+          "description": "Nơi Loa đọc việc. Bản chính https://api.nlh.vn, bản dev https://apidev.nlh.vn.",
+          "default": "https://api.nlh.vn"
         }
       }
     }

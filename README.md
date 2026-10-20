@@ -61,7 +61,7 @@ Máy đã bật Loa trước khi đổi tên Nếp: gõ **bật Loa** thêm mộ
 
 ### Khi có tổ chức Team hoặc Enterprise
 
-Chưa dùng. Owner đồng bộ repo này ở [Organization settings > Plugins & skills](https://claude.ai/admin-settings/skills?tab=inventory) (**Add**, **Sync from GitHub**), đặt `nlh` là **Required**, và thêm connector `https://governance.nlh.vn/mcp` ở [Organization settings > Connectors](https://claude.ai/admin-settings/connectors).
+Chưa dùng. Owner đồng bộ repo này ở [Organization settings > Plugins & skills](https://claude.ai/admin-settings/skills?tab=inventory) (**Add**, **Sync from GitHub**), đặt `nlh` là **Required**, và thêm connector `https://mcp.nlh.vn/mcp` ở [Organization settings > Connectors](https://claude.ai/admin-settings/connectors).
 
 ### File .zip (để thử)
 
