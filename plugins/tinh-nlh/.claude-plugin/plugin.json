@@ -39,8 +39,8 @@
         "hub_origin": {
           "type": "string",
           "title": "Địa chỉ hub",
-          "description": "Nơi tạo khoá. Bản chính https://governance.nlh.vn, bản dev https://governance-dev.nlh.vn.",
-          "default": "https://governance.nlh.vn"
+          "description": "Nơi Loa đọc việc. Bản chính https://api.nlh.vn, bản dev https://apidev.nlh.vn.",
+          "default": "https://api.nlh.vn"
         }
       }
     }

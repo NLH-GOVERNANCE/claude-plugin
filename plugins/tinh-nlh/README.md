@@ -28,4 +28,4 @@ The plugin holds no secret and copies no rules or cells: everything is read from
 
 ## Data
 
-The plugin stores nothing except for Loa: its launcher copy, read mark, seen ids and pending sends (`tower-state.json`) live in `~/.tinh-nlh/speaker` on the machine; the key is encrypted with DPAPI (Windows) or kept in the Keychain (macOS), readable only by that account on that machine. Everything else goes through the connector to `governance.nlh.vn`, under the user's own company account.
+The plugin stores nothing except for Loa: its launcher copy, read mark, seen ids and pending sends (`tower-state.json`) live in `~/.tinh-nlh/speaker` on the machine; the key is encrypted with DPAPI (Windows) or kept in the Keychain (macOS), readable only by that account on that machine. Loa reads from `api.nlh.vn`; everything else goes through the connector at `mcp.nlh.vn`, under the user's own company account.
