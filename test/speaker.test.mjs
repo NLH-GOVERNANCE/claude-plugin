@@ -16,6 +16,7 @@ import {
   feedUrl,
   findByName,
   findSession,
+  HUB_CELLS,
   hubOrigin,
   KEY_FILE,
   KEY_STORES,
@@ -171,6 +172,26 @@ describe('hàm thuần của Loa', () => {
     assert.equal(seatName({ cell: 'cto', session_name: 'Ô CTO (son@cto)' }), 'Ô CTO (son/cto)', 'hub cũ: tên phiên đã báo');
   });
 
+  test('phiên đã báo không còn chạy mà có phiên khác đang chạy ngồi cùng ô: gửi vào phiên đang chạy, không mở lại bản sao (21/10)', () => {
+    const seat = { cell: 'review-pr-son', cell_title: 'Review PR của anh Sơn', cell_handles: ['review', 'review-son'], person_handle: 'son', session_id: STOPPED };
+    const APP = '5e22aee8-b510-4a5b-b071-046ba1d93b26';
+    const sessions = [
+      { kind: 'background', sessionId: STOPPED, name: 'Ô Review PR của anh Sơn (son/review)', state: 'done', cwd: 'C:\t' },
+      { pid: 7, kind: 'interactive', sessionId: APP, name: 'Dân làng Review của anh Sơn (son/review)' },
+    ];
+    const at = '2026-10-21T13:30:00.000Z';
+    assert.deepEqual(route(entry('a', at, seat), { sessions, cwdOf: () => 'C:\t' }), { via: 'send', to: 'Dân làng Review của anh Sơn (son/review)', sessionId: APP });
+    // Không có phiên nào đang chạy ngồi ô đó: mở lại đúng phiên đã báo như trước.
+    assert.deepEqual(route(entry('b', at, seat), { sessions: [sessions[0]], cwdOf: () => 'C:\t' }), { via: 'resume', sessionId: STOPPED, cwd: 'C:\t' });
+  });
+
+  test('việc của chòi hệ propose-change (chữ ký, lời chấm trên đề xuất) không bao giờ mở hay gửi vào phiên nào', () => {
+    const at = '2026-10-21T13:44:00.000Z';
+    const seat = { cell: 'propose-change', person_handle: 'son', kind: 'your_turn' };
+    assert.equal(route(entry('a', at, seat), { sessions: [], cwdOf: () => null }), null);
+    assert.ok(HUB_CELLS.includes('propose-change'));
+  });
+
   test('mục đã đẩy không đẩy lại; mốc lấy thời điểm mới nhất; đọc lùi 5 phút; lần đầu chỉ việc từ lúc bật', () => {
     const first = nextEntries({ since: null, seen: [], pending: [] }, [entry('a', '2026-10-18T05:00:00.000Z'), entry('b', '2026-10-18T05:01:00.000Z')]);
     assert.deepEqual(first.fresh.map((item) => item.id), ['a', 'b']);
@@ -305,7 +326,7 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     loa.close();
   });
 
-  test('mở lại hỏng mà có phiên đang chạy mang tên của ô: gửi vào phiên đó, không mở phiên mới', async () => {
+  test('phiên đã báo đã đóng mà có phiên đang chạy mang tên của ô: gửi thẳng vào phiên đó, không mở lại bản sao, không mở phiên mới', async () => {
     const seat = { cell: 'dai-dien-kien-truc-son', cell_title: 'CTO', cell_handles: ['cto', 'son'], person_handle: 'son' };
     const loa = inProcess({
       feed: () => [entry('your_cell:t:7', at, { ...seat, session_id: CLOSED })],
@@ -314,7 +335,7 @@ describe('Loa báo việc (server trong tiến trình)', () => {
       spawnOk: false,
     });
     await loa.server.tick();
-    assert.deepEqual(loa.spawned.map((item) => item.args.slice(0, 2)), [['--bg', `--resume=${CLOSED}`]]);
+    assert.deepEqual(loa.spawned, []);
     assert.deepEqual([loa.pushed().at(-1).meta.action, loa.pushed().at(-1).meta.to], ['send', 'Ô CTO (son/cto) trên máy anh Sơn']);
     loa.close();
   });
