@@ -31,13 +31,17 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.5.1';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Read a little before the saved mark so items recorded during the previous read still arrive; seen ids stop repeats.
 const OVERLAP_MS = 5 * 60 * 1000;
 // First run on a machine (no mark yet): only work from now on. Older work stays for each cell to read itself.
 const FIRST_LOOKBACK_MS = 60 * 1000;
 const SEEN_MAX = 1000;
+// Cells of the hub itself, where no person or session sits: the sign requests of propose_change. Their news belongs to
+// whoever proposed, so Loa prints it for the user and never opens a session for them (21/10: Loa opened
+// "Ô propose-change (son/propose-change)" for a signature on D-0068).
+export const HUB_CELLS = ['propose-change'];
 // At most one new session per cell in this window; later items for that cell go to the session just opened.
 const NEW_SESSION_GAP_MS = 10 * 60 * 1000;
 // A send the Loa session never confirmed (forwarded) is dropped after this and recorded as failed.
@@ -186,6 +190,7 @@ export function seatName(entry) {
 export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.now() }) {
   if (!sentence(entry)) return null;
   const cell = cellsOf(entry.cell)[0] ?? 'khac';
+  if (HUB_CELLS.includes(cell)) return null;
   const id = SESSION_ID.test(String(entry.session_id ?? '')) ? String(entry.session_id) : '';
   if (id) {
     const found = findSession(sessions, id);
@@ -193,6 +198,10 @@ export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.n
       if (!found.name) return null;
       if (!found.name.includes('@')) return { via: 'send', to: found.name, sessionId: id };
     } else {
+      // A running session seated at the same cell (an app session the person reopened under a new id) gets the item
+      // before Loa resumes a second copy of the stopped one in the background (21/10: two Review, two Tech Lead).
+      const named = findByName(sessions, seatTags(entry));
+      if (named) return { via: 'send', to: named.name, sessionId: named.sessionId };
       const cwd = found?.cwd ?? cwdOf(id);
       if (cwd) return { via: 'resume', sessionId: id, cwd };
     }
@@ -413,6 +422,10 @@ export function startServer({
   async function deliver(entry) {
     const text = sentence(entry);
     const item = { entry_id: ref(entry.id), kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '' };
+    if (HUB_CELLS.includes(item.cell)) {
+      const ticket = item.ticket ? ` (phiếu ${item.ticket})` : '';
+      return push(`Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
+    }
     if (entry.kind === 'you') {
       const ticket = item.ticket ? `, phiếu ${item.ticket}` : '';
       return push(`Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
