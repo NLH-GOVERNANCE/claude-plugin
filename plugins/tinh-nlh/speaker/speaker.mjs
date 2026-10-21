@@ -31,7 +31,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.5.1';
+export const VERSION = '0.5.2';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Read a little before the saved mark so items recorded during the previous read still arrive; seen ids stop repeats.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -202,6 +202,11 @@ export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.n
       // before Loa resumes a second copy of the stopped one in the background (21/10: two Review, two Tech Lead).
       const named = findByName(sessions, seatTags(entry));
       if (named) return { via: 'send', to: named.name, sessionId: named.sessionId };
+      // Not listed at all: a Claude app session at rest has no process, so `claude agents` leaves it out, yet its
+      // transcript is on disk. Resuming it in the background makes a second copy; the app wakes it when SendMessage
+      // reaches the name it reported (21/10: Loa reopened background copies of the app's Review and Tech Lead).
+      const reported = plain(entry.session_name);
+      if (!found && sessions && reported && !reported.includes('@')) return { via: 'send', to: reported, sessionId: id };
       const cwd = found?.cwd ?? cwdOf(id);
       if (cwd) return { via: 'resume', sessionId: id, cwd };
     }
