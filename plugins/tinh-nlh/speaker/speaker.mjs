@@ -8,6 +8,9 @@
 // - running (app or terminal) with a name without @: push a channel message to the Loa session, which delivers it with
 //   SendMessage and then calls the `forwarded` tool with the outcome. SendMessage refuses any name with @, so a running
 //   session named with @ (named before 18/10) counts as unreachable and the steps below run;
+// - not listed, its conversation still on disk, and the name it reported carries the cell's "(person/handle)": most
+//   likely a Claude app session at rest, so send to that name (the app wakes it); if no session takes the send, resume
+//   as below;
 // - stopped or closed but its conversation is still on disk: resume that same session by id in the background with
 //   the sentence (`claude --bg --resume <id>`), keeping its conversation;
 // - no id, deleted, resume failed or named with @: a running session whose name carries "(person/handle)" of the cell
@@ -202,12 +205,17 @@ export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.n
       // before Loa resumes a second copy of the stopped one in the background (21/10: two Review, two Tech Lead).
       const named = findByName(sessions, seatTags(entry));
       if (named) return { via: 'send', to: named.name, sessionId: named.sessionId };
-      // Not listed at all: a Claude app session at rest has no process, so `claude agents` leaves it out, yet its
-      // transcript is on disk. Resuming it in the background makes a second copy; the app wakes it when SendMessage
-      // reaches the name it reported (21/10: Loa reopened background copies of the app's Review and Tech Lead).
-      const reported = plain(entry.session_name);
-      if (!found && sessions && reported && !reported.includes('@')) return { via: 'send', to: reported, sessionId: id };
       const cwd = found?.cwd ?? cwdOf(id);
+      // Not listed at all but its transcript is on disk, and the name it reported carries this cell's "(person/handle)":
+      // most likely a Claude app session at rest (no process, so `claude agents` leaves it out). Resuming it in the
+      // background makes a second copy; the app wakes it when SendMessage reaches that name (21/10: Loa reopened
+      // background copies of the app's Review and Tech Lead). A closed terminal session looks the same, so the send
+      // keeps the resume as its fallback: when the Loa session reports the send failed, Loa resumes as before.
+      const reported = plain(entry.session_name);
+      const tagged = seatTags(entry).some((tag) => reported.toLowerCase().includes(tag));
+      if (!found && sessions && cwd && tagged && !reported.includes('@')) {
+        return { via: 'send', to: reported, sessionId: id, fallback: { via: 'resume', sessionId: id, cwd } };
+      }
       if (cwd) return { via: 'resume', sessionId: id, cwd };
     }
   }
@@ -446,7 +454,7 @@ export function startServer({
       plan = route({ ...entry, session_id: null }, { sessions, cwdOf, recent });
     }
     if (plan.via === 'send') {
-      const pending = { ...item, session_id: plan.sessionId ?? '', to: plan.to, text, queued_at: Date.now() };
+      const pending = { ...item, session_id: plan.sessionId ?? '', to: plan.to, text, queued_at: Date.now(), ...(plan.fallback ? { fallback: plan.fallback } : {}) };
       state.pending = [...state.pending.filter((other) => other.entry_id !== item.entry_id), pending];
       return push(text, { action: 'send', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, to: plan.to, ...(plan.sessionId ? { session_id: plan.sessionId } : {}) });
     }
@@ -507,6 +515,15 @@ export function startServer({
       state.pending = state.pending.filter((other) => other !== item);
       if (dir) saveState(dir, state);
       await record(item, 'send', args.ok === true);
+      // Sent by the reported name and no session took it: resume that session by id as before (route's fallback).
+      if (args.ok !== true && item.fallback?.via === 'resume') {
+        const ok = await spawnClaude(['--bg', `--resume=${item.fallback.sessionId}`, item.text], item.fallback.cwd);
+        await record({ ...item, session_id: item.fallback.sessionId }, 'resume', ok);
+        push(
+          ok ? `Đã mở lại phiên đang ngồi ô ${item.cell} và báo phiếu ${item.ticket || 'mới'}.` : `Chưa báo được ô ${item.cell}; ô vẫn tự thấy việc trong hộp việc.`,
+          { action: ok ? 'resumed' : 'failed', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id },
+        );
+      }
       return reply('Recorded.');
     }
     return send({ id: message.id, error: { code: -32601, message: `No tool ${tool}` } });

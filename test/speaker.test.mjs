@@ -189,12 +189,18 @@ describe('hàm thuần của Loa', () => {
     const APP = '5e22aee8-b510-4a5b-b071-046ba1d93b27';
     const seat = { cell: 'tech-lead-son', cell_title: 'Tech Lead', cell_handles: ['lead'], person_handle: 'son', session_id: APP, session_name: 'Dân làng - techlead (son/lead)' };
     const at = '2026-10-21T14:15:00.000Z';
-    assert.deepEqual(route(entry('a', at, seat), { sessions: [], cwdOf: () => 'C:\g' }), { via: 'send', to: 'Dân làng - techlead (son/lead)', sessionId: APP });
+    const resume = { via: 'resume', sessionId: APP, cwd: 'C:/g' };
+    // Gửi theo tên, giữ đường mở lại làm đường lùi khi không phiên nào nhận tên đó.
+    assert.deepEqual(route(entry('a', at, seat), { sessions: [], cwdOf: () => 'C:/g' }), { via: 'send', to: 'Dân làng - techlead (son/lead)', sessionId: APP, fallback: resume });
     // Danh sách máy không đọc được: không đoán, giữ cách cũ (mở lại theo bản ghi).
-    assert.deepEqual(route(entry('b', at, seat), { sessions: null, cwdOf: () => 'C:\g' }), { via: 'resume', sessionId: APP, cwd: 'C:\g' });
+    assert.deepEqual(route(entry('b', at, seat), { sessions: null, cwdOf: () => 'C:/g' }), resume);
+    // Tên đã báo không mang thẻ "(son/lead)" của ô: có thể là phiên khác, không gửi theo tên, mở lại như cũ.
+    assert.deepEqual(route(entry('c', at, { ...seat, session_name: 'Dân làng - techlead' }), { sessions: [], cwdOf: () => 'C:/g' }), resume);
+    // Bản ghi đã xoá: không gửi theo tên, đi tiếp như cũ (phiên mới).
+    assert.deepEqual(route(entry('d', at, seat), { sessions: [], cwdOf: () => null }), { via: 'new', name: 'Ô Tech Lead (son/lead)' });
     // Phiên nền đã dừng (còn trong danh sách): mở lại đúng phiên đó như trước.
-    const stopped = [{ kind: 'background', sessionId: APP, name: 'Ô Tech Lead (son/lead)', state: 'done', cwd: 'C:\t' }];
-    assert.deepEqual(route(entry('c', at, { ...seat, session_name: 'Ô Tech Lead (son/lead)' }), { sessions: stopped, cwdOf: () => null }), { via: 'resume', sessionId: APP, cwd: 'C:\t' });
+    const stopped = [{ kind: 'background', sessionId: APP, name: 'Ô Tech Lead (son/lead)', state: 'done', cwd: 'C:/t' }];
+    assert.deepEqual(route(entry('e', at, { ...seat, session_name: 'Ô Tech Lead (son/lead)' }), { sessions: stopped, cwdOf: () => null }), { via: 'resume', sessionId: APP, cwd: 'C:/t' });
   });
 
   test('việc của chòi hệ propose-change (chữ ký, lời chấm trên đề xuất) không bao giờ mở hay gửi vào phiên nào', () => {
@@ -290,6 +296,20 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null }) 
 
 describe('Loa báo việc (server trong tiến trình)', () => {
   const at = '2026-10-18T05:00:00.000Z';
+
+  test('gửi theo tên cho phiên app đang nghỉ mà không phiên nào nhận: forwarded hỏng thì mở lại đúng phiên như cũ', async () => {
+    const APP = '5e22aee8-b510-4a5b-b071-046ba1d93b28';
+    const seat = { cell: 'tech-lead-son', cell_title: 'Tech Lead', cell_handles: ['lead'], person_handle: 'son', session_id: APP, session_name: 'Dân làng - techlead (son/lead)' };
+    const loa = inProcess({ feed: () => [entry('your_cell:t:8', at, seat)], sessions: [], cwdOf: () => 'C:/g' });
+    await loa.server.tick();
+    assert.deepEqual([loa.pushed().at(-1).meta.action, loa.pushed().at(-1).meta.to], ['send', 'Dân làng - techlead (son/lead)']);
+    assert.equal(loa.spawned.length, 0, 'chưa mở lại khi chưa biết gửi hỏng');
+    await loa.call(2, 'forwarded', { entry_id: 'your_cell:t:8', ok: false });
+    assert.deepEqual(loa.spawned.map((item) => [item.args.slice(0, 2), item.cwd]), [[['--bg', `--resume=${APP}`], 'C:/g']]);
+    assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['send', false], ['resume', true]]);
+    assert.equal(loa.pushed().at(-1).meta.action, 'resumed');
+    loa.close();
+  });
 
   test('phiên đang chạy: đẩy một câu cho phiên Loa gửi bằng SendMessage; forwarded ghi một dòng sổ không nội dung', async () => {
     const loa = inProcess({
