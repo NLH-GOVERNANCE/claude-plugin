@@ -13,6 +13,7 @@ import { PassThrough } from 'node:stream';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  dueChecks,
   feedUrl,
   findByName,
   findSession,
@@ -23,12 +24,17 @@ import {
   KEYCHAIN,
   machineSessions,
   nextEntries,
+  ownLine,
   plain,
+  REMIND_MAX,
+  REMIND_MS,
+  reminderSentence,
   route,
   savedKey,
   seatName,
   seatTags,
   sentence,
+  taken,
   startServer,
   transcriptCwd,
 } from '../plugins/tinh-nlh/speaker/speaker.mjs';
@@ -248,7 +254,7 @@ const until = async (check, ms = 3000) => {
 };
 
 // Server trong tiến trình: luồng giả thay stdio, hub giả thay fetch, claude giả thay `claude agents` và `claude --bg`.
-function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null }) {
+function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, clock, confirmMs = '0' }) {
   const input = new PassThrough();
   const output = new PassThrough();
   const messages = [];
@@ -260,19 +266,21 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null }) 
     for (const line of lines) if (line.trim()) messages.push(JSON.parse(line));
   });
   const rows = [];
+  const reads = [];
   const spawned = [];
   const fetchImpl = async (url, init = {}) => {
     if (url.includes('/tower/forwards')) {
       rows.push(JSON.parse(init.body));
       return Response.json({ recorded: true }, { status: 201 });
     }
+    reads.push(url);
     return Response.json({ entries: feed(), more: false });
   };
   const dir = temp('loa');
   const server = startServer({
     input,
     output,
-    env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: 'C:\\TinhNhiLe' },
+    env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: 'C:\\TinhNhiLe', TOWER_CONFIRM_MS: confirmMs },
     fetchImpl,
     run: () => JSON.stringify(sessions),
     spawnClaude: async (args, cwd) => {
@@ -282,6 +290,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null }) 
     cwdOf,
     log: () => {},
     onClose: () => {},
+    ...(clock ? { clock } : {}),
   });
   const write = (message) => input.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
   write({ id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
@@ -291,7 +300,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null }) 
     await until(() => messages.some((message) => message.id === id));
     return messages.find((message) => message.id === id);
   };
-  return { server, messages, pushed, rows, spawned, call, dir, close: () => input.end() };
+  return { server, messages, pushed, rows, spawned, reads, call, dir, close: () => input.end() };
 }
 
 describe('Loa báo việc (server trong tiến trình)', () => {
@@ -419,6 +428,135 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.equal(rows.length, 1, 'không ghi lại');
     assert.equal(JSON.parse(readFileSync(join(dir, 'tower-state.json'), 'utf8')).pending.length, 0);
     input.end();
+  });
+});
+
+// Phiếu 6beaa750: nhắc lại việc chưa ai nhận sau 30 phút (tối đa 3 lần), không báo dòng dân làng tự ghi, bỏ việc đã
+// rời luồng việc. Đồng hồ giả: mỗi tick là một lần Loa đọc sau khi thời gian trôi.
+describe('Loa nhắc lại việc chưa ai nhận', () => {
+  const at = '2026-10-21T08:00:00.000Z';
+  const MIN = 60 * 1000;
+  const fakeClock = () => {
+    let now = Date.parse(at) + 10_000;
+    return { clock: () => now, pass: (ms) => (now += ms) };
+  };
+  const live = [{ pid: 7, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto)' }];
+  const sends = (loa) => loa.pushed().filter((event) => event.meta.action === 'send');
+  const state = (loa) => JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8'));
+
+  test('hàm thuần: câu nhắc không tiêu đề; mục có người giữ; dòng tự ghi; việc tới hạn kiểm', () => {
+    assert.equal(reminderSentence(entry('a', at), 2), `Loa nhắc lần 2/3: Việc ${TICKET} của dân làng cto vẫn chưa ai nhận. Mở việc, nhận nếu còn chưa ai nhận, rồi làm.`);
+    assert.match(reminderSentence(entry('a', at, { kind: 'mention', ticket_id: null }), 1), /^Loa nhắc lần 1\/3: Lời gọi dân làng cto trong nhóm vẫn chưa ai nhận\./);
+    assert.doesNotMatch(reminderSentence(entry('a', at, { title: 'Tiêu đề bí mật', cell: 'cto"><x' }), 1), /Tiêu đề|bí mật|<|>/);
+    assert.equal(REMIND_MAX, 3);
+    assert.equal(REMIND_MS, 30 * MIN);
+    assert.ok(taken({ held_by: 'actor' }) && taken({ claimed: true }));
+    assert.ok(!taken(entry('a', at)));
+    assert.ok(ownLine(entry('a', at, { from_cell: 'cto' })), 'dân làng tự mở việc cho chính mình');
+    assert.ok(!ownLine(entry('a', at, { from_cell: 'lead' })));
+    assert.ok(!ownLine(entry('a', at, { kind: 'your_turn', from_cell: 'cto' })), 'tới lượt dân làng đã hỏi vẫn báo');
+    const now = Date.parse(at) + 31 * MIN;
+    const due = dueChecks({ held: [{ entry_id: 'h', at, held_at: now - 3 * MIN }], told: [{ entry_id: 't', at, told_at: now - 29 * MIN }], pending: [] }, now, 2 * MIN);
+    assert.deepEqual([due.held.length, due.told.length, due.since], [1, 0, '2026-10-21T07:59:59.999Z']);
+    assert.equal(dueChecks({ held: [], told: [], pending: [] }, now).since, null, 'không có gì tới hạn: không đọc thêm');
+  });
+
+  test('việc còn trong luồng sau 30 phút: nhắc đúng một lần mỗi 30 phút, tối đa 3, cùng phiên; mỗi lần một dòng sổ via send ghi là nhắc', async () => {
+    const time = fakeClock();
+    const loa = inProcess({ feed: () => [entry('your_cell:t:r', at, { session_id: LIVE })], sessions: live, clock: time.clock });
+    await loa.server.tick();
+    assert.equal(sends(loa).length, 1);
+    await loa.call(2, 'forwarded', { entry_id: 'your_cell:t:r', ok: true });
+    const counts = [];
+    let id = 3;
+    // Mỗi 15 phút một lần đọc, trong 2 giờ 15 phút.
+    for (let step = 1; step <= 9; step += 1) {
+      time.pass(15 * MIN);
+      await loa.server.tick();
+      const last = sends(loa).at(-1);
+      if (last.meta.entry_id.startsWith('remind') && !loa.rows.some((row) => row.entry_id === last.meta.entry_id)) await loa.call(id++, 'forwarded', { entry_id: last.meta.entry_id, ok: true });
+      counts.push(sends(loa).length - 1);
+    }
+    assert.deepEqual(counts, [0, 1, 1, 2, 2, 3, 3, 3, 3], 'phút 30, 60, 90; không lần thứ tư');
+    const reminders = sends(loa).slice(1);
+    assert.deepEqual(reminders.map((event) => event.meta.entry_id), ['remind1:your_cell:t:r', 'remind2:your_cell:t:r', 'remind3:your_cell:t:r']);
+    assert.ok(reminders.every((event) => event.meta.to === 'Ô CTO (son/cto)'));
+    assert.equal(reminders[0].content, reminderSentence(entry('x', at), 1));
+    assert.deepEqual(loa.rows.map((row) => [row.entry_id, row.via, row.ok, row.reminder]), [
+      ['your_cell:t:r', 'send', true, undefined],
+      ['remind1:your_cell:t:r', 'send', true, 1],
+      ['remind2:your_cell:t:r', 'send', true, 2],
+      ['remind3:your_cell:t:r', 'send', true, 3],
+    ]);
+    assert.ok(!JSON.stringify(loa.rows).includes('Việc your'), 'không tiêu đề');
+    assert.ok(!readFileSync(join(loa.dir, 'tower-state.json'), 'utf8').includes('Việc your_cell'), 'file trạng thái không chép tiêu đề');
+    assert.equal(loa.spawned.length, 0);
+    loa.close();
+  });
+
+  test('việc đã rời luồng (đã nhận, đã trả lời, đã đóng) hay có người giữ: không nhắc, quên mục đó', async () => {
+    const time = fakeClock();
+    let feed = [entry('your_cell:t:g', at, { session_id: LIVE }), entry('mention:m:h', at, { kind: 'mention', ticket_id: null, session_id: LIVE })];
+    const loa = inProcess({ feed: () => feed, sessions: live, clock: time.clock });
+    await loa.server.tick();
+    assert.equal(sends(loa).length, 2);
+    feed = [entry('mention:m:h', at, { kind: 'mention', ticket_id: null, session_id: LIVE, held_by: 'actor-1' })];
+    time.pass(31 * MIN);
+    await loa.server.tick();
+    assert.equal(sends(loa).length, 2, 'không nhắc');
+    assert.deepEqual(state(loa).told, []);
+    time.pass(31 * MIN);
+    await loa.server.tick();
+    assert.equal(sends(loa).length, 2);
+    loa.close();
+  });
+
+  test('nhắc không mở phiên mới: vào đúng phiên Loa đã mở cho dân làng đó; việc chờ chính người dùng không nhắc', async () => {
+    const time = fakeClock();
+    const loa = inProcess({ feed: () => [entry('your_cell:t:n', at), entry('you:t:y', at, { kind: 'you' })], clock: time.clock });
+    await loa.server.tick();
+    assert.equal(loa.spawned.length, 1);
+    time.pass(31 * MIN);
+    await loa.server.tick();
+    assert.equal(loa.spawned.length, 1, 'không mở thêm phiên');
+    assert.deepEqual(sends(loa).map((event) => [event.meta.entry_id, event.meta.to]), [['remind1:your_cell:t:n', 'Ô cto']]);
+    assert.equal(loa.pushed().filter((event) => event.meta.kind === 'you').length, 1, 'việc của chính người dùng chỉ báo một lần');
+    loa.close();
+  });
+
+  test('không báo dòng dân làng tự ghi: việc nó tự mở cho mình; câu trả lời mà việc đã đóng trong 2 phút', async () => {
+    const time = fakeClock();
+    let feed = [entry('your_cell:t:o', at, { session_id: LIVE, from_cell: 'cto' }), entry('your_turn:t:c', at, { kind: 'your_turn', session_id: LIVE, from_cell: 'cto' })];
+    const loa = inProcess({ feed: () => feed, sessions: live, clock: time.clock, confirmMs: '120000' });
+    await loa.server.tick();
+    assert.equal(loa.pushed().length, 0, 'câu trả lời chờ 2 phút; việc tự mở không báo');
+    // Dân làng CTO ghi trả lời rồi đóng việc: việc rời luồng.
+    feed = [];
+    time.pass(2 * MIN);
+    await loa.server.tick();
+    assert.equal(loa.pushed().length, 0);
+    assert.deepEqual([state(loa).held, loa.rows], [[], []]);
+    loa.close();
+  });
+
+  test('câu trả lời còn trong luồng sau 2 phút: báo như cũ, một lần; hàng chờ gửi cho việc đã rời luồng thì bỏ', async () => {
+    const time = fakeClock();
+    let feed = [entry('your_turn:t:k', at, { kind: 'your_turn', session_id: LIVE })];
+    const loa = inProcess({ feed: () => feed, sessions: live, clock: time.clock, confirmMs: '120000' });
+    await loa.server.tick();
+    time.pass(MIN);
+    await loa.server.tick();
+    assert.equal(sends(loa).length, 0, 'chưa đủ 2 phút');
+    time.pass(MIN);
+    await loa.server.tick();
+    assert.deepEqual(sends(loa).map((event) => [event.meta.entry_id, event.content]), [['your_turn:t:k', sentence(entry('x', at, { kind: 'your_turn' }))]]);
+    // Phiên Loa chưa gửi (chế độ dự phòng 10 phút) mà việc đã rời luồng: không gửi tin cũ.
+    feed = [];
+    time.pass(2 * MIN);
+    await loa.server.tick();
+    assert.deepEqual(JSON.parse((await loa.call(2, 'pending', {})).result.content[0].text), []);
+    assert.equal(sends(loa).length, 1);
+    loa.close();
   });
 });
 

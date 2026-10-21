@@ -18,6 +18,11 @@
 // - none of these: the session Loa opened for the cell in the last 10 minutes, else open a new background session
 //   "Ô <cell title> (<person>/<first handle>)".
 // Every delivery writes one ledger row (POST /tower/forwards): entry, ticket, cell, target session, how, ok or failed.
+// Reminders (ticket 6beaa750): an item still in the feed 30 minutes after Loa told its session, and not held by anyone,
+// is told again in one sentence "vẫn chưa ai nhận", at most 3 times, 30 minutes apart, into the same session only (never
+// a new one, never a group or a person); each reminder writes its own row with entry_id "remind<n>:<entry id>". An item
+// gone from the feed (claimed, answered, closed) is never reminded. An answer (your_turn) waits 2 minutes and goes out
+// only if it is still in the feed, so a villager that writes its own answer and closes the ticket is not told about it.
 // Without the channel (fallback mode, /loop 10m) the Loa session calls the `pending` tool to deliver queued sends.
 //
 // Runs only with NLH_TOWER=1, which only the Loa launcher sets, so no other session on the machine reads the feed.
@@ -49,6 +54,14 @@ export const HUB_CELLS = ['propose-change'];
 const NEW_SESSION_GAP_MS = 10 * 60 * 1000;
 // A send the Loa session never confirmed (forwarded) is dropped after this and recorded as failed.
 const PENDING_MAX_MS = 3 * 60 * 60 * 1000;
+// Reminders: an item told this long ago and still in the feed is told again, at most REMIND_MAX times.
+export const REMIND_MS = 30 * 60 * 1000;
+export const REMIND_MAX = 3;
+// An answer (your_turn) waits this long, then goes out only if it is still in the feed (TOWER_CONFIRM_MS, 0 = at once).
+const CONFIRM_MS = 2 * 60 * 1000;
+// At most one extra feed read per minute to check held answers, reminders and queued sends; none when nothing is due.
+const CHECK_MS = 60 * 1000;
+const TOLD_MAX = 300;
 // Claude Code session ids are uuids; anything else is never passed to claude.
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_ORIGIN = 'https://api.nlh.vn';
@@ -104,6 +117,32 @@ export function sentence(entry) {
     default:
       return '';
   }
+}
+
+// The reminder: same shape as the first sentence, no title, no content (D-0009).
+export function reminderSentence(entry, count) {
+  const cell = cellsOf(entry.cell).join(', ') || 'không rõ';
+  const ticket = ref(entry.ticket_id);
+  const what = ticket ? `Việc ${ticket} của dân làng ${cell}` : `Lời gọi dân làng ${cell} trong nhóm`;
+  return `Loa nhắc lần ${count}/${REMIND_MAX}: ${what} vẫn chưa ai nhận. Mở việc, nhận nếu còn chưa ai nhận, rồi làm.`;
+}
+
+// Someone holds the item (the hub may add held_by or claimed to an entry): not waiting, no reminder.
+export const taken = (entry) => Boolean(entry?.held_by || entry?.claimed_by || entry?.claimed === true || entry?.held === true);
+
+// A line the receiving villager wrote itself (ticket 6beaa750, CTO 21/10): new work it opened for its own cell. An
+// answer (your_turn) carries from_cell of the villager that asked, not of who wrote the latest line, so it is not judged
+// here; it waits CONFIRM_MS and goes out only while still in the feed.
+export const ownLine = (entry) => entry?.kind === 'your_cell' && Boolean(name(entry.from_cell)) && cellsOf(entry.cell)[0] === name(entry.from_cell);
+
+// What is due at `now`: held answers past confirmMs, told items past REMIND_MS, queued sends past confirmMs. Each
+// carries the feed entry id it checks and its time (at), so one feed read from the oldest covers them all.
+export function dueChecks(state, now, confirmMs = CONFIRM_MS) {
+  const held = (state.held ?? []).filter((item) => now - item.held_at >= confirmMs);
+  const told = (state.told ?? []).filter((item) => now - item.told_at >= REMIND_MS);
+  const pending = (state.pending ?? []).filter((item) => item.base_id && item.at && now - (item.queued_at ?? 0) >= Math.max(confirmMs, CHECK_MS));
+  const times = [...held, ...told, ...pending].map((item) => Date.parse(item.at)).filter((at) => !Number.isNaN(at));
+  return { held, told, pending, since: times.length ? new Date(Math.min(...times) - 1).toISOString() : null };
 }
 
 // Sessions on this machine, from `claude agents --json --all`, or null when that cannot run.
@@ -234,14 +273,20 @@ export function loadState(dir) {
       since: typeof state.since === 'string' ? state.since : null,
       seen: Array.isArray(state.seen) ? state.seen : [],
       pending: Array.isArray(state.pending) ? state.pending : [],
+      told: Array.isArray(state.told) ? state.told : [],
+      held: Array.isArray(state.held) ? state.held : [],
     };
   } catch {
-    return { since: null, seen: [], pending: [] };
+    return { since: null, seen: [], pending: [], told: [], held: [] };
   }
 }
 
+// Ids, cells, times and session names only: never a title or other ticket content.
 function saveState(dir, state) {
-  writeFileSync(join(dir, 'tower-state.json'), JSON.stringify({ since: state.since, seen: state.seen.slice(-SEEN_MAX), pending: state.pending }));
+  writeFileSync(
+    join(dir, 'tower-state.json'),
+    JSON.stringify({ since: state.since, seen: state.seen.slice(-SEEN_MAX), pending: state.pending, told: state.told.slice(-TOLD_MAX), held: state.held }),
+  );
 }
 
 export const KEY_FILE = 'tower-key.dpapi';
@@ -386,8 +431,11 @@ export function startServer({
   cwdOf = (id) => transcriptCwd(id),
   log = (line) => process.stderr.write(`speaker: ${line}\n`),
   onClose = () => process.exit(0),
+  clock = () => Date.now(),
 } = {}) {
   const enabled = env.NLH_TOWER === '1';
+  const confirmMs = env.TOWER_CONFIRM_MS !== undefined && env.TOWER_CONFIRM_MS !== '' ? Number(env.TOWER_CONFIRM_MS) : CONFIRM_MS;
+  let lastCheck = 0;
   // The Loa folder, set by the launcher; plugin data folder otherwise.
   const dir = env.NLH_TOWER_DIR || env.CLAUDE_PLUGIN_DATA || env.TOWER_STATE_DIR || null;
   // New sessions open in the Loa work folder.
@@ -403,7 +451,7 @@ export function startServer({
   };
   const recent = new Map();
   let timer = null;
-  let state = { since: null, seen: [], pending: [] };
+  let state = { since: null, seen: [], pending: [], told: [], held: [] };
   let fileKey = null;
 
   const currentKey = () => {
@@ -419,7 +467,7 @@ export function startServer({
     const { key } = currentKey();
     const origin = hubOrigin(env.TOWER_ORIGIN);
     if (!key || !origin) return;
-    const body = { entry_id: item.entry_id, kind: item.kind, ticket_id: item.ticket || null, cell: item.cell || null, session_id: item.session_id || null, via, ok };
+    const body = { entry_id: item.entry_id, kind: item.kind, ticket_id: item.ticket || null, cell: item.cell || null, session_id: item.session_id || null, via, ok, ...(item.reminder ? { reminder: item.reminder } : {}) };
     try {
       const response = await fetchImpl(`${origin}/tower/forwards`, {
         method: 'POST',
@@ -432,9 +480,21 @@ export function startServer({
     }
   }
 
-  async function deliver(entry) {
-    const text = sentence(entry);
-    const item = { entry_id: ref(entry.id), kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '' };
+  // Remember what was told, for the reminders. A reminder updates the same row.
+  const remember = (entry, item, to, reminder) => {
+    const at = typeof entry.at === 'string' ? entry.at : null;
+    if (!at || !item.base_id) return;
+    const before = state.told.find((other) => other.entry_id === item.base_id);
+    const row = { entry_id: item.base_id, kind: item.kind, ticket: item.ticket, cell: item.cell, at, told_at: clock(), reminders: reminder || 0, to: to || before?.to || null };
+    state.told = [...state.told.filter((other) => other.entry_id !== item.base_id), row];
+  };
+
+  // reminder: 0 for the first notice, else the reminder count. told: the remembered row of a reminder, or the held row
+  // of an answer that waited and is still in the feed.
+  async function deliver(entry, { reminder = 0, told = null } = {}) {
+    const text = reminder ? reminderSentence(entry, reminder) : sentence(entry);
+    const base = ref(entry.id);
+    const item = { entry_id: reminder ? `remind${reminder}:${base}` : base, base_id: base, kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '', ...(reminder ? { reminder } : {}) };
     if (HUB_CELLS.includes(item.cell)) {
       const ticket = item.ticket ? ` (phiếu ${item.ticket})` : '';
       return push(`Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
@@ -443,30 +503,103 @@ export function startServer({
       const ticket = item.ticket ? `, phiếu ${item.ticket}` : '';
       return push(`Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
+    // Fresh items only: a line the villager wrote itself is not told; an answer waits confirmMs (see recheck).
+    if (!told) {
+      if (ownLine(entry) || taken(entry)) return log(`not told: ${ownLine(entry) ? 'own line' : 'held'}`);
+      if (entry.kind === 'your_turn' && confirmMs > 0 && item.entry_id && entry.at) {
+        state.held = [...state.held.filter((other) => other.entry_id !== item.entry_id), { entry_id: item.entry_id, at: entry.at, held_at: clock() }];
+        return;
+      }
+    }
     const sessions = machineSessions(run);
-    let plan = route(entry, { sessions, cwdOf, recent });
+    // A reminder goes to the session told before: its name stands in for "the session just opened", never a new one.
+    const seat = reminder ? new Map(told?.to ? [[item.cell, { name: told.to, at: clock() }]] : []) : recent;
+    let plan = route(entry, { sessions, cwdOf, recent: seat, now: clock() });
     if (!plan || !item.entry_id) return;
+    if (reminder && plan.via === 'new') return log('reminder skipped: no session to remind');
     if (plan.via === 'resume') {
       const ok = await spawnClaude(['--bg', `--resume=${plan.sessionId}`, text], plan.cwd);
       await record({ ...item, session_id: plan.sessionId }, 'resume', ok);
-      if (ok) return push(`Đã mở lại phiên đang ngồi ô ${item.cell} và báo phiếu ${item.ticket || 'mới'}.`, { action: 'resumed', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, session_id: plan.sessionId });
-      // Resume failed: as if no id was reported, by name, then a new session.
-      plan = route({ ...entry, session_id: null }, { sessions, cwdOf, recent });
+      if (ok) {
+        remember(entry, item, null, reminder);
+        return push(`Đã mở lại phiên của dân làng ${item.cell} và ${reminder ? 'nhắc' : 'báo'} việc ${item.ticket || 'mới'}.`, { action: 'resumed', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, session_id: plan.sessionId });
+      }
+      // Resume failed: as if no id was reported, by name, then a new session (never for a reminder).
+      plan = route({ ...entry, session_id: null }, { sessions, cwdOf, recent: seat, now: clock() });
+      if (reminder && plan.via === 'new') return log('reminder skipped: no session to remind');
     }
     if (plan.via === 'send') {
-      const pending = { ...item, session_id: plan.sessionId ?? '', to: plan.to, text, queued_at: Date.now(), ...(plan.fallback ? { fallback: plan.fallback } : {}) };
+      const pending = { ...item, at: entry.at, session_id: plan.sessionId ?? '', to: plan.to, text, queued_at: clock(), ...(plan.fallback ? { fallback: plan.fallback } : {}) };
       state.pending = [...state.pending.filter((other) => other.entry_id !== item.entry_id), pending];
+      remember(entry, item, plan.to, reminder);
       return push(text, { action: 'send', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, to: plan.to, ...(plan.sessionId ? { session_id: plan.sessionId } : {}) });
     }
     // New session: never seen, deleted, or resume failed, and no running session named for the cell.
     const sessionName = plan.name;
     const ok = await spawnClaude(['--bg', '--model', 'sonnet', '-n', sessionName, text], work);
     await record(item, 'new', ok);
-    if (ok) recent.set(item.cell, { name: sessionName, at: Date.now() });
+    if (ok) {
+      recent.set(item.cell, { name: sessionName, at: clock() });
+      remember(entry, item, sessionName, 0);
+    }
     push(
       ok ? `Đã mở phiên mới "${sessionName}" cho ô ${item.cell} và báo phiếu ${item.ticket || 'mới'}.` : `Chưa mở được phiên cho ô ${item.cell}. Loa sẽ thử lại ở việc sau; ô vẫn tự thấy việc trong hộp việc.`,
       { action: ok ? 'opened' : 'failed', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id },
     );
+  }
+
+  // One feed read from `since`, or null when it cannot be read (then nothing is decided this round).
+  async function readFeed(since) {
+    const { key } = currentKey();
+    const origin = hubOrigin(env.TOWER_ORIGIN);
+    if (!key || !origin) return null;
+    try {
+      const response = await fetchImpl(`${origin}/tower/feed?since=${encodeURIComponent(since)}`, { headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' } });
+      if (!response.ok) return null;
+      const data = await response.json().catch(() => null);
+      return data && Array.isArray(data.entries) ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Held answers, reminders and queued sends: is the item still in the feed? Still there and nobody holds it: deliver
+  // the answer, or remind. Gone (claimed, answered, closed) or held: drop it, no reminder, no stale send.
+  async function recheck() {
+    const now = clock();
+    const due = dueChecks(state, now, confirmMs);
+    if (!due.since || now - lastCheck < CHECK_MS) return;
+    lastCheck = now;
+    const data = await readFeed(due.since);
+    if (!data) return;
+    const present = new Map(data.entries.filter((entry) => entry?.id).map((entry) => [entry.id, entry]));
+    const last = data.entries.at(-1)?.at;
+    // The feed is oldest first; with more pages, an item later than this page is unknown, not gone.
+    const gone = (id, at) => !present.has(id) && (!data.more || (last && Date.parse(at) <= Date.parse(last)));
+    const waiting = (id) => present.has(id) && !taken(present.get(id));
+    const dropped = new Set(
+      [...due.held, ...due.told, ...due.pending].filter((item) => {
+        const id = item.base_id ?? item.entry_id;
+        return gone(id, item.at) || (present.has(id) && taken(present.get(id)));
+      }),
+    );
+    if (dropped.size) log(`dropped ${dropped.size}: no longer waiting in the feed`);
+    state.held = state.held.filter((item) => !dropped.has(item));
+    state.told = state.told.filter((item) => !dropped.has(item));
+    state.pending = state.pending.filter((item) => !dropped.has(item));
+    for (const item of due.held.filter((other) => waiting(other.entry_id))) {
+      state.held = state.held.filter((other) => other !== item);
+      await deliver(present.get(item.entry_id), { told: item });
+    }
+    for (const item of due.told.filter((other) => waiting(other.entry_id))) {
+      if (item.reminders >= REMIND_MAX) {
+        state.told = state.told.filter((other) => other !== item);
+        continue;
+      }
+      await deliver(present.get(item.entry_id), { reminder: item.reminders + 1, told: item });
+      // Not delivered (no session to remind): count it anyway, so the next try is 30 minutes later, not every minute.
+      state.told = state.told.map((other) => (other === item ? { ...item, told_at: now, reminders: item.reminders + 1 } : other));
+    }
   }
 
   async function tick() {
@@ -498,9 +631,10 @@ export function startServer({
     state = next;
     for (const entry of fresh) await deliver(entry);
     // Sends never confirmed within PENDING_MAX_MS: drop them, one failed row each.
-    const stale = state.pending.filter((item) => !(Date.now() - (item.queued_at ?? 0) < PENDING_MAX_MS));
+    const stale = state.pending.filter((item) => !(clock() - (item.queued_at ?? 0) < PENDING_MAX_MS));
     state.pending = state.pending.filter((item) => !stale.includes(item));
     for (const item of stale) await record(item, 'send', false);
+    await recheck();
     if (dir) saveState(dir, state);
     if (data.more && fresh.length) await tick();
   }
