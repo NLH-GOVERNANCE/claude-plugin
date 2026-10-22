@@ -267,6 +267,34 @@ describe('plugin nlh', () => {
     assert.match(skill, /`role` `summary`/);
   });
 
+  test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook, câu thường thì không', async () => {
+    const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
+    const startup = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.match(startup, /read village_rules in that result.*\(no such field: get_cell luat-lang, file rules\.md\)/);
+    assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },
+    ]);
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/correction.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|child_process)/);
+    const run = (prompt) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/correction.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end(typeof prompt === 'string' ? JSON.stringify({ prompt }) : 'không phải json');
+      });
+    const reminder =
+      'Người dùng đang sửa bạn. Sửa việc trước. Điều chung cho mọi nghề thì thêm một dòng vào luật làng (ô luat-lang); điều chỉ của nghề bạn thì ghi vào playbook dân làng của bạn. Đọc quyết định đã ký liên quan trước.';
+    for (const prompt of ['sao không báo chị Nhi', 'Đã chốt rồi mà, nhắc lại lần nữa', 'SAO KHONG bao Danh?', 'lại quên ghi sổ']) {
+      assert.deepEqual(JSON.parse(await run(prompt)), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: reminder } }, prompt);
+    }
+    for (const prompt of ['việc của tôi hôm nay?', 'Giao cho chị Thùy: soạn hợp đồng', 'saokhông', '']) assert.equal(await run(prompt), '', prompt);
+    assert.equal(await run(null), '');
+    // Mỗi dấu hiệu một dòng trong file, sửa danh sách không phải sửa code.
+    const signals = readJson('plugins/tinh-nlh/hooks/correction-signals.json');
+    for (const signal of ['nhắc lại', 'đã chốt', 'trước đó', 'sao không', 'lại quên', 'phải báo']) assert.ok(signals.includes(signal), signal);
+  });
+
   test('skill dặn luôn bàn giao khi dừng, và mở phiếu góp ý cho Tech Lead', () => {
     const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
     assert.match(skill, /## Handoff \(always\)/);
