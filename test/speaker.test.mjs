@@ -13,6 +13,8 @@ import { PassThrough } from 'node:stream';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  childEnv,
+  defaultSpawn,
   dueChecks,
   feedUrl,
   findByName,
@@ -22,10 +24,12 @@ import {
   KEY_FILE,
   KEY_STORES,
   KEYCHAIN,
+  machineId,
   machineSessions,
   nextEntries,
   ownLine,
   plain,
+  reportedSeat,
   REMIND_MAX,
   REMIND_MS,
   reminderSentence,
@@ -209,6 +213,38 @@ describe('hàm thuần của Loa', () => {
     assert.deepEqual(route(entry('e', at, { ...seat, session_name: 'Ô Tech Lead (son/lead)' }), { sessions: stopped, cwdOf: () => null }), { via: 'resume', sessionId: APP, cwd: 'C:/t' });
   });
 
+  test('phiên Claude Desktop đã báo ngồi dân làng (report_session) mà mục chưa kèm mã phiên: gửi theo tên đã báo, không mở phiên trùng (fact 850d6a86)', () => {
+    const APP = '5e22aee8-b510-4a5b-b071-046ba1d93b28';
+    const seat = { cell: 'review-pr-son', cell_title: 'Review PR của anh Sơn', cell_handles: ['review'], person_handle: 'son' };
+    const at = '2026-10-22T08:00:00.000Z';
+    const reported = [{ session_id: APP, session_name: 'Dân làng Review của anh Sơn (son/review)', cell: 'review-pr-son', status: 'idle' }];
+    const resume = { via: 'resume', sessionId: APP, cwd: 'C:/r' };
+    // Không có trong danh sách máy (app đang nghỉ), bản ghi trên máy này: gửi theo tên, mở lại làm đường lùi.
+    assert.deepEqual(route(entry('a', at, seat), { sessions: [], cwdOf: () => 'C:/r', reported }), { via: 'send', to: 'Dân làng Review của anh Sơn (son/review)', sessionId: APP, fallback: resume });
+    // Bản ghi không ở máy này (phiên của máy khác): không gửi, mở phiên mới như cũ.
+    assert.deepEqual(route(entry('b', at, seat), { sessions: [], cwdOf: () => null, reported }), { via: 'new', name: 'Ô Review PR của anh Sơn (son/review)' });
+    // Phiên đã thôi ngồi, tên có @, hay tên không mang thẻ của ô: không dùng.
+    for (const other of [{ status: 'stopped' }, { session_name: 'Review (son@review)' }, { session_name: 'Một phiên khác' }]) {
+      assert.equal(reportedSeat(entry('c', at, seat), { sessions: [], cwdOf: () => 'C:/r', reported: [{ ...reported[0], ...other }] }), null, JSON.stringify(other));
+    }
+    // Còn trong danh sách máy, đã dừng: mở lại đúng phiên đó; danh sách máy không đọc được: không đoán.
+    const listed = [{ kind: 'background', sessionId: APP, name: 'Dân làng Review của anh Sơn (son/review)', state: 'done', cwd: 'C:/b' }];
+    assert.deepEqual(reportedSeat(entry('d', at, seat), { sessions: listed, cwdOf: () => null, reported }), { via: 'resume', sessionId: APP, cwd: 'C:/b' });
+    assert.equal(reportedSeat(entry('e', at, seat), { sessions: null, cwdOf: () => 'C:/r', reported }), null);
+  });
+
+  test('mã máy (D-0065 · 5/5): ngẫu nhiên, sinh một lần rồi giữ nguyên; tệp hỏng thì sinh lại; luồng việc gửi kèm mã máy', () => {
+    const dir = temp('machine');
+    const id = machineId(dir, () => 'a'.repeat(32));
+    assert.equal(id, `m-${'a'.repeat(32)}`);
+    assert.equal(machineId(dir, () => 'b'.repeat(32)), id, 'lần sau đọc lại, không sinh mới');
+    writeFileSync(join(dir, 'machine-id'), 'tên-máy có dấu cách\n');
+    assert.equal(machineId(dir, () => 'c'.repeat(32)), `m-${'c'.repeat(32)}`);
+    assert.match(machineId(temp('machine')), /^m-[0-9a-f]{32}$/);
+    assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, id), `https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z&machine_id=${id}`);
+    assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, 'ngắn'), 'https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z');
+  });
+
   test('việc của chòi hệ propose-change (chữ ký, lời chấm trên đề xuất) không bao giờ mở hay gửi vào phiên nào', () => {
     const at = '2026-10-21T13:44:00.000Z';
     const seat = { cell: 'propose-change', person_handle: 'son', kind: 'your_turn' };
@@ -280,7 +316,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
   const server = startServer({
     input,
     output,
-    env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: 'C:\\TinhNhiLe', TOWER_CONFIRM_MS: confirmMs },
+    env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, NLH_MACHINE_DIR: dir, NLH_TOWER_WORK: 'C:\\TinhNhiLe', TOWER_CONFIRM_MS: confirmMs },
     fetchImpl,
     run: () => JSON.stringify(sessions),
     spawnClaude: async (args, cwd) => {
@@ -313,6 +349,8 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     await loa.server.tick();
     assert.deepEqual([loa.pushed().at(-1).meta.action, loa.pushed().at(-1).meta.to], ['send', 'Dân làng - techlead (son/lead)']);
     assert.equal(loa.spawned.length, 0, 'chưa mở lại khi chưa biết gửi hỏng');
+    // Luồng việc đọc kèm mã máy (D-0065 · 5/5), mã giữ trong thư mục máy.
+    assert.match(loa.reads[0], new RegExp(`&machine_id=${readFileSync(join(loa.dir, 'machine-id'), 'utf8').trim()}$`));
     await loa.call(2, 'forwarded', { entry_id: 'your_cell:t:8', ok: false });
     assert.deepEqual(loa.spawned.map((item) => [item.args.slice(0, 2), item.cwd]), [[['--bg', `--resume=${APP}`], 'C:/g']]);
     assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['send', false], ['resume', true]]);
@@ -411,7 +449,7 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     const server = startServer({
       input,
       output: new PassThrough(),
-      env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, TOWER_POLL_MS: '999999' },
+      env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, NLH_MACHINE_DIR: dir, TOWER_POLL_MS: '999999' },
       fetchImpl: async (url, init = {}) => (url.includes('/tower/forwards') ? (rows.push(JSON.parse(init.body)), Response.json({}, { status: 201 })) : Response.json({ entries: [] })),
       run: () => '[]',
       spawnClaude: async () => true,
@@ -751,5 +789,29 @@ describe('plugin.json và lời dặn Loa', () => {
     assert.match(skill, /call the speaker tool `pending`/);
     assert.equal(skill.match(/^name: (.+)$/m)?.[1], 'speaker-loop');
     assert.doesNotMatch(skill, /claude --bg|ListAgents|my_context|Tháp/);
+  });
+});
+
+// Việc 20493d87 (22/10): phiên Loa mở thừa hưởng NLH_TOWER=1 nên giữ khoá Loa; Loa mới bị khoá ngoài, 12 lời báo kẹt 35 phút.
+describe('phiên Loa mở không mang biến của Loa', () => {
+  test('childEnv bỏ NLH_TOWER, NLH_TOWER_DIR, NLH_TOWER_WORK, giữ biến khác', () => {
+    assert.deepEqual(childEnv({ NLH_TOWER: '1', NLH_TOWER_DIR: 'd', NLH_TOWER_WORK: 'w', PATH: 'p', CLAUDE_BIN: 'c' }), { PATH: 'p', CLAUDE_BIN: 'c' });
+  });
+
+  test('lệnh mở phiên thật (defaultSpawn) chạy không có NLH_TOWER*', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nlh-spawn-'));
+    const out = join(dir, 'env.json');
+    const saved = { ...process.env };
+    Object.assign(process.env, { NLH_TOWER: '1', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: dir, NLH_SPAWN_PROBE: 'yes' });
+    try {
+      const ok = await defaultSpawn(process.execPath)(['-e', `require('fs').writeFileSync(${JSON.stringify(out)}, JSON.stringify(process.env))`], dir);
+      assert.equal(ok, true);
+    } finally {
+      for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK', 'NLH_SPAWN_PROBE']) if (!(key in saved)) delete process.env[key];
+    }
+    const env = JSON.parse(readFileSync(out, 'utf8'));
+    assert.equal(env.NLH_SPAWN_PROBE, 'yes');
+    for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK']) assert.equal(key in env, false, key);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

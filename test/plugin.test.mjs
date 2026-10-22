@@ -2,7 +2,8 @@
 // của gói: không secret, không bin/, hook không gọi mạng, connector đúng địa chỉ bản chính. Chỉ đọc file.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -71,15 +72,27 @@ describe('plugin nlh', () => {
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
-    assert.deepEqual(Object.keys(hooks).sort(), ['PostToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'UserPromptSubmit']);
+    assert.deepEqual(Object.keys(hooks).sort(), ['PostToolUse', 'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'StopFailure', 'UserPromptSubmit']);
     const byMatcher = Object.fromEntries(hooks.SessionStart.map((group) => [group.matcher, group.hooks]));
     assert.deepEqual(Object.keys(byMatcher).sort(), ['clear|compact', 'startup', 'startup|clear']);
     // Lúc mở phiên, hook mcp_tool bị bỏ qua (máy chủ MCP chưa nối), nên chỉ in lời dặn; echo không gọi mạng.
     assert.equal(byMatcher.startup.length, 1);
     assert.equal(byMatcher.startup[0].type, 'command');
     assert.match(byMatcher.startup[0].command, /^echo "[^"$`]+my_context[^"$`]+"$/);
-    assert.deepEqual(byMatcher['startup|clear'], [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] }]);
+    assert.deepEqual(byMatcher['startup|clear'], [
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] },
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs'] },
+    ]);
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
+    // Mã máy (D-0065 · 5/5): chỉ đọc, ghi tệp mã máy qua speaker.mjs, không gọi mạng.
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/machine.mjs'), 'utf8'), /fetch|https?:|node:/);
+    // Hết hạn mức giữa lượt: báo máy dừng, hub dùng máy của nơi chạy này; việc máy giữ về máy khác cùng dân làng.
+    assert.deepEqual(hooks.StopFailure, [
+      {
+        matcher: 'rate_limit|billing_error',
+        hooks: [{ type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'stopped', machine_stop: 'quota' }, timeout: 10 }],
+      },
+    ]);
     // Sau /clear hay gọn ngữ cảnh: gọi thẳng công cụ, đúng tên máy chủ có phạm vi plugin, không truyền gì thêm.
     const [server] = Object.keys(readJson('plugins/tinh-nlh/.mcp.json').mcpServers);
     assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:nlh:${server}`, tool: 'my_context', timeout: 30 }]);
@@ -165,6 +178,24 @@ describe('plugin nlh', () => {
     assert.equal(await run('không phải json'), '');
   });
 
+  test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nlh-machine-'));
+    const run = () =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/machine.mjs')], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, NLH_MACHINE_DIR: dir } });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end('{}');
+      });
+    const first = await run();
+    const id = readFileSync(join(dir, 'machine-id'), 'utf8').trim();
+    assert.match(id, /^m-[0-9a-f]{32}$/);
+    assert.match(first, new RegExp(`^This machine: id ${id} .*report_session.*status started.*/nlh:handoff.*machine_stop quota or shutdown`));
+    assert.equal(await run(), first, 'lần sau cùng mã');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test('lan can: không có bin/ (claude.ai từ chối cả gói), không có gì trông như khoá hay token', () => {
     assert.equal(existsSync(join(pluginDir, 'bin')), false);
     const secretLike = /((api[_-]?key|secret|password|token)\s*[:=]\s*\S|bearer\s+[A-Za-z0-9._-]{8,}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,})/i;
@@ -222,18 +253,54 @@ describe('plugin nlh', () => {
     assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_context'), false);
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
-    assert.deepEqual(hooks.PostToolUse, [
-      {
-        matcher: '^mcp__plugin_nlh_nhile-governance__(?!my_context$)',
-        hooks: [{ type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } }],
-      },
-    ]);
+    assert.deepEqual(hooks.PostToolUse[0], {
+      matcher: '^mcp__plugin_nlh_nhile-governance__(?!my_context$)',
+      hooks: [{ type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } }],
+    });
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
     const command = readFileSync(join(pluginDir, 'commands/no-save.md'), 'utf8');
     assert.match(command, /`save_chat`.*`role` `opt_out`/);
     const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
     assert.match(skill, /## Chat saving/);
     assert.match(skill, /`role` `summary`/);
+  });
+
+  test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook, câu thường thì không', async () => {
+    const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
+    const startup = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.match(startup, /read village_rules in that result.*\(no such field: get_cell luat-lang, file rules\.md\)/);
+    assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },
+    ]);
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/correction.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|child_process)/);
+    const run = (prompt) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/correction.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end(typeof prompt === 'string' ? JSON.stringify({ prompt }) : 'không phải json');
+      });
+    const reminder =
+      'Người dùng đang sửa bạn. Sửa việc trước. Điều chung cho mọi nghề thì thêm một dòng vào luật làng (ô luat-lang); điều chỉ của nghề bạn thì ghi vào playbook dân làng của bạn. Đọc quyết định đã ký liên quan trước.';
+    for (const prompt of ['sao không báo chị Nhi', 'Đã chốt rồi mà, nhắc lại lần nữa', 'SAO KHONG bao Danh?', 'lại quên ghi sổ']) {
+      assert.deepEqual(JSON.parse(await run(prompt)), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: reminder } }, prompt);
+    }
+    for (const prompt of ['việc của tôi hôm nay?', 'Giao cho chị Thùy: soạn hợp đồng', 'saokhông', '']) assert.equal(await run(prompt), '', prompt);
+    assert.equal(await run(null), '');
+    // Mỗi dấu hiệu một dòng trong file, sửa danh sách không phải sửa code.
+    const signals = readJson('plugins/tinh-nlh/hooks/correction-signals.json');
+    for (const signal of ['nhắc lại', 'đã chốt', 'trước đó', 'sao không', 'lại quên', 'phải báo']) assert.ok(signals.includes(signal), signal);
+  });
+
+  test('cổng trên máy (việc 6c4e1825): trước và sau lệnh Bash hay PowerShell chạy gate/hook.mjs, không gọi connector', () => {
+    const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
+    const gate = (timeout) => ({ matcher: '^(Bash|PowerShell)$', hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs'], timeout }] });
+    assert.deepEqual(hooks.PreToolUse, [gate(300)]);
+    assert.deepEqual(hooks.PostToolUse[1], gate(30));
+    assert.equal(hooks.PostToolUse.length, 2);
+    const matcher = new RegExp(hooks.PreToolUse[0].matcher);
+    assert.ok(matcher.test('Bash') && matcher.test('PowerShell') && !matcher.test('mcp__x__Bash'));
   });
 
   test('skill dặn luôn bàn giao khi dừng, và mở phiếu góp ý cho Tech Lead', () => {
