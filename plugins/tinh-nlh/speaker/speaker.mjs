@@ -45,7 +45,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.6.1';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Read a little before the saved mark so items recorded during the previous read still arrive; seen ids stop repeats.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -480,9 +480,13 @@ const TOOLS = [
 
 const defaultRun = (claude) => (args, options = {}) =>
   execFileSync(claude, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000, windowsHide: true, ...options });
-const defaultSpawn = (claude) => (args, cwd) =>
+// A session Loa opens is a normal session: without the Loa launcher's variables it neither starts its own Loa nor
+// holds the Loa lock after this Loa closes (22/10: a Review session kept the lock and 12 sends waited 35 minutes).
+export const TOWER_ENV = ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK'];
+export const childEnv = (env = process.env) => Object.fromEntries(Object.entries(env).filter(([key]) => !TOWER_ENV.includes(key)));
+export const defaultSpawn = (claude) => (args, cwd) =>
   new Promise((done) => {
-    execFile(claude, args, { cwd, encoding: 'utf8', timeout: 120_000, windowsHide: true }, (error) => done(!error));
+    execFile(claude, args, { cwd, env: childEnv(), encoding: 'utf8', timeout: 120_000, windowsHide: true }, (error) => done(!error));
   });
 
 export function startServer({
