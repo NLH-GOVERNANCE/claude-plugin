@@ -1,0 +1,9 @@
+[
+{ "id": "junk-file", "kind": "path", "on": ["commit", "push"], "patterns": ["*.tsbuildinfo", ".claude/launch.json", ".claude/settings.local.json"], "message": "File rác trong commit: {path}. Bỏ khỏi commit (git rm --cached) và thêm vào .gitignore.", "source": "lỗi lặp 19–22/10" },
+{ "id": "vietnamese-file-name", "kind": "new-path-non-ascii", "on": ["commit", "push"], "message": "Tên file có chữ Việt có dấu: {path}. Đặt tên tiếng Anh, chữ thường, nối bằng \"-\" (R17).", "source": "lỗi lặp 19–22/10" },
+{ "id": "vietnamese-branch-name", "kind": "branch-non-ascii", "on": ["commit", "push"], "message": "Tên nhánh \"{branch}\" có chữ Việt có dấu. Tạo nhánh tên tiếng Anh từ dev (R17).", "source": "anh Sơn 20/10" },
+{ "id": "test-plan-ci-ticked", "kind": "test-plan-ticked", "on": ["push"], "pattern": "\\bCI\\b|GitHub Actions|\\bchecks?\\b", "message": "Test Plan tick mục chờ CI trước khi CI chạy trên commit mới: \"{item}\". Bỏ tick (gh pr edit), tick lại khi CI xanh.", "source": "api#439, api#438" },
+{ "id": "test-plan-post-merge-ticked", "kind": "test-plan-ticked", "on": ["push"], "pattern": "post-merge|sau (khi )?gộp", "message": "Test Plan tick mục chỉ kiểm được sau gộp: \"{item}\". Để \"- [ ] Post-merge: <lý do>\".", "source": "api#439, api#446" },
+{ "id": "description-commit-count", "kind": "description-commit-count", "on": ["push"], "message": "Mô tả PR ghi {said} commit, sau lần push này PR có {real}. Sửa mô tả (gh pr edit) rồi push.", "source": "anh Sơn 22/10" },
+{ "id": "force-push-open-pr", "kind": "force-push-open-pr", "on": ["push"], "message": "Nhánh đã mở PR #{pr}: không force push (R15). Thêm commit mới thay vì viết lại lịch sử.", "source": "R15, claude-plugin 20/10" }
+]
