@@ -27,14 +27,15 @@ const TEST_TIMEOUT_MS = 240_000;
 const stateDir = process.env.NLH_GATE_DIR || join(homedir(), '.tinh-nlh', 'gate');
 const repeated = JSON.parse(readFileSync(new URL('./repeated-errors.json', import.meta.url), 'utf8'));
 
-function run(file, args, cwd, timeout = 15_000) {
+function run(file, args, timeout = 15_000) {
   try {
-    return execFileSync(file, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, windowsHide: true }).trim();
+    return execFileSync(file, args, { cwd: homedir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, windowsHide: true }).trim();
   } catch {
     return null;
   }
 }
-const git = (cwd, ...args) => run('git', ['-c', 'core.quotepath=off', ...args], cwd);
+// git runs with -C, not in the repo folder: on Windows a git.exe inside the repo would be found before PATH.
+const git = (dir, ...args) => run('git', ['-C', dir, '-c', 'core.quotepath=off', ...args]);
 
 // git diff --name-status -z: status, path (renames and copies: status, old path, new path).
 function nameStatus(cwd, ...args) {
@@ -67,6 +68,8 @@ function writeJson(file, value) {
 }
 
 // gate/rules.mjs of NLH-OS/api: the cached copy while fresh, else a new copy through gh, else the stale copy.
+// It runs as code here, as it does in the PR gate: only from main of NLH-OS/api (reviewed, protected), through the
+// user's own gh sign-in; the ticket asks to read the rules there, never to copy them into the plugin.
 async function loadRules() {
   const file = join(stateDir, 'rules.mjs');
   const age = existsSync(file) ? Date.now() - statSync(file).mtimeMs : Infinity;
@@ -95,7 +98,8 @@ function openPullRequest(repo, branch) {
   }
 }
 
-// The repo's quick tests: `test:fast` in the root package.json. Skipped when this tree already passed.
+// The repo's quick tests: `test:fast` in the root package.json. Skipped when this tree already passed. Only repos of
+// the organisations in scope get here, the same code the user is about to commit and push.
 function quickTests(root, tree) {
   let scripts;
   try {
