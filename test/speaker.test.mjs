@@ -13,6 +13,8 @@ import { PassThrough } from 'node:stream';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  childEnv,
+  defaultSpawn,
   dueChecks,
   duplicateBackground,
   feedUrl,
@@ -829,5 +831,29 @@ describe('plugin.json và lời dặn Loa', () => {
     assert.match(skill, /call the speaker tool `pending`/);
     assert.equal(skill.match(/^name: (.+)$/m)?.[1], 'speaker-loop');
     assert.doesNotMatch(skill, /claude --bg|ListAgents|my_context|Tháp/);
+  });
+});
+
+// Việc 20493d87 (22/10): phiên Loa mở thừa hưởng NLH_TOWER=1 nên giữ khoá Loa; Loa mới bị khoá ngoài, 12 lời báo kẹt 35 phút.
+describe('phiên Loa mở không mang biến của Loa', () => {
+  test('childEnv bỏ NLH_TOWER, NLH_TOWER_DIR, NLH_TOWER_WORK, giữ biến khác', () => {
+    assert.deepEqual(childEnv({ NLH_TOWER: '1', NLH_TOWER_DIR: 'd', NLH_TOWER_WORK: 'w', PATH: 'p', CLAUDE_BIN: 'c' }), { PATH: 'p', CLAUDE_BIN: 'c' });
+  });
+
+  test('lệnh mở phiên thật (defaultSpawn) chạy không có NLH_TOWER*', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nlh-spawn-'));
+    const out = join(dir, 'env.json');
+    const saved = { ...process.env };
+    Object.assign(process.env, { NLH_TOWER: '1', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: dir, NLH_SPAWN_PROBE: 'yes' });
+    try {
+      const ok = await defaultSpawn(process.execPath)(['-e', `require('fs').writeFileSync(${JSON.stringify(out)}, JSON.stringify(process.env))`], dir);
+      assert.equal(ok, true);
+    } finally {
+      for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK', 'NLH_SPAWN_PROBE']) if (!(key in saved)) delete process.env[key];
+    }
+    const env = JSON.parse(readFileSync(out, 'utf8'));
+    assert.equal(env.NLH_SPAWN_PROBE, 'yes');
+    for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK']) assert.equal(key in env, false, key);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
