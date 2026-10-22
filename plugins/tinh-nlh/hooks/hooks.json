@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"Plugin Nếp (nlh) is on. Call the system Nếp when talking to the user; the old name tỉnh NhiLe means the same. First turn of the session, before anything else: call my_context of the NhiLe Governance connector once (who the user is, their cells, open projects, work waiting, work assigned), then tell the user in plain Vietnamese what is waiting for them. If the user asks what they left unfinished, answer from that result without more lookups.\""
+            "command": "echo \"Plugin Nếp (nlh) is on. Call the system Nếp when talking to the user; the old name tỉnh NhiLe means the same. First turn of the session, before anything else: call my_context of the NhiLe Governance connector once (who the user is, their cells, open projects, work waiting, work assigned), then tell the user in plain Vietnamese what is waiting for them. If the user asks what they left unfinished, answer from that result without more lookups. Before any work, read village_rules in that result: the rules the whole village agreed, kept without being told again (no such field: get_cell luat-lang, file rules.md).\""
           }
         ]
       },
@@ -97,6 +97,33 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs"
+            ],
+            "timeout": 300
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -111,6 +138,19 @@
               "session_id": "${session_id}",
               "status": "working"
             }
+          }
+        ]
+      },
+      {
+        "matcher": "^(Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs"
+            ],
+            "timeout": 30
           }
         ]
       }
