@@ -2,7 +2,8 @@
 // của gói: không secret, không bin/, hook không gọi mạng, connector đúng địa chỉ bản chính. Chỉ đọc file.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -71,15 +72,27 @@ describe('plugin nlh', () => {
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
-    assert.deepEqual(Object.keys(hooks).sort(), ['PostToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'UserPromptSubmit']);
+    assert.deepEqual(Object.keys(hooks).sort(), ['PostToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'StopFailure', 'UserPromptSubmit']);
     const byMatcher = Object.fromEntries(hooks.SessionStart.map((group) => [group.matcher, group.hooks]));
     assert.deepEqual(Object.keys(byMatcher).sort(), ['clear|compact', 'startup', 'startup|clear']);
     // Lúc mở phiên, hook mcp_tool bị bỏ qua (máy chủ MCP chưa nối), nên chỉ in lời dặn; echo không gọi mạng.
     assert.equal(byMatcher.startup.length, 1);
     assert.equal(byMatcher.startup[0].type, 'command');
     assert.match(byMatcher.startup[0].command, /^echo "[^"$`]+my_context[^"$`]+"$/);
-    assert.deepEqual(byMatcher['startup|clear'], [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] }]);
+    assert.deepEqual(byMatcher['startup|clear'], [
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] },
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs'] },
+    ]);
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
+    // Mã máy (D-0065 · 5/5): chỉ đọc, ghi tệp mã máy qua speaker.mjs, không gọi mạng.
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/machine.mjs'), 'utf8'), /fetch|https?:|node:/);
+    // Hết hạn mức giữa lượt: báo máy dừng, hub dùng máy của nơi chạy này; việc máy giữ về máy khác cùng dân làng.
+    assert.deepEqual(hooks.StopFailure, [
+      {
+        matcher: 'rate_limit|billing_error',
+        hooks: [{ type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'stopped', machine_stop: 'quota' }, timeout: 10 }],
+      },
+    ]);
     // Sau /clear hay gọn ngữ cảnh: gọi thẳng công cụ, đúng tên máy chủ có phạm vi plugin, không truyền gì thêm.
     const [server] = Object.keys(readJson('plugins/tinh-nlh/.mcp.json').mcpServers);
     assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:nlh:${server}`, tool: 'my_context', timeout: 30 }]);
@@ -163,6 +176,24 @@ describe('plugin nlh', () => {
     assert.match(await run(JSON.stringify({ session_id: 'abc' })), /no name yet/);
     assert.equal(await run(JSON.stringify({ session_id: 'có dấu cách' })), '');
     assert.equal(await run('không phải json'), '');
+  });
+
+  test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nlh-machine-'));
+    const run = () =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/machine.mjs')], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, NLH_MACHINE_DIR: dir } });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end('{}');
+      });
+    const first = await run();
+    const id = readFileSync(join(dir, 'machine-id'), 'utf8').trim();
+    assert.match(id, /^m-[0-9a-f]{32}$/);
+    assert.match(first, new RegExp(`^This machine: id ${id} .*report_session.*status started.*/nlh:handoff.*machine_stop quota or shutdown`));
+    assert.equal(await run(), first, 'lần sau cùng mã');
+    rmSync(dir, { recursive: true, force: true });
   });
 
   test('lan can: không có bin/ (claude.ai từ chối cả gói), không có gì trông như khoá hay token', () => {
