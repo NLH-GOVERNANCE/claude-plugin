@@ -17,6 +17,8 @@
 //   and no @ (it never reported, e.g. it ran before the connector signed in), sent to like a running one;
 // - none of these: the session Loa opened for the cell in the last 10 minutes, else open a new background session
 //   "Ô <cell title> (<person>/<first handle>)".
+// A running interactive session seated at the villager (its name carries "(person/handle)", or it reported the cell)
+// always wins over a background one; a background copy of such a seat is stopped (`claude stop`, ticket 5d66123d).
 // Every delivery writes one ledger row (POST /tower/forwards): entry, ticket, cell, target session, how, ok or failed.
 // Reminders (ticket 6beaa750): an item still in the feed 30 minutes after Loa told its session, and not held by anyone,
 // is told again in one sentence "vẫn chưa ai nhận", at most 3 times, 30 minutes apart, into the same session only (never
@@ -45,7 +47,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.6.1';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Read a little before the saved mark so items recorded during the previous read still arrive; seen ids stop repeats.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -310,7 +312,9 @@ export function reportedSeat(entry, { sessions, cwdOf, reported = [] }) {
   if (!sessions || !Array.isArray(reported)) return null;
   const tags = seatTags(entry);
   if (!tags.length) return null;
-  for (const seat of reported) {
+  // Running seats first, so a background copy that reported the same cell earlier is not resumed over it (5d66123d).
+  const running = (seat) => (findSession(sessions, String(seat?.session_id ?? ''))?.live ? 0 : 1);
+  for (const seat of [...reported].sort((a, b) => running(a) - running(b))) {
     const id = String(seat?.session_id ?? '');
     const seatName = plain(seat?.session_name);
     if (!SESSION_ID.test(id) || seat.status === 'stopped' || !seatName || seatName.includes('@')) continue;
@@ -484,6 +488,27 @@ const defaultSpawn = (claude) => (args, cwd) =>
   new Promise((done) => {
     execFile(claude, args, { cwd, encoding: 'utf8', timeout: 120_000, windowsHide: true }, (error) => done(!error));
   });
+
+// Background sessions that copy a running interactive session seated at the same villager (ticket 5d66123d, 22/10:
+// Danh was asked to sign round 23 twice, 3 seconds apart, by the app session "Dân làng - techlead (son/lead)" and the
+// background "Ô Tech Lead (son/lead)" Loa had opened 14 seconds before it). Seated: the interactive session's name
+// carries a "(person/handle)" tag, or it reported sitting at a cell (the feed's sessions). A background session (not
+// stopped or failed) with the same tag in its name, or that reported the same cell, is a copy. Returns [{ id, name }],
+// id as `claude stop` takes it (the short id `claude agents` lists, else the session id).
+export function duplicateBackground(sessions, reported = []) {
+  const list = Array.isArray(sessions) ? sessions : [];
+  const seats = Array.isArray(reported) ? reported : [];
+  const tagsOf = (value) => String(value ?? '').toLowerCase().match(/\([^()/@\s]+\/[^()/@\s]+\)/g) ?? [];
+  const cellOf = (id) => seats.find((seat) => seat?.session_id === id && seat.status !== 'stopped')?.cell || null;
+  const live = list.filter((session) => session?.kind === 'interactive' && session.pid);
+  const tags = new Set(live.flatMap((session) => tagsOf(session.name)));
+  const cells = new Set(live.map((session) => cellOf(session.sessionId)).filter(Boolean));
+  return list
+    .filter((session) => session?.kind === 'background' && !['stopped', 'failed'].includes(session.state))
+    .filter((session) => tagsOf(session.name).some((tag) => tags.has(tag)) || cells.has(cellOf(session.sessionId)))
+    .map((session) => ({ id: String(session.id || session.sessionId || ''), name: plain(session.name) }))
+    .filter((session) => /^[0-9a-f-]{8,36}$/i.test(session.id));
+}
 
 export function startServer({
   input = process.stdin,
@@ -673,6 +698,22 @@ export function startServer({
     }
   }
 
+  // Stop background copies of a running interactive seat (duplicateBackground), at most once a minute, each id tried
+  // once. Items for that villager then go to the interactive session (route finds it by name or by its report).
+  let lastStop = -Infinity;
+  const stopTried = new Set();
+  async function stopCopies() {
+    if (clock() - lastStop < CHECK_MS) return;
+    lastStop = clock();
+    for (const copy of duplicateBackground(machineSessions(run), reported)) {
+      if (stopTried.has(copy.id)) continue;
+      stopTried.add(copy.id);
+      const ok = await spawnClaude(['stop', copy.id], work);
+      log(`background copy ${ok ? 'stopped' : 'not stopped'}`);
+      if (ok) push(`Đã dừng phiên nền "${copy.name}": dân làng này đã có phiên đang mở trên máy, việc đi vào phiên đó.`, { action: 'stopped', kind: 'stop', cell: '', ticket: '', entry_id: `stop:${copy.id}` });
+    }
+  }
+
   async function tick() {
     const { key, configured } = currentKey();
     const origin = hubOrigin(env.TOWER_ORIGIN);
@@ -699,6 +740,7 @@ export function startServer({
     const data = await response.json().catch(() => null);
     if (!data || !Array.isArray(data.entries)) return log('hub returned unexpected data');
     if (Array.isArray(data.sessions)) reported = data.sessions;
+    await stopCopies();
     const { fresh, state: next } = nextEntries(state, data.entries);
     state = next;
     for (const entry of fresh) await deliver(entry);

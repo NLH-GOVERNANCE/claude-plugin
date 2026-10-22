@@ -14,6 +14,7 @@ import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   dueChecks,
+  duplicateBackground,
   feedUrl,
   findByName,
   findSession,
@@ -231,6 +232,28 @@ describe('hàm thuần của Loa', () => {
     assert.equal(reportedSeat(entry('e', at, seat), { sessions: null, cwdOf: () => 'C:/r', reported }), null);
   });
 
+  test('dân làng có phiên tương tác đang chạy: không mở lại bản nền, bản nền trùng phải dừng (việc 5d66123d, 22/10 Danh bị xin ký hai lần)', () => {
+    const APP = '87c9a692-db78-4d5c-a625-ebb3da60985d';
+    const BG = 'cdf7a861-7c17-4359-bd7d-d41027661c88';
+    const seat = { cell: 'tech-lead-son', cell_title: 'Tech Lead', cell_handles: ['lead'], person_handle: 'son' };
+    const app = { pid: 9, kind: 'interactive', sessionId: APP, name: 'Dân làng - techlead (son/lead)', status: 'idle', cwd: 'C:/g' };
+    const bg = { id: 'cdf7a861', kind: 'background', sessionId: BG, name: 'Ô Tech Lead (son/lead)', state: 'working', cwd: 'C:/t' };
+    const at = '2026-10-22T09:20:00.000Z';
+    // Mục mang mã phiên nền cũ: gửi vào phiên tương tác, không mở lại bản nền.
+    assert.deepEqual(route(entry('a', at, { ...seat, session_id: BG }), { sessions: [app, { ...bg, state: 'done' }], cwdOf: () => 'C:/t' }), { via: 'send', to: 'Dân làng - techlead (son/lead)', sessionId: APP });
+    // Phiên tương tác không mang thẻ trong tên nhưng đã báo ngồi ô: chọn nó trước bản nền đã báo cùng ô.
+    const plainApp = { ...app, name: 'PC Tech Lead notebook' };
+    const reported = [{ session_id: BG, session_name: 'Ô Tech Lead (son/lead)', cell: 'tech-lead-son' }, { session_id: APP, session_name: 'Tech Lead (son/lead)', cell: 'tech-lead-son' }];
+    assert.deepEqual(reportedSeat(entry('b', at, seat), { sessions: [plainApp, { ...bg, state: 'done' }], cwdOf: () => 'C:/t', reported }), { via: 'send', to: 'PC Tech Lead notebook', sessionId: APP });
+    // Bản nền trùng: theo thẻ trong tên, hay theo ô đã báo; phiên nền đã dừng, hỏng hay của dân làng khác thì không đụng.
+    const cto = { id: 'c888341b', kind: 'background', sessionId: 'c888341b-61b2-458c-b314-f9814ef386c5', name: 'Ô CTO (son/cto)', state: 'working' };
+    assert.deepEqual(duplicateBackground([app, bg, cto, { ...bg, id: 'e0f164f2', state: 'stopped' }, { ...bg, id: '3eea1398', state: 'failed' }]), [{ id: 'cdf7a861', name: 'Ô Tech Lead (son/lead)' }]);
+    assert.deepEqual(duplicateBackground([plainApp, { ...bg, name: 'Ô Tech Lead' }], reported), [{ id: 'cdf7a861', name: 'Ô Tech Lead' }]);
+    // Không có phiên tương tác đang chạy (đã đóng: không pid), hay danh sách máy không đọc được: không dừng gì.
+    assert.deepEqual(duplicateBackground([{ ...app, pid: undefined }, bg]), []);
+    assert.deepEqual(duplicateBackground(null, reported), []);
+  });
+
   test('mã máy (D-0065 · 5/5): ngẫu nhiên, sinh một lần rồi giữ nguyên; tệp hỏng thì sinh lại; luồng việc gửi kèm mã máy', () => {
     const dir = temp('machine');
     const id = machineId(dir, () => 'a'.repeat(32));
@@ -401,6 +424,25 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['resume', false], ['new', false]]);
     assert.equal(loa.pushed().at(-1).meta.action, 'failed');
     assert.match(loa.pushed().at(-1).content, /^Chưa mở được phiên cho ô cto\./);
+    loa.close();
+  });
+
+  test('bản nền trùng phiên tương tác của dân làng: Loa dừng nó một lần, báo một câu, việc đi vào phiên tương tác (việc 5d66123d)', async () => {
+    const seat = { cell: 'tech-lead-son', cell_title: 'Tech Lead', cell_handles: ['lead'], person_handle: 'son', session_id: 'cdf7a861-7c17-4359-bd7d-d41027661c88' };
+    const loa = inProcess({
+      feed: () => [entry('your_turn:t:23', at, { ...seat, kind: 'your_turn' })],
+      sessions: [
+        { pid: 9, kind: 'interactive', sessionId: '87c9a692-db78-4d5c-a625-ebb3da60985d', name: 'Dân làng - techlead (son/lead)' },
+        { id: 'cdf7a861', kind: 'background', sessionId: 'cdf7a861-7c17-4359-bd7d-d41027661c88', name: 'Ô Tech Lead (son/lead)', state: 'working' },
+      ],
+      cwdOf: () => 'C:/t',
+    });
+    await loa.server.tick();
+    assert.deepEqual(loa.spawned, [{ args: ['stop', 'cdf7a861'], cwd: 'C:\\TinhNhiLe' }], 'chỉ dừng bản nền, không mở lại, không mở mới');
+    assert.equal(loa.pushed()[0].meta.action, 'stopped');
+    assert.deepEqual([loa.pushed().at(-1).meta.action, loa.pushed().at(-1).meta.to], ['send', 'Dân làng - techlead (son/lead)']);
+    await loa.server.tick();
+    assert.equal(loa.spawned.length, 1, 'không dừng lại lần hai');
     loa.close();
   });
 
@@ -782,7 +824,7 @@ describe('plugin.json và lời dặn Loa', () => {
 
   test('Loa chỉ gửi đúng câu tới đúng tên server đã tra, rồi ghi forwarded; không tự mở phiên, không đọc nội dung phiếu', () => {
     assert.match(skill, /`action` `send`: `SendMessage` with `to` exactly as the attribute .* and the message text exactly as received, nothing added\. Then call the speaker tool `forwarded`/);
-    assert.match(skill, /Loa does not open or resume sessions itself and runs no `claude` commands/);
+    assert.match(skill, /Loa does not open, resume or stop sessions itself and runs no `claude` commands/);
     assert.match(skill, /Loa never reads or copies ticket content \(D-0009\)/);
     assert.match(skill, /call the speaker tool `pending`/);
     assert.equal(skill.match(/^name: (.+)$/m)?.[1], 'speaker-loop');
