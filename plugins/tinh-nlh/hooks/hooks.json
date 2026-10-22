@@ -111,6 +111,21 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs"
+            ],
+            "timeout": 300
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "^mcp__plugin_nlh_nhile-governance__(?!my_context$)",
@@ -123,6 +138,19 @@
               "session_id": "${session_id}",
               "status": "working"
             }
+          }
+        ]
+      },
+      {
+        "matcher": "^(Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs"
+            ],
+            "timeout": 30
           }
         ]
       }
