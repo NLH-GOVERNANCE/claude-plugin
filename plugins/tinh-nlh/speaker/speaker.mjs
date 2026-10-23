@@ -186,7 +186,10 @@ export const taken = (entry) => Boolean(entry?.held_by || entry?.claimed_by || e
 // already took it, or the person asked has signed (a signed sign request comes as your_turn). It is told once, never
 // reminded (22/10: CTO reminded 3 times for work Tech Lead had claimed, Tech Lead for work Build had claimed and for a
 // sign request Danh had signed).
-export const REMIND_KINDS = ['your_cell', 'mention'];
+// A call in a group (mention) is told once and never reminded (ticket 54f15062, 23/10): one reply by three people made
+// three mention entries for the same ticket, each reminded on its own, and a mention carries no claim mark once another
+// machine took the ticket. The ticket itself (your_cell) keeps its reminder.
+export const REMIND_KINDS = ['your_cell'];
 export const remindable = (entry) => REMIND_KINDS.includes(entry?.kind) && !taken(entry);
 
 // A line the receiving villager wrote itself (ticket 6beaa750, CTO 21/10): new work it opened for its own cell. An
@@ -742,12 +745,15 @@ export function startServer({
       state.held = state.held.filter((other) => other !== item);
       await deliver(present.get(item.entry_id), { told: item });
     }
+    // One reminder per ticket per round, not per entry (ticket 54f15062): entries of the same ticket still count up.
+    const remindedTickets = new Set();
     for (const item of due.told.filter((other) => present.has(other.entry_id) && remindable(present.get(other.entry_id)))) {
       if (item.reminders >= REMIND_MAX) {
         state.told = state.told.filter((other) => other !== item);
         continue;
       }
-      await deliver(present.get(item.entry_id), { reminder: item.reminders + 1, told: item });
+      if (!(item.ticket && remindedTickets.has(item.ticket))) await deliver(present.get(item.entry_id), { reminder: item.reminders + 1, told: item });
+      if (item.ticket) remindedTickets.add(item.ticket);
       // Not delivered (no session to remind): count it anyway, so the next try is 30 minutes later, not every minute.
       state.told = state.told.map((other) => (other === item ? { ...item, told_at: now, reminders: item.reminders + 1 } : other));
     }
