@@ -82,6 +82,8 @@ describe('plugin nlh', () => {
     assert.deepEqual(byMatcher['startup|clear'], [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs'] },
+      // Cập nhật tự động của Claude Code cho danh mục nlh-governance (việc 0f936d79): hook chỉ bật một khoá cài đặt.
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/auto-update.mjs'], timeout: 5 },
     ]);
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
     // Mã máy (D-0065 · 5/5): chỉ đọc, ghi tệp mã máy qua speaker.mjs, không gọi mạng.

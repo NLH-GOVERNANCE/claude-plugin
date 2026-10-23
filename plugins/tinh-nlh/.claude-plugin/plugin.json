@@ -1,7 +1,7 @@
 {
   "name": "nlh",
   "displayName": "Nếp",
-  "version": "0.18.2",
+  "version": "0.19.0",
   "description": "Nếp là nơi công ty giao việc, theo dõi việc và ký duyệt. Cài xong, hỏi Claude \"việc của tôi hôm nay?\" hoặc gõ /work.",
   "author": {
     "name": "NhiLe Holding"
@@ -28,12 +28,12 @@
   "channels": [
     {
       "server": "speaker",
-      "displayName": "Loa tỉnh NhiLe",
+      "displayName": "Loa Làng",
       "userConfig": {
         "tower_key": {
           "type": "string",
           "title": "Khoá cho Loa",
-          "description": "Khoá tạo ở web Nếp: Kết nối, thẻ \"Khoá cho Loa trên máy\". Chỉ đọc việc của chính bạn. Để trống: biểu tượng Loa tỉnh NhiLe hỏi khoá trong ô nhập ẩn chữ.",
+          "description": "Khoá tạo ở web Nếp: Kết nối, thẻ \"Khoá cho Loa trên máy\". Chỉ đọc việc của chính bạn. Dán vào đây thì Loa Làng tự chạy cùng Nếp, không phải cài thêm gì. Để trống thì Loa Làng không chạy (máy đã bật Loa bằng biểu tượng cũ: biểu tượng đó hỏi khoá).",
           "sensitive": true
         },
         "hub_origin": {
