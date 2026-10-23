@@ -844,7 +844,7 @@ describe('server Loa chạy thật qua stdio', () => {
     const noKey = open(temp('loa-state'), { TOWER_KEY: '' });
     await until(() => noKey.pushed().length >= 1);
     assert.match(noKey.pushed()[0].content, /^Loa chưa có khoá\./);
-    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
+    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
     assert.equal(requests.length, 0);
     await noKey.close();
 
@@ -877,7 +877,7 @@ describe('plugin.json và lời dặn Loa', () => {
   test('kênh gắn server speaker, tên hiển thị Loa; khoá là cấu hình nhạy cảm, không nằm trong repo', () => {
     const [channel] = manifest.channels;
     assert.equal(channel.server, 'speaker');
-    assert.equal(channel.displayName, 'Loa Làng');
+    assert.equal(channel.displayName, 'Loa tỉnh NhiLe');
     assert.equal(channel.userConfig.tower_key.sensitive, true);
     assert.equal(channel.userConfig.tower_key.default, undefined);
     assert.doesNotMatch(JSON.stringify(manifest), /Tháp/);
@@ -900,24 +900,24 @@ describe('plugin.json và lời dặn Loa', () => {
 
 // Việc 20493d87 (22/10): phiên Loa mở thừa hưởng NLH_TOWER=1 nên giữ khoá Loa; Loa mới bị khoá ngoài, 12 lời báo kẹt 35 phút.
 describe('phiên Loa mở không mang biến của Loa', () => {
-  test('childEnv bỏ NLH_TOWER, NLH_TOWER_DIR, NLH_TOWER_WORK, NLH_LOA và khoá Loa (TOWER_KEY, TOWER_KEY_FILE), giữ biến khác', () => {
-    assert.deepEqual(childEnv({ NLH_TOWER: '1', NLH_TOWER_DIR: 'd', NLH_TOWER_WORK: 'w', NLH_LOA: 'monitor', TOWER_KEY: KEY, TOWER_KEY_FILE: 'f', PATH: 'p', CLAUDE_BIN: 'c' }), { PATH: 'p', CLAUDE_BIN: 'c' });
+  test('childEnv bỏ NLH_TOWER, NLH_TOWER_DIR, NLH_TOWER_WORK, giữ biến khác', () => {
+    assert.deepEqual(childEnv({ NLH_TOWER: '1', NLH_TOWER_DIR: 'd', NLH_TOWER_WORK: 'w', PATH: 'p', CLAUDE_BIN: 'c' }), { PATH: 'p', CLAUDE_BIN: 'c' });
   });
 
   test('lệnh mở phiên thật (defaultSpawn) chạy không có NLH_TOWER*', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nlh-spawn-'));
     const out = join(dir, 'env.json');
     const saved = { ...process.env };
-    Object.assign(process.env, { NLH_TOWER: '1', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: dir, TOWER_KEY: KEY, TOWER_KEY_FILE: 'f', NLH_SPAWN_PROBE: 'yes' });
+    Object.assign(process.env, { NLH_TOWER: '1', NLH_TOWER_DIR: dir, NLH_TOWER_WORK: dir, NLH_SPAWN_PROBE: 'yes' });
     try {
       const ok = await defaultSpawn(process.execPath)(['-e', `require('fs').writeFileSync(${JSON.stringify(out)}, JSON.stringify(process.env))`], dir);
       assert.equal(ok, true);
     } finally {
-      for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK', 'TOWER_KEY', 'TOWER_KEY_FILE', 'NLH_SPAWN_PROBE']) if (!(key in saved)) delete process.env[key];
+      for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK', 'NLH_SPAWN_PROBE']) if (!(key in saved)) delete process.env[key];
     }
     const env = JSON.parse(readFileSync(out, 'utf8'));
     assert.equal(env.NLH_SPAWN_PROBE, 'yes');
-    for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK', 'TOWER_KEY', 'TOWER_KEY_FILE']) assert.equal(key in env, false, key);
+    for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK']) assert.equal(key in env, false, key);
     rmSync(dir, { recursive: true, force: true });
   });
 });
