@@ -1,0 +1,8 @@
+[
+  {
+    "name": "loa",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}/speaker/watch.mjs\"",
+    "description": "Loa Làng: việc cần báo tới các phiên",
+    "when": "on-skill-invoke:nlh:speaker-loop"
+  }
+]
