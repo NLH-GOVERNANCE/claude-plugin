@@ -29,6 +29,7 @@ import {
   machineSessions,
   nextEntries,
   ownLine,
+  remindable,
   plain,
   reportedSeat,
   REMIND_MAX,
@@ -589,6 +590,69 @@ describe('Loa nhắc lại việc chưa ai nhận', () => {
     await loa.server.tick();
     assert.equal(sends(loa).length, 2);
     loa.close();
+  });
+
+  // Việc c65f35ed, ca thật 22/10 tối: CTO mở việc cho Tech Lead, Tech Lead nhận rồi ghi; Tech Lead mở việc cho Build,
+  // Build PC nhận rồi ghi; Tech Lead xin Danh ký, Danh ký. Cả ba tới dân làng đã hỏi (from_cell) dưới dạng your_turn.
+  test('câu trả lời và chữ ký đã có tới dân làng đã hỏi: báo một lần, không nhắc "chưa ai nhận"; việc có người nhận thì thôi nhắc', async () => {
+    const time = fakeClock();
+    const cto = [{ pid: 7, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto)' }];
+    const feed = [
+      entry('your_turn:lead-claimed:a', at, { kind: 'your_turn', session_id: LIVE, from_cell: 'cto' }),
+      entry('your_turn:build-claimed:b', at, { kind: 'your_turn', session_id: LIVE, cell: 'lead', from_cell: 'lead' }),
+      entry('your_turn:danh-signed:c', at, { kind: 'your_turn', session_id: LIVE, cell: 'lead', from_cell: 'lead' }),
+      entry('your_cell:claimed:d', at, { session_id: LIVE, claimed: true }),
+    ];
+    const loa = inProcess({ feed: () => feed, sessions: cto, clock: time.clock });
+    await loa.server.tick();
+    assert.deepEqual(sends(loa).map((event) => event.meta.entry_id), ['your_turn:lead-claimed:a', 'your_turn:build-claimed:b', 'your_turn:danh-signed:c'], 'việc đã có người nhận không báo');
+    assert.deepEqual(state(loa).told, [], 'câu trả lời không vào hàng nhắc');
+    for (let step = 0; step < 4; step += 1) {
+      time.pass(31 * MIN);
+      await loa.server.tick();
+    }
+    assert.equal(sends(loa).length, 3, 'không lần nhắc nào');
+    assert.ok(!loa.pushed().some((event) => /chưa ai nhận/.test(event.content)));
+    assert.ok(remindable(entry('a', at)) && !remindable(entry('a', at, { kind: 'mention' })), 'lời gọi trong nhóm báo một lần, không nhắc lại (54f15062)');
+    assert.ok(!remindable(entry('a', at, { kind: 'your_turn' })) && !remindable(entry('a', at, { kind: 'plan_signed' })) && !remindable(entry('a', at, { claimed: true })));
+    loa.close();
+  });
+
+  test('ba lời gọi (mention) cùng một việc: báo, không nhắc lại sau 30 phút (54f15062)', async () => {
+    const time = fakeClock();
+    const feed = ['a', 'b', 'c'].map((who) => entry(`mention:t:${who}`, at, { kind: 'mention', session_id: LIVE }));
+    const loa = inProcess({ feed: () => feed, sessions: live, clock: time.clock });
+    await loa.server.tick();
+    let id = 2;
+    for (const event of sends(loa)) await loa.call(id++, 'forwarded', { entry_id: event.meta.entry_id, ok: true });
+    const first = sends(loa).length;
+    for (let step = 0; step < 3; step += 1) {
+      time.pass(31 * MIN);
+      await loa.server.tick();
+    }
+    assert.equal(sends(loa).length, first, 'không lần nhắc nào');
+    assert.ok(!sends(loa).some((event) => event.meta.entry_id.startsWith('remind')));
+    loa.close();
+  });
+
+  test('hai mục của cùng một việc chưa ai nhận: mỗi vòng chỉ một lời nhắc (54f15062)', async () => {
+    const time = fakeClock();
+    const feed = [entry('your_cell:t:a', at, { session_id: LIVE }), entry('your_cell:t:b', at, { session_id: LIVE })];
+    const loa = inProcess({ feed: () => feed, sessions: live, clock: time.clock });
+    await loa.server.tick();
+    let id = 2;
+    for (const event of sends(loa)) await loa.call(id++, 'forwarded', { entry_id: event.meta.entry_id, ok: true });
+    time.pass(31 * MIN);
+    await loa.server.tick();
+    const reminders = sends(loa).filter((event) => event.meta.entry_id.startsWith('remind'));
+    assert.equal(reminders.length, 1, 'một việc, một lời nhắc');
+    loa.close();
+  });
+
+  test('Loa cũ đã ghi câu trả lời vào hàng nhắc (tower-state.json): không nhắc nó', () => {
+    const now = Date.parse(at) + 31 * MIN;
+    const told = [{ entry_id: 'your_turn:t', kind: 'your_turn', at, told_at: Date.parse(at), reminders: 0 }, { entry_id: 'your_cell:t', kind: 'your_cell', at, told_at: Date.parse(at), reminders: 0 }];
+    assert.deepEqual(dueChecks({ held: [], told, pending: [] }, now).told.map((item) => item.entry_id), ['your_cell:t']);
   });
 
   test('nhắc không mở phiên mới: vào đúng phiên Loa đã mở cho dân làng đó; việc chờ chính người dùng không nhắc', async () => {

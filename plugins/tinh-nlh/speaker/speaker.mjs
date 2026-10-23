@@ -20,8 +20,8 @@
 // A running interactive session seated at the villager (its name carries "(person/handle)", or it reported the cell)
 // always wins over a background one; a background copy of such a seat is stopped (`claude stop`, ticket 5d66123d).
 // Every delivery writes one ledger row (POST /tower/forwards): entry, ticket, cell, target session, how, ok or failed.
-// Reminders (ticket 6beaa750): an item still in the feed 30 minutes after Loa told its session, and not held by anyone,
-// is told again in one sentence "vẫn chưa ai nhận", at most 3 times, 30 minutes apart, into the same session only (never
+// Reminders (ticket 6beaa750): new work or a group call (never an answer, c65f35ed) still in the feed 30 minutes after
+// Loa told its session, and not held by anyone, is told again in one sentence "vẫn chưa ai nhận", at most 3 times, 30 minutes apart, into the same session only (never
 // a new one, never a group or a person); each reminder writes its own row with entry_id "remind<n>:<entry id>". An item
 // gone from the feed (claimed, answered, closed) is never reminded. An answer (your_turn) waits 2 minutes and goes out
 // only if it is still in the feed, so a villager that writes its own answer and closes the ticket is not told about it.
@@ -47,7 +47,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.6.1';
+export const VERSION = '0.6.2';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Read a little before the saved mark so items recorded during the previous read still arrive; seen ids stop repeats.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -167,6 +167,18 @@ export function reminderSentence(entry, count) {
 // Someone holds the item (the hub may add held_by or claimed to an entry): not waiting, no reminder.
 export const taken = (entry) => Boolean(entry?.held_by || entry?.claimed_by || entry?.claimed === true || entry?.held === true);
 
+// "Vẫn chưa ai nhận" (ticket c65f35ed, 22/10): only new work for a cell (your_cell) and a call in a group (mention) wait
+// for a claim, and the hub puts them on the cell that holds the work; claimed, they leave the feed. An answer
+// (your_turn, plan_signed) goes to the villager that asked (from_cell), not to the cell holding the work: someone
+// already took it, or the person asked has signed (a signed sign request comes as your_turn). It is told once, never
+// reminded (22/10: CTO reminded 3 times for work Tech Lead had claimed, Tech Lead for work Build had claimed and for a
+// sign request Danh had signed).
+// A call in a group (mention) is told once and never reminded (ticket 54f15062, 23/10): one reply by three people made
+// three mention entries for the same ticket, each reminded on its own, and a mention carries no claim mark once another
+// machine took the ticket. The ticket itself (your_cell) keeps its reminder.
+export const REMIND_KINDS = ['your_cell'];
+export const remindable = (entry) => REMIND_KINDS.includes(entry?.kind) && !taken(entry);
+
 // A line the receiving villager wrote itself (ticket 6beaa750, CTO 21/10): new work it opened for its own cell. An
 // answer (your_turn) carries from_cell of the villager that asked, not of who wrote the latest line, so it is not judged
 // here; it waits CONFIRM_MS and goes out only while still in the feed.
@@ -176,7 +188,7 @@ export const ownLine = (entry) => entry?.kind === 'your_cell' && Boolean(name(en
 // carries the feed entry id it checks and its time (at), so one feed read from the oldest covers them all.
 export function dueChecks(state, now, confirmMs = CONFIRM_MS) {
   const held = (state.held ?? []).filter((item) => now - item.held_at >= confirmMs);
-  const told = (state.told ?? []).filter((item) => now - item.told_at >= REMIND_MS);
+  const told = (state.told ?? []).filter((item) => REMIND_KINDS.includes(item.kind) && now - item.told_at >= REMIND_MS);
   const pending = (state.pending ?? []).filter((item) => item.base_id && item.at && now - (item.queued_at ?? 0) >= Math.max(confirmMs, CHECK_MS));
   const times = [...held, ...told, ...pending].map((item) => Date.parse(item.at)).filter((at) => !Number.isNaN(at));
   return { held, told, pending, since: times.length ? new Date(Math.min(...times) - 1).toISOString() : null };
@@ -581,7 +593,7 @@ export function startServer({
   // Remember what was told, for the reminders. A reminder updates the same row.
   const remember = (entry, item, to, reminder) => {
     const at = typeof entry.at === 'string' ? entry.at : null;
-    if (!at || !item.base_id) return;
+    if (!at || !item.base_id || !REMIND_KINDS.includes(item.kind)) return;
     const before = state.told.find((other) => other.entry_id === item.base_id);
     const row = { entry_id: item.base_id, kind: item.kind, ticket: item.ticket, cell: item.cell, at, told_at: clock(), reminders: reminder || 0, to: to || before?.to || null };
     state.told = [...state.told.filter((other) => other.entry_id !== item.base_id), row];
@@ -691,12 +703,15 @@ export function startServer({
       state.held = state.held.filter((other) => other !== item);
       await deliver(present.get(item.entry_id), { told: item });
     }
-    for (const item of due.told.filter((other) => waiting(other.entry_id))) {
+    // One reminder per ticket per round, not per entry (ticket 54f15062): entries of the same ticket still count up.
+    const remindedTickets = new Set();
+    for (const item of due.told.filter((other) => present.has(other.entry_id) && remindable(present.get(other.entry_id)))) {
       if (item.reminders >= REMIND_MAX) {
         state.told = state.told.filter((other) => other !== item);
         continue;
       }
-      await deliver(present.get(item.entry_id), { reminder: item.reminders + 1, told: item });
+      if (!(item.ticket && remindedTickets.has(item.ticket))) await deliver(present.get(item.entry_id), { reminder: item.reminders + 1, told: item });
+      if (item.ticket) remindedTickets.add(item.ticket);
       // Not delivered (no session to remind): count it anyway, so the next try is 30 minutes later, not every minute.
       state.told = state.told.map((other) => (other === item ? { ...item, told_at: now, reminders: item.reminders + 1 } : other));
     }
