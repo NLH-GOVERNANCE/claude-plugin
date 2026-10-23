@@ -1,4 +1,4 @@
-﻿# Loa tỉnh NhiLe on Windows. The "Loa tỉnh NhiLe" desktop shortcut (made by the "bật Loa" command, setup.ps1) opens
+﻿# Loa Làng on Windows (named Loa tỉnh NhiLe before 23/10). The "Loa tỉnh NhiLe" desktop shortcut (made by the "bật Loa" command, setup.ps1) opens
 # this file from the copy in ~\.tinh-nlh\speaker, so a plugin installed from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
 # hash checked); ask for the key in a hidden prompt if none is saved (DPAPI); then open Claude Code on Sonnet as Loa.
@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-$Host.UI.RawUI.WindowTitle = 'Loa tỉnh NhiLe'
+$Host.UI.RawUI.WindowTitle = 'Loa Làng'
 
 function Stop-Loa([string]$text) {
   Write-Host ''
@@ -155,7 +155,7 @@ if (-not (Test-Path -LiteralPath $opened)) {
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/loop 10m /nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
+$arguments = @('/loop 10m /nlh:speaker-loop', '-n', 'Loa Làng', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
 # Fallback without the dev channel flag: the server still reads the hub, resumes and opens sessions; only sends wait
 # for the 10-minute loop.
 $fallback = $arguments[0..($arguments.Count - 3)]

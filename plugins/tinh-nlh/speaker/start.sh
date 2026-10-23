@@ -1,5 +1,5 @@
 #!/bin/bash
-# Loa tỉnh NhiLe on macOS. The "Loa tỉnh NhiLe.command" desktop file (made by the "bật Loa" command, setup.sh) opens
+# Loa Làng on macOS (named Loa tỉnh NhiLe before 23/10). The "Loa tỉnh NhiLe.command" desktop file (made by the "bật Loa" command, setup.sh) opens
 # this file from the copy in ~/.tinh-nlh/speaker, so a plugin installed from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
 # hash checked); ask for the key in a hidden prompt if none is saved (Keychain); then open Claude Code on Sonnet as Loa.
@@ -27,7 +27,7 @@ newer() {
   [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)" = "$1" ]
 }
 
-printf '\033]0;Loa tỉnh NhiLe\007'
+printf '\033]0;Loa Làng\007'
 mkdir -p "$DIR"
 
 # 1. Newest Loa from the installed plugin (the plugin updates itself). Copy over the one in $DIR, used from this launch.
@@ -138,7 +138,7 @@ if [ ! -f "$DIR/opened.txt" ]; then
 fi
 echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 echo ''
-set -- '/loop 10m /nlh:speaker-loop' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+set -- '/loop 10m /nlh:speaker-loop' -n 'Loa Làng' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"

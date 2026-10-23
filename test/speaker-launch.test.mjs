@@ -40,15 +40,17 @@ function fakeHome(name = 'user') {
 }
 
 // Hai lối mở cùng mở Claude một cách: câu mở đầu trước, Sonnet, kênh tower qua --mcp-config, cờ dev chỉ cho server:tower.
-const CLAUDE_ARGS = ['/loop 10m /nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
+const CLAUDE_ARGS = ['/loop 10m /nlh:speaker-loop', '-n', 'Loa Làng', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
 
 describe('lệnh "bật Loa" và các file của lối mở', () => {
   test('lệnh /nlh:speaker chạy đúng file setup có trong plugin, theo hệ điều hành; không hỏi khoá trong chat', () => {
     const command = read('commands/speaker.md');
     assert.match(command, /"bật Loa"/);
-    assert.match(command, /biểu tượng \*\*Loa tỉnh NhiLe\*\*/);
+    // Loa Làng tự chạy cùng plugin: lệnh chạy loa.mjs ensure trước; script cài biểu tượng chỉ còn cho máy cũ khi người dùng đòi.
+    assert.match(command, /Loa Làng starts by itself with the plugin/);
+    assert.match(command, /Old machines: only when the user asks for the old desktop icon "Loa tỉnh NhiLe"/);
     const paths = [...command.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/([\w./-]+)/g)].map((match) => match[1]);
-    assert.deepEqual(paths, ['speaker/setup.ps1', 'speaker/setup.sh']);
+    assert.deepEqual(paths, ['speaker/loa.mjs', 'speaker/setup.ps1', 'speaker/setup.sh']);
     for (const path of paths) assert.ok(existsSync(join(plugin, path)), path);
     assert.match(command, /Never ask for the key, never accept it in chat/);
   });

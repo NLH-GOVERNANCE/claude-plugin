@@ -813,7 +813,7 @@ describe('server Loa chạy thật qua stdio', () => {
     const noKey = open(temp('loa-state'), { TOWER_KEY: '' });
     await until(() => noKey.pushed().length >= 1);
     assert.match(noKey.pushed()[0].content, /^Loa chưa có khoá\./);
-    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
+    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa Làng: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
     assert.equal(requests.length, 0);
     await noKey.close();
 
@@ -846,7 +846,7 @@ describe('plugin.json và lời dặn Loa', () => {
   test('kênh gắn server speaker, tên hiển thị Loa; khoá là cấu hình nhạy cảm, không nằm trong repo', () => {
     const [channel] = manifest.channels;
     assert.equal(channel.server, 'speaker');
-    assert.equal(channel.displayName, 'Loa tỉnh NhiLe');
+    assert.equal(channel.displayName, 'Loa Làng');
     assert.equal(channel.userConfig.tower_key.sensitive, true);
     assert.equal(channel.userConfig.tower_key.default, undefined);
     assert.doesNotMatch(JSON.stringify(manifest), /Tháp/);

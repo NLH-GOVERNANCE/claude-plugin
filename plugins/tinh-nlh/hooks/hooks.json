@@ -26,6 +26,14 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs"
             ]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/auto-update.mjs"
+            ],
+            "timeout": 5
           }
         ]
       },
