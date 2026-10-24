@@ -183,7 +183,8 @@ export function gateVerdict({ status, signal, error, stdout } = {}, { records = 
 // silent. EVERY fetch and push url of origin must be on the allow list (one stranger and nothing is pushed), and there
 // must be exactly one of each: git pushes to all push urls, and only one was checked.
 export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteUrls = [], pushUrls = [], transportKeys = [], remoteUnreadable = false, names = [], patch = '', scanFailed = false }) {
-  if (String(env.NLH_AUTOPUSH ?? '').trim() === '0') return { push: false, reason: 'off' };
+  // Off unless the machine asks for it: NLH_AUTOPUSH must be exactly "1" (missing, "0", "true", "yes", "" and anything else: off).
+  if (env.NLH_AUTOPUSH !== '1') return { push: false, reason: 'off' };
   if (!isCommit) return { push: false, reason: 'not-a-commit' };
   if (isProtectedBranch(branch)) return { push: false, reason: 'protected-branch' };
   if (!SHA.test(String(sha ?? ''))) return { push: false, reason: 'no-commit' };
