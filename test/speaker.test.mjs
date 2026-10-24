@@ -615,6 +615,11 @@ describe('Loa nhắc lại việc chưa ai nhận', () => {
     assert.ok(!loa.pushed().some((event) => /chưa ai nhận/.test(event.content)));
     assert.ok(remindable(entry('a', at)) && !remindable(entry('a', at, { kind: 'mention' })), 'lời gọi trong nhóm báo một lần, không nhắc lại (54f15062)');
     assert.ok(!remindable(entry('a', at, { kind: 'your_turn' })) && !remindable(entry('a', at, { kind: 'plan_signed' })) && !remindable(entry('a', at, { claimed: true })));
+    // Việc để chờ (91d7c954): hold_until ngày mai thì hôm nay không nhắc; mốc đã qua thì nhắc như cũ; chờ việc hay người thì không nhắc.
+    const now = Date.parse('2026-10-24T09:00:00Z');
+    assert.ok(!remindable(entry('a', at, { hold_until: '2026-10-25T09:00:00Z' }), now), 'chờ tới mai');
+    assert.ok(remindable(entry('a', at, { hold_until: '2026-10-24T08:00:00Z' }), now), 'mốc đã qua');
+    assert.ok(!remindable(entry('a', at, { waiting_on: 'Danh' }), now), 'đang chờ người');
     loa.close();
   });
 

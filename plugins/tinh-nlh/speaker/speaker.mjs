@@ -177,7 +177,10 @@ export const taken = (entry) => Boolean(entry?.held_by || entry?.claimed_by || e
 // three mention entries for the same ticket, each reminded on its own, and a mention carries no claim mark once another
 // machine took the ticket. The ticket itself (your_cell) keeps its reminder.
 export const REMIND_KINDS = ['your_cell'];
-export const remindable = (entry) => REMIND_KINDS.includes(entry?.kind) && !taken(entry);
+// Việc đang để chờ (ticket 91d7c954): dòng nhận ghi hold_until (giờ) hay waiting_on (việc, người). Hub giữ quyền giữ tới
+// mốc đó nên việc thường không vào feed; feed nào còn mang hai trường này thì cũng không nhắc tới mốc.
+export const parked = (entry, now = Date.now()) => Boolean(entry?.waiting_on) || Date.parse(entry?.hold_until ?? '') > now;
+export const remindable = (entry, now = Date.now()) => REMIND_KINDS.includes(entry?.kind) && !taken(entry) && !parked(entry, now);
 
 // A line the receiving villager wrote itself (ticket 6beaa750, CTO 21/10): new work it opened for its own cell. An
 // answer (your_turn) carries from_cell of the villager that asked, not of who wrote the latest line, so it is not judged
@@ -705,7 +708,7 @@ export function startServer({
     }
     // One reminder per ticket per round, not per entry (ticket 54f15062): entries of the same ticket still count up.
     const remindedTickets = new Set();
-    for (const item of due.told.filter((other) => present.has(other.entry_id) && remindable(present.get(other.entry_id)))) {
+    for (const item of due.told.filter((other) => present.has(other.entry_id) && remindable(present.get(other.entry_id), clock()))) {
       if (item.reminders >= REMIND_MAX) {
         state.told = state.told.filter((other) => other !== item);
         continue;
