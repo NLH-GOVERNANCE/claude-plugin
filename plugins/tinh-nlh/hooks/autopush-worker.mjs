@@ -4,15 +4,17 @@
 // in autopush.log per try; a network error or a refusal is not retried here, the next commit pushes the branch again.
 // Never a force push. Always exits 0.
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gateCommand, redact, runAutoPush } from './autopush.mjs';
+import { gateCommand, gateVerdict, redact, runAutoPush } from './autopush.mjs';
 import { pushFacts, repoFacts } from './autopush-git.mjs';
 
 const dir = process.env.NLH_AUTOPUSH_DIR || join(homedir(), '.tinh-nlh', 'autopush');
 const gateHook = fileURLToPath(new URL('../gate/hook.mjs', import.meta.url));
+const gateDir = process.env.NLH_GATE_DIR || join(homedir(), '.tinh-nlh', 'gate');
 const LOCK_TTL_MS = 5 * 60 * 1000;
 const LOG_MAX = 100 * 1024;
 
@@ -31,16 +33,30 @@ function log(line) {
   }
 }
 
-// The gate, as for a push typed by hand, about exactly the checked commit. A deny stops the push; the gate failing
-// itself lets it run, as the gate does.
-function gate(facts) {
+// The gate (gate/hook.mjs, unchanged), as for a push typed by hand, about exactly the checked commit. It gets a tool_use_id
+// of its own, so for a push it lets through it writes push-<id>.json: the proof that it checked this commit with its rules
+// (see gateVerdict). The record is read and removed here. Silence or a missing record is not a yes.
+function gate(facts, decision) {
+  const id = `nlh_autopush_${randomBytes(8).toString('hex')}`;
   const result = spawnSync(process.execPath, [gateHook], {
-    input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', cwd: facts.root, tool_input: { command: gateCommand(facts.sha, facts.branch) } }),
+    input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: id, cwd: facts.root, tool_input: { command: gateCommand(facts.sha, facts.branch) } }),
     encoding: 'utf8',
     timeout: 280_000,
     windowsHide: true,
   });
-  return { denied: /"permissionDecision":\s*"deny"/.test(result.stdout ?? '') };
+  const file = join(gateDir, `push-${id}.json`);
+  let records = null;
+  try {
+    records = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    records = null;
+  }
+  try {
+    rmSync(file);
+  } catch {
+    // nothing to remove
+  }
+  return gateVerdict(result, { records, sha: facts.sha, branch: facts.branch, repo: decision.repo, root: facts.root });
 }
 
 function push(args) {
