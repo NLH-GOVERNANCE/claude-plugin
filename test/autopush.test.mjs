@@ -284,7 +284,7 @@ describe('tự đẩy: hàm quyết định', () => {
 
   test('cổng: chỉ đẩy khi thoát 0, đúng hạn, không in gì và có hồ sơ cổng đã kiểm đúng commit này với luật đã chạy; mọi ca khác không đẩy', () => {
     const record = { root: '/r', repo: 'NLH-OS/api', branch: 'feat/x', remote: 'origin', sha: SHA, checks: ['luật cổng', 'lỗi lặp (3)'], rulesMissing: false };
-    const proof = { records: [record], sha: SHA, branch: 'feat/x' };
+    const proof = { records: [record], sha: SHA, branch: 'feat/x', repo: 'NLH-OS/api', root: '/r' };
     const ok = { status: 0, signal: null, error: undefined, stdout: '' };
     assert.deepEqual(gateVerdict(ok, proof), { allowed: true, reason: 'gate said yes' });
     const no = (extra, evidence = proof) => gateVerdict({ ...ok, ...extra }, evidence);
@@ -302,6 +302,12 @@ describe('tự đẩy: hàm quyết định', () => {
       'hồ sơ không phải mảng': no({}, { ...proof, records: { sha: SHA } }),
       'hồ sơ của commit khác': no({}, withRecord({ sha: 'b'.repeat(40) })),
       'hồ sơ của nhánh khác': no({}, withRecord({ branch: 'feat/y' })),
+      'hồ sơ của repo khác': no({}, withRecord({ repo: 'NLH-OS/other' })),
+      'hồ sơ của tổ chức khác': no({}, withRecord({ repo: 'NLH-GOVERNANCE/api' })),
+      'hồ sơ của root khác': no({}, withRecord({ root: '/elsewhere' })),
+      'hồ sơ thiếu repo': no({}, withRecord({ repo: undefined })),
+      'hồ sơ thiếu root': no({}, withRecord({ root: undefined })),
+      'chứng cứ thiếu repo/root cần khớp': no({}, { ...proof, repo: undefined }),
       'luật chưa nạp': no({}, withRecord({ rulesMissing: true })),
       'luật chưa nạp (thiếu trường)': no({}, withRecord({ rulesMissing: undefined })),
       'luật cổng không chạy': no({}, withRecord({ checks: ['lỗi lặp (3)'] })),
@@ -312,9 +318,42 @@ describe('tự đẩy: hàm quyết định', () => {
       assert.ok(verdict.reason, name);
     }
     assert.equal(cases['cổng in deny'].reason, 'gate said no');
+    // Hoa thường của tên repo trong url không làm hồ sơ hết khớp.
+    assert.equal(no({}, withRecord({ repo: 'nlh-os/API' })).allowed, true);
     assert.equal(gateVerdict().allowed, false);
     assert.equal(gateVerdict({}).allowed, false);
     assert.equal(gateVerdict(ok).allowed, false);
+  });
+
+  test('runAutoPush: pushUrls, remoteUrls, transportKeys, root, sha hay nhánh đổi giữa hai lần đọc thì không đẩy', () => {
+    const base0 = { root: '/r', branch: 'feat/x', sha: SHA, remoteUrls: [URL_OK], pushUrls: [URL_OK], transportKeys: [], names: [], patch: '', scanFailed: false };
+    const other = 'https://github.com/NLH-GOVERNANCE/other.git';
+    const changes = {
+      pushUrls: { pushUrls: [other] },
+      'pushUrls thêm một url hợp lệ': { pushUrls: [URL_OK, other] },
+      remoteUrls: { remoteUrls: [other] },
+      transportKeys: { transportKeys: ['http.proxy'] },
+      root: { root: '/elsewhere' },
+      sha: { sha: 'b'.repeat(40) },
+      branch: { branch: 'feat/y' },
+    };
+    for (const [name, change] of Object.entries(changes)) {
+      let calls = 0;
+      const pushed = [];
+      const result = runAutoPush('/r', {
+        env: {},
+        // Lần đọc thứ nhất của mỗi vòng như cũ, lần thứ hai đã đổi.
+        facts: () => ((calls += 1) % 2 ? base0 : { ...base0, ...change }),
+        gate: () => ({ allowed: true }),
+        push: (args) => (pushed.push(args), { ok: true }),
+      });
+      assert.equal(result, 'moved', name);
+      assert.deepEqual(pushed, [], name);
+    }
+    // Không đổi gì thì đẩy.
+    const pushed = [];
+    assert.equal(runAutoPush('/r', { env: {}, facts: () => base0, gate: () => ({ allowed: true }), push: (args) => (pushed.push(args), { ok: true }) }), 'pushed');
+    assert.equal(pushed.length, 1);
   });
 
   test('runAutoPush: cổng không nói yes thì không đẩy và ghi lý do vào log', () => {
@@ -773,6 +812,7 @@ describe('tự đẩy: hook chạy thật trên repo git', () => {
     const { dir, work, env } = makeRepo('https://github.com/NLH-OS/demo.git');
     commit(work);
     const sha = sh(work, 'rev-parse', 'HEAD');
+    const top = sh(work, 'rev-parse', '--show-toplevel');
     const gate = join(root, 'plugins/tinh-nlh/gate/hook.mjs');
     const rulesFile = join(env.NLH_GATE_DIR, 'rules.mjs');
     let n = 0;
@@ -790,7 +830,7 @@ describe('tự đẩy: hook chạy thật trên repo git', () => {
       } catch {
         records = null;
       }
-      return { result, verdict: gateVerdict(result, { records, sha, branch: 'feat/auto' }) };
+      return { result, verdict: gateVerdict(result, { records, sha, branch: 'feat/auto', repo: 'NLH-OS/demo', root: top }) };
     };
     const push = gateCommand(sha, 'feat/auto');
     const allowed = ask(push);

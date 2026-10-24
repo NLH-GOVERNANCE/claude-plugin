@@ -36,7 +36,7 @@ function log(line) {
 // The gate (gate/hook.mjs, unchanged), as for a push typed by hand, about exactly the checked commit. It gets a tool_use_id
 // of its own, so for a push it lets through it writes push-<id>.json: the proof that it checked this commit with its rules
 // (see gateVerdict). The record is read and removed here. Silence or a missing record is not a yes.
-function gate(facts) {
+function gate(facts, decision) {
   const id = `nlh_autopush_${randomBytes(8).toString('hex')}`;
   const result = spawnSync(process.execPath, [gateHook], {
     input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: id, cwd: facts.root, tool_input: { command: gateCommand(facts.sha, facts.branch) } }),
@@ -56,7 +56,7 @@ function gate(facts) {
   } catch {
     // nothing to remove
   }
-  return gateVerdict(result, { records, sha: facts.sha, branch: facts.branch });
+  return gateVerdict(result, { records, sha: facts.sha, branch: facts.branch, repo: decision.repo, root: facts.root });
 }
 
 function push(args) {

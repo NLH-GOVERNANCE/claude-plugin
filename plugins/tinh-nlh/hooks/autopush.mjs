@@ -163,13 +163,15 @@ export const transportEnvNames = (env) => Object.keys(env ?? {}).filter((name) =
 // checks that ran ("luật cổng" is added only after the counted rules ran) and whether the rules were missing.
 // A yes needs: a clean exit, no timeout, nothing printed, and a record for exactly this commit and branch with the rules
 // loaded and run. Silence alone, a crash, a timeout or any other answer is not a yes.
-// result: { status, signal, error, stdout } of the finished process; proof: { records, sha, branch }.
-export function gateVerdict({ status, signal, error, stdout } = {}, { records = null, sha, branch } = {}) {
+// result: { status, signal, error, stdout } of the finished process; proof: { records, sha, branch, repo, root }.
+export function gateVerdict({ status, signal, error, stdout } = {}, { records = null, sha, branch, repo, root } = {}) {
   if (error) return { allowed: false, reason: 'gate did not run' };
   if (signal) return { allowed: false, reason: 'gate timed out or was stopped' };
   if (status !== 0) return { allowed: false, reason: 'gate exit code not 0' };
   if (String(stdout ?? '').trim() !== '') return { allowed: false, reason: /"permissionDecision":\s*"deny"/.test(stdout) ? 'gate said no' : 'gate answer not understood' };
-  const record = Array.isArray(records) ? records.find((item) => item && item.sha === sha && item.branch === branch) : null;
+  // The record must be for this commit, this branch, this repo (owner/name, any letter case) and this working folder.
+  const sameRepo = (item) => typeof item.repo === 'string' && typeof repo === 'string' && item.repo.toLowerCase() === repo.toLowerCase();
+  const record = Array.isArray(records) ? records.find((item) => item && item.sha === sha && item.branch === branch && sameRepo(item) && item.root === root) : null;
   if (!record) return { allowed: false, reason: 'gate left no record that it checked this commit' };
   if (record.rulesMissing !== false) return { allowed: false, reason: 'gate rules not loaded' };
   if (!Array.isArray(record.checks) || !record.checks.includes('luật cổng')) return { allowed: false, reason: 'gate rules did not run' };
@@ -233,11 +235,13 @@ export const redact = (text) =>
     .slice(0, 160);
 
 // The push itself, with the dependencies passed in so a test can change the repo between two steps.
-// deps: { facts(root), gate(facts) -> { allowed, reason }, push(args) -> { ok, message }, afterPush(facts), log(line), between() }.
+// deps: { facts(root), gate(facts, decision) -> { allowed, reason }, push(args) -> { ok, message }, afterPush(facts), log(line), between() }.
 // Steps: read the facts and decide; ask the gate about exactly that commit; read the facts again and cancel if the
 // branch or HEAD moved (then start over, at most MAX_ROUNDS times: a commit made meanwhile is checked in its turn);
 // push `<sha>:refs/heads/<branch>` with the checked id. Returns a short word for what happened.
 export const MAX_ROUNDS = 3;
+const sameFacts = (a, b) =>
+  a.sha === b.sha && a.branch === b.branch && a.root === b.root && ['pushUrls', 'remoteUrls', 'transportKeys'].every((key) => JSON.stringify(a[key]) === JSON.stringify(b[key]));
 export function runAutoPush(root, { env = {}, facts, gate, push, afterPush = () => {}, log = () => {}, between = () => {} }) {
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const before = facts(root);
@@ -246,14 +250,16 @@ export function runAutoPush(root, { env = {}, facts, gate, push, afterPush = () 
       if (decision.notice || decision.reason === 'remote-unreadable') log(`${before.branch} not pushed: ${decision.reason} (retry at next commit)`);
       return decision.reason;
     }
-    const verdict = gate(before);
+    const verdict = gate(before, decision);
     if (!verdict.allowed) {
       log(`${decision.repo} ${before.branch} not pushed: ${verdict.reason}`);
       return 'gate';
     }
     between();
     const after = facts(root);
-    if (!after || after.sha !== before.sha || after.branch !== before.branch) continue;
+    // Everything that decided the push must be as it was: the commit, the branch, the folder, both url lists and the
+    // transport settings. Anything else changed: nothing is pushed on this round.
+    if (!after || !sameFacts(before, after)) continue;
     const again = decideAutoPush({ env, ...after });
     if (!again.push) {
       if (again.notice) log(`${after.branch} not pushed: ${again.reason}`);
