@@ -1,6 +1,7 @@
 // PostToolUse hook of plugin nlh (ticket eca924c5): after a Bash or PowerShell `git commit` on a work branch of our
 // organisations, push the branch to origin in the background, so a machine that turns off loses no work. The decision
-// is in autopush.mjs. This hook never blocks and never fails: any error, it does nothing and exits 0. NLH_AUTOPUSH=0 turns it off.
+// is in autopush.mjs. OFF BY DEFAULT: it does anything only when the machine sets NLH_AUTOPUSH to exactly "1"; otherwise it
+// exits at once, no git, no network, nothing printed. This hook never blocks and never fails: any error, it does nothing and exits 0. NLH_AUTOPUSH=0 turns it off.
 import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
@@ -16,7 +17,7 @@ try {
   const input = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
   const command = String(input.tool_input?.command ?? '');
   const dirs =
-    input.hook_event_name === 'PostToolUse' && /^(Bash|PowerShell)$/.test(String(input.tool_name ?? '')) && process.env.NLH_AUTOPUSH !== '0'
+    input.hook_event_name === 'PostToolUse' && /^(Bash|PowerShell)$/.test(String(input.tool_name ?? '')) && process.env.NLH_AUTOPUSH === '1'
       ? commitDirs(command, input.cwd || process.cwd(), (from, to) => resolve(from, to.replace(/^~(?=$|[\\/])/, homedir())))
       : [];
   const notices = [];
