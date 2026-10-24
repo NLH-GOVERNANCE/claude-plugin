@@ -9,7 +9,7 @@ import { join, posix } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { addedLines, allowedRemote, commitDirs, decideAutoPush, gateCommand, isProtectedBranch, isSafePushArgs, pushArgs, redact, runAutoPush, secretFindings } from '../plugins/tinh-nlh/hooks/autopush.mjs';
-import { repoFacts } from '../plugins/tinh-nlh/hooks/autopush-git.mjs';
+import { pushFacts, repoFacts } from '../plugins/tinh-nlh/hooks/autopush-git.mjs';
 import { dataDirs, localSchedules, scheduleFiles, summarizeSchedules } from '../plugins/tinh-nlh/hooks/local-schedules.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -212,7 +212,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     sh(work, 'add', '.');
     sh(work, 'commit', '-m', `add ${name}`);
   };
-  const facts = (work, max) => repoFacts(work, max);
+  const facts = (work, max) => repoFacts(work, { maxPatch: max });
   const decideFor = (work, max) => decideAutoPush({ env: {}, ...facts(work, max) });
 
   test('repo sạch: đọc đủ SHA, nhánh, url; đẩy được', () => {
@@ -299,6 +299,85 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  test('url.*.insteadOf / pushInsteadOf về host lạ (cấu hình repo hay toàn máy): không đẩy', () => {
+    const { dir, work } = repo();
+    commit(work, 'a.mjs', 'export {};\n');
+    const globalConfig = join(dir, 'global.gitconfig');
+    const saved = process.env.GIT_CONFIG_GLOBAL;
+    try {
+      for (const [where, key] of [
+        ['repo', 'url.https://evil.example/.insteadOf'],
+        ['repo', 'url.https://evil.example/.pushInsteadOf'],
+        ['global', 'url.https://evil.example/.pushInsteadOf'],
+      ]) {
+        if (where === 'repo') sh(work, 'config', key, 'https://github.com/');
+        else {
+          writeFileSync(globalConfig, `[url "https://evil.example/"]\n\tpushInsteadOf = https://github.com/\n`);
+          process.env.GIT_CONFIG_GLOBAL = globalConfig;
+        }
+        const f = pushFacts(work, { lsRemote: () => assert.fail('không được hỏi mạng khi có url.*') });
+        assert.equal(f.urlRewrites, true, `${where} ${key}`);
+        const result = decideAutoPush({ env: {}, ...f });
+        // Về host lạ: url sau khi viết lại không qua danh sách trắng; dù lý do nào cũng không đẩy.
+        assert.equal(result.push, false, `${where} ${key}`);
+        assert.ok(['remote-not-allowed', 'url-rewrite'].includes(result.reason), result.reason);
+        if (where === 'repo') sh(work, 'config', '--unset-all', key);
+      }
+      // Viết lại sang url cũng hợp lệ: vẫn không đẩy (đích thật khác url đã kiểm), báo một dòng.
+      process.env.GIT_CONFIG_GLOBAL = join(dir, 'empty.gitconfig');
+      sh(work, 'config', 'url.https://github.com/NLH-GOVERNANCE/.insteadOf', 'https://github.com/NLH-OS/');
+      const swapped = decideAutoPush({ env: {}, ...pushFacts(work, { lsRemote: () => assert.fail('không hỏi mạng') }) });
+      assert.deepEqual([swapped.push, swapped.reason], [false, 'url-rewrite']);
+      assert.equal(swapped.notice.split('\n').length, 1);
+      sh(work, 'config', '--unset-all', 'url.https://github.com/NLH-GOVERNANCE/.insteadOf');
+      // Hết quy tắc thì đẩy được lại.
+      delete process.env.GIT_CONFIG_GLOBAL;
+      process.env.GIT_CONFIG_GLOBAL = join(dir, 'empty.gitconfig');
+      assert.equal(decideAutoPush({ env: {}, ...pushFacts(work, { lsRemote: () => [] }) }).push, true);
+    } finally {
+      if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = saved;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('refs/remotes/origin bị chỉnh giả thì vẫn quét đủ khoảng đích chưa có (ranh giới là ls-remote)', () => {
+    const { dir, work } = repo();
+    commit(work, 'k.txt', `${FAKE_GH}\n`);
+    const secret = sh(work, 'rev-parse', 'HEAD');
+    commit(work, 'a.mjs', 'export {};\n');
+    // Giả: ref theo dõi cục bộ nói đích đã có mọi thứ. Quét cục bộ bị lừa; quét theo ls-remote thì không.
+    sh(work, 'update-ref', 'refs/remotes/origin/feat/auto', 'HEAD');
+    assert.equal(decideAutoPush({ env: {}, ...repoFacts(work) }).push, true);
+    const real = decideAutoPush({ env: {}, ...pushFacts(work, { lsRemote: () => [] }) });
+    assert.equal(real.push, false);
+    assert.match(real.notice, /looks like a key/);
+    // Đích nói nó đã có commit chứa khoá (id lạ cục bộ thì bỏ qua): khoảng quét chỉ còn commit sau đó.
+    const ids = [secret, 'b'.repeat(40)];
+    const f = pushFacts(work, { lsRemote: () => ids });
+    assert.deepEqual(f.names, ['a.mjs']);
+    assert.equal(decideAutoPush({ env: {}, ...f }).push, true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('ls-remote lỗi hay quá giờ: không đẩy, không gọi cổng', () => {
+    const { dir, work } = repo();
+    commit(work, 'a.mjs', 'export {};\n');
+    const f = pushFacts(work, { lsRemote: () => null });
+    assert.equal(f.remoteUnreadable, true);
+    assert.deepEqual([decideAutoPush({ env: {}, ...f }).push, decideAutoPush({ env: {}, ...f }).reason], [false, 'remote-unreadable']);
+    const lines = [];
+    const result = runAutoPush(work, {
+      facts: (r) => pushFacts(r, { lsRemote: () => null }),
+      gate: () => assert.fail('không hỏi cổng'),
+      push: () => assert.fail('không đẩy'),
+      log: (line) => lines.push(line),
+    });
+    assert.equal(result, 'remote-unreadable');
+    assert.match(lines[0], /remote-unreadable \(retry at next commit\)/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test('HEAD đổi giữa lúc hỏi cổng và lúc đẩy: không đẩy SHA cũ; commit mới được kiểm ở vòng sau', () => {
     const { dir, work } = repo();
     commit(work, 'a.mjs', 'export {};\n');
@@ -307,7 +386,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     const pushed = [];
     let moved = false;
     const deps = {
-      facts: (r) => repoFacts(r),
+      facts: (r) => pushFacts(r, { lsRemote: () => [] }),
       gate: (f) => (asked.push(f.sha), { denied: false }),
       push: (args) => (pushed.push(args), { ok: true }),
       // Chèn giữa cổng và lúc đẩy: có commit mới (sạch), một lần.
@@ -334,7 +413,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
       const pushed = [];
       let moved = false;
       const result = runAutoPush(work, {
-        facts: (r) => repoFacts(r),
+        facts: (r) => pushFacts(r, { lsRemote: () => [] }),
         gate: () => ({ denied: false }),
         push: (args) => (pushed.push(args), { ok: true }),
         between: () => {
@@ -356,17 +435,17 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     let n = 0;
     const pushed = [];
     const result = runAutoPush(work, {
-      facts: (r) => repoFacts(r),
+      facts: (r) => pushFacts(r, { lsRemote: () => [] }),
       gate: () => ({ denied: false }),
       push: (args) => (pushed.push(args), { ok: true }),
       between: () => commit(work, `m${(n += 1)}.mjs`, 'export {};\n'),
     });
     assert.equal(result, 'moved');
     assert.deepEqual(pushed, []);
-    assert.equal(runAutoPush(work, { facts: (r) => repoFacts(r), gate: () => ({ denied: true }), push: (args) => (pushed.push(args), { ok: true }) }), 'gate');
+    assert.equal(runAutoPush(work, { facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: true }), push: (args) => (pushed.push(args), { ok: true }) }), 'gate');
     assert.deepEqual(pushed, []);
-    assert.equal(runAutoPush(work, { env: { NLH_AUTOPUSH: '0' }, facts: (r) => repoFacts(r), gate: () => ({ denied: false }), push: (args) => (pushed.push(args), { ok: true }) }), 'off');
-    assert.equal(runAutoPush(work, { facts: (r) => repoFacts(r), gate: () => ({ denied: false }), push: () => ({ ok: false, message: 'network' }) }), 'failed');
+    assert.equal(runAutoPush(work, { env: { NLH_AUTOPUSH: '0' }, facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: false }), push: (args) => (pushed.push(args), { ok: true }) }), 'off');
+    assert.equal(runAutoPush(work, { facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: false }), push: () => ({ ok: false, message: 'network' }) }), 'failed');
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -425,7 +504,7 @@ describe('tự đẩy: hook chạy thật trên repo git', () => {
     assert.equal(out, null);
     const lines = readFileSync(log, 'utf8').trim().split('\n');
     assert.equal(lines.length, 1);
-    assert.match(lines[0], /NLH-OS\/demo feat\/auto push failed \(retry at next commit\)/);
+    assert.match(lines[0], /feat\/auto not pushed: remote-unreadable \(retry at next commit\)/);
     rmSync(dir, { recursive: true, force: true });
   });
 

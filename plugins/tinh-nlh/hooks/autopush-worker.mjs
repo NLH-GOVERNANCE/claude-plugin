@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gateCommand, redact, runAutoPush } from './autopush.mjs';
-import { repoFacts } from './autopush-git.mjs';
+import { pushFacts, repoFacts } from './autopush-git.mjs';
 
 const dir = process.env.NLH_AUTOPUSH_DIR || join(homedir(), '.tinh-nlh', 'autopush');
 const gateHook = fileURLToPath(new URL('../gate/hook.mjs', import.meta.url));
@@ -68,7 +68,7 @@ try {
   const root = process.argv[2];
   if (root) {
     mkdirSync(dir, { recursive: true });
-    const first = repoFacts(root);
+    const first = repoFacts(root, { scan: false });
     const lockFile = join(dir, `${Buffer.from(first?.root ?? root).toString('hex').slice(-40)}.lock`);
     let busy = false;
     try {
@@ -79,7 +79,7 @@ try {
     if (!busy) {
       lock = lockFile;
       writeFileSync(lock, String(process.pid));
-      runAutoPush(root, { env: process.env, facts: repoFacts, gate, push, afterPush, log });
+      runAutoPush(root, { env: process.env, facts: (r) => pushFacts(r), gate, push, afterPush, log });
     }
   }
 } catch {

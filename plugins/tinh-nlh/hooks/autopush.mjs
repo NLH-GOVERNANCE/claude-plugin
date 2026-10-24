@@ -103,17 +103,24 @@ export function isSafePushArgs(args) {
   return Boolean(match && SHA.test(match[1]) && !isProtectedBranch(match[2]) && !/^[-+]/.test(String(args[1])));
 }
 
-// Facts: { env, isCommit, branch, sha, remoteUrls, pushUrls, names, patch, scanFailed }. Returns { push, reason, notice }:
+// Facts: { env, isCommit, branch, sha, remoteUrls, pushUrls, urlRewrites, remoteUnreadable, names, patch, scanFailed }. Returns { push, reason, notice }:
 // notice is the one line for Claude, only when a secret or an unreadable patch stopped the push; every other "no" is
 // silent. EVERY fetch and push url of origin must be on the allow list (one stranger and nothing is pushed), and there
 // must be exactly one of each: git pushes to all push urls, and only one was checked.
-export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteUrls = [], pushUrls = [], names = [], patch = '', scanFailed = false }) {
+export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteUrls = [], pushUrls = [], urlRewrites = false, remoteUnreadable = false, names = [], patch = '', scanFailed = false }) {
   if (String(env.NLH_AUTOPUSH ?? '').trim() === '0') return { push: false, reason: 'off' };
   if (!isCommit) return { push: false, reason: 'not-a-commit' };
   if (isProtectedBranch(branch)) return { push: false, reason: 'protected-branch' };
   if (!SHA.test(String(sha ?? ''))) return { push: false, reason: 'no-commit' };
   if (!remoteUrls.length || !pushUrls.length || ![...remoteUrls, ...pushUrls].every((url) => allowedRemote(url))) {
     return { push: false, reason: 'remote-not-allowed' };
+  }
+  if (urlRewrites) {
+    return {
+      push: false,
+      reason: 'url-rewrite',
+      notice: `Nếp did not auto-push ${branch}: git config rewrites urls (url.*.insteadOf), so the real target may differ from the one checked. Push by hand.`,
+    };
   }
   if (remoteUrls.length > 1 || pushUrls.length > 1) {
     return {
@@ -122,6 +129,7 @@ export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteU
       notice: `Nếp did not auto-push ${branch}: origin has more than one url (git pushes to all of them). Keep one, or push by hand.`,
     };
   }
+  if (remoteUnreadable) return { push: false, reason: 'remote-unreadable' };
   if (scanFailed) {
     return {
       push: false,
@@ -155,7 +163,7 @@ export function runAutoPush(root, { env = {}, facts, gate, push, afterPush = () 
     const before = facts(root);
     const decision = before ? decideAutoPush({ env, ...before }) : { push: false, reason: 'no-facts' };
     if (!decision.push) {
-      if (decision.notice) log(`${before.branch} not pushed: ${decision.reason}`);
+      if (decision.notice || decision.reason === 'remote-unreadable') log(`${before.branch} not pushed: ${decision.reason} (retry at next commit)`);
       return decision.reason;
     }
     if (gate(before).denied) {
