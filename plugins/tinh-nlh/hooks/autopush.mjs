@@ -80,7 +80,7 @@ export function addedLines(patch) {
 // binary files included. Findings name a file or a kind, never the value.
 export function secretFindings({ names = [], patch = '' }) {
   const found = [];
-  for (const name of names) {
+  for (const name of new Set(names)) {
     const base = String(name).split('/').pop();
     if (SECRET_NAME.some((pattern) => pattern.test(base))) found.push(`file ${name}`);
   }
@@ -103,15 +103,72 @@ export function isSafePushArgs(args) {
   return Boolean(match && SHA.test(match[1]) && !isProtectedBranch(match[2]) && !/^[-+]/.test(String(args[1])));
 }
 
-// Settings that change how git reaches a server (url rewrites, ssh command, proxies, tls checks, alternate programs):
-// with any of them the real target may differ from the url that was checked, so the hook pushes only on the default way.
-// Key names of the effective git config (`git config --list`, lower-cased by git except the subsection) and names of
-// environment variables. A credential helper is fine (git needs it to sign in).
-const TRANSPORT_KEY = [/^url\./i, /^core\.(sshcommand|gitproxy)$/i, /^http\.(.+\.)?(proxy|sslverify)$/i, /^remote\..+\.(proxy|receivepack|uploadpack|vcs)$/i];
-const TRANSPORT_ENV = /^(GIT_SSH|GIT_SSH_COMMAND|GIT_PROXY_COMMAND|HTTPS_PROXY|HTTP_PROXY|ALL_PROXY)$/i;
+// How git reaches a server must be the default one, or the real target may differ from the url that was checked.
+// Config: every entry of the effective config (`git config --list --show-scope`) in a section that touches the transport
+// (url, protocol, ssh, http, remote, core, credential) must be on a short allow list of harmless settings; any
+// other entry there is a violation. Other sections (user, branch, push, pull, alias, ...) do not matter here.
+// Environment: variables that redirect git, its ssh, its proxy, its trust store, its config or its repo.
+// include and includeIf are not listed: `git config --list` already follows them, so what they load is checked entry by entry.
+const ALWAYS_BAD_SECTION = new Set(['url', 'protocol', 'ssh']);
+const HTTP_OK = new Set(['postbuffer', 'lowspeedlimit', 'lowspeedtime', 'version']);
+const REMOTE_OK = new Set(['url', 'fetch', 'pushurl', 'tagopt', 'prune', 'prunetags']);
+const CORE_OK = new Set([
+  'autocrlf', 'filemode', 'ignorecase', 'safecrlf', 'eol', 'symlinks', 'fscache', 'longpaths', 'precomposeunicode', 'quotepath',
+  'bare', 'repositoryformatversion', 'logallrefupdates', 'editor', 'whitespace', 'preloadindex', 'untrackedcache', 'commentchar',
+  'excludesfile', 'attributesfile', 'protectntfs', 'trustctime', 'checkstat', 'abbrev', 'compression', 'loosecompression', 'hidedotfiles',
+]);
+const HELPER_PLAIN = /^(|manager|manager-core|osxkeychain|libsecret|wincred|store|cache)$/;
+const HELPER_GH = /^!'?[^'"]*\bgh(\.exe)?'? auth git-credential$/i;
+const TRANSPORT_ENV = /^(GIT_SSH|GIT_SSH_COMMAND|GIT_SSH_VARIANT|GIT_PROXY_COMMAND|GIT_PROXY_.*|GIT_CONFIG.*|GIT_DIR|GIT_WORK_TREE|GIT_EXEC_PATH|GIT_SSL_.*|GIT_ASKPASS|SSH_ASKPASS|CURL_CA_BUNDLE|SSL_CERT_FILE|SSL_CERT_DIR|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY)$/i;
 
-export const transportConfigKeys = (keys) => [...new Set(keys.filter((key) => TRANSPORT_KEY.some((pattern) => pattern.test(key))))];
+// entries: [{ scope, key, value }]. Returns the keys that are not on the allow list (labels for a test, never printed).
+export function transportViolations(entries) {
+  const bad = [];
+  for (const { scope, key, value } of entries) {
+    const parts = String(key).split('.');
+    const section = parts[0].toLowerCase();
+    const variable = parts[parts.length - 1].toLowerCase();
+    const plain = parts.length === 2;
+    let ok = true;
+    if (ALWAYS_BAD_SECTION.has(section)) ok = false;
+    else if (section === 'http') {
+      ok =
+        HTTP_OK.has(variable) ||
+        // Git for Windows and Git for macOS write these two in the system config: its own trust store.
+        (scope === 'system' && plain && variable === 'sslbackend' && /^(openssl|schannel)$/i.test(value)) ||
+        (scope === 'system' && plain && variable === 'sslcainfo' && /\/etc\/ssl\/certs\/ca-bundle\.crt$/i.test(value));
+    } else if (section === 'remote') ok = (parts.length >= 3 && REMOTE_OK.has(variable)) || (plain && variable === 'pushdefault');
+    else if (section === 'core') ok = plain && CORE_OK.has(variable);
+    else if (section === 'credential') {
+      ok = variable === 'usehttppath' || (variable === 'helper' && (HELPER_PLAIN.test(value) || (HELPER_GH.test(value) && (scope === 'system' || scope === 'global'))));
+    }
+    if (!ok) bad.push(String(key));
+  }
+  return [...new Set(bad)];
+}
 export const transportEnvNames = (env) => Object.keys(env ?? {}).filter((name) => TRANSPORT_ENV.test(name) && String(env[name] ?? '') !== '');
+
+// What the local gate answered, read from a run of gate/hook.mjs with NLH_GATE_CHECK=1 (it then always prints one JSON line
+// saying whether the check ran and what it decided). Only a clean exit, no timeout, valid JSON that says the check ran with
+// the rules loaded and decided "allow" lets the push go on; silence, a failure or anything else is not a yes.
+// Input: { status, signal, error, stdout } of the finished process.
+export function gateVerdict({ status, signal, error, stdout } = {}) {
+  if (error) return { allowed: false, reason: 'gate did not run' };
+  if (signal) return { allowed: false, reason: 'gate timed out or was stopped' };
+  if (status !== 0) return { allowed: false, reason: 'gate exit code not 0' };
+  let parsed;
+  try {
+    parsed = JSON.parse(String(stdout ?? '').trim());
+  } catch {
+    return { allowed: false, reason: 'gate output is not JSON' };
+  }
+  const check = parsed?.nlhGateCheck;
+  if (!check || check.ran !== true) return { allowed: false, reason: 'gate did not check' };
+  if (check.rulesMissing === true) return { allowed: false, reason: 'gate rules not loaded' };
+  if (check.decision === 'deny') return { allowed: false, reason: 'gate said no' };
+  if (check.decision !== 'allow') return { allowed: false, reason: 'gate answer not understood' };
+  return { allowed: true, reason: 'gate said yes' };
+}
 
 // Facts: { env, isCommit, branch, sha, remoteUrls, pushUrls, transportKeys, remoteUnreadable, names, patch, scanFailed }. Returns { push, reason, notice }:
 // notice is the one line for Claude, only when a secret or an unreadable patch stopped the push; every other "no" is
@@ -130,7 +187,7 @@ export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteU
     return {
       push: false,
       reason: 'transport',
-      notice: `Nếp did not auto-push ${branch}: the way git reaches GitHub is not the default (${oddTransport.slice(0, 3).join(', ')}), so the real target may differ from the one checked. Push by hand.`,
+      notice: `Nếp did not auto-push ${branch}: ${oddTransport.length} git setting(s) or variable(s) change the way git reaches GitHub, so the real target may differ from the one checked. Push by hand.`,
     };
   }
   if (remoteUrls.length > 1 || pushUrls.length > 1) {
@@ -153,7 +210,10 @@ export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteU
   }
   const found = secretFindings({ names, patch });
   if (found.length) {
-    return { push: false, reason: 'secret', notice: `Nếp did not auto-push ${branch}: the commits waiting to be pushed hold ${found.slice(0, 3).join(', ')}. Check, then push by hand.` };
+    // Counts and kinds only, never a file name or a value: names are written by whoever made the commit, and the line goes to Claude.
+    const files = found.filter((item) => item.startsWith('file ')).length;
+    const kinds = [files ? `${files} file(s) with a secret-like name` : '', found.includes('a line that looks like a key') ? 'key-like content' : ''].filter(Boolean).join(' and ');
+    return { push: false, reason: 'secret', notice: `Nếp did not auto-push ${branch}: the commits waiting to be pushed hold ${kinds}. Check, then push by hand.` };
   }
   return { push: true, reason: 'ok', repo: allowedRemote(pushUrls[0]), url: pushUrls[0], sha, branch };
 }
@@ -167,7 +227,7 @@ export const redact = (text) =>
     .slice(0, 160);
 
 // The push itself, with the dependencies passed in so a test can change the repo between two steps.
-// deps: { facts(root), gate(facts) -> { denied }, push(args) -> { ok, message }, afterPush(facts), log(line), between() }.
+// deps: { facts(root), gate(facts) -> { allowed, reason }, push(args) -> { ok, message }, afterPush(facts), log(line), between() }.
 // Steps: read the facts and decide; ask the gate about exactly that commit; read the facts again and cancel if the
 // branch or HEAD moved (then start over, at most MAX_ROUNDS times: a commit made meanwhile is checked in its turn);
 // push `<sha>:refs/heads/<branch>` with the checked id. Returns a short word for what happened.
@@ -180,8 +240,9 @@ export function runAutoPush(root, { env = {}, facts, gate, push, afterPush = () 
       if (decision.notice || decision.reason === 'remote-unreadable') log(`${before.branch} not pushed: ${decision.reason} (retry at next commit)`);
       return decision.reason;
     }
-    if (gate(before).denied) {
-      log(`${decision.repo} ${before.branch} gate said no: not pushed`);
+    const verdict = gate(before);
+    if (!verdict.allowed) {
+      log(`${decision.repo} ${before.branch} not pushed: ${verdict.reason}`);
       return 'gate';
     }
     between();

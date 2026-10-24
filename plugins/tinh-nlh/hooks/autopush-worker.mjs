@@ -8,7 +8,7 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSyn
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gateCommand, redact, runAutoPush } from './autopush.mjs';
+import { gateCommand, gateVerdict, redact, runAutoPush } from './autopush.mjs';
 import { pushFacts, repoFacts } from './autopush-git.mjs';
 
 const dir = process.env.NLH_AUTOPUSH_DIR || join(homedir(), '.tinh-nlh', 'autopush');
@@ -31,16 +31,18 @@ function log(line) {
   }
 }
 
-// The gate, as for a push typed by hand, about exactly the checked commit. A deny stops the push; the gate failing
-// itself lets it run, as the gate does.
+// The gate, as for a push typed by hand, about exactly the checked commit, asked in check mode (NLH_GATE_CHECK=1): it prints
+// one JSON line with what it decided. Only a clean exit, in time, with a JSON that says the check ran and allows, goes on
+// (gateVerdict); silence, a crash, a timeout or anything else is not a yes.
 function gate(facts) {
   const result = spawnSync(process.execPath, [gateHook], {
     input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', cwd: facts.root, tool_input: { command: gateCommand(facts.sha, facts.branch) } }),
     encoding: 'utf8',
     timeout: 280_000,
     windowsHide: true,
+    env: { ...process.env, NLH_GATE_CHECK: '1' },
   });
-  return { denied: /"permissionDecision":\s*"deny"/.test(result.stdout ?? '') };
+  return gateVerdict(result);
 }
 
 function push(args) {

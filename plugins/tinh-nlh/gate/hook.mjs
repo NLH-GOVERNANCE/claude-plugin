@@ -202,9 +202,11 @@ async function checkOp({ op, dir, args }, pending, now) {
   return { op, root, repo, branch, remote, sha, checks, findings, rulesMissing: !rules };
 }
 
-async function pre(input) {
+// check: the plugin's own auto-push asks the gate with NLH_GATE_CHECK=1 and needs a plain answer. pre() then returns
+// { ran, decision, rulesMissing } (ran: at least one commit or push was checked) and writes no deny line; main prints it.
+async function pre(input, check = false) {
   const command = String(input.tool_input?.command ?? '');
-  if (!/\bgit\b/.test(command) || !/\b(commit|push)\b/.test(command)) return;
+  if (!/\bgit\b/.test(command) || !/\b(commit|push)\b/.test(command)) return { ran: false };
   const cwd = input.cwd || process.cwd();
   const ops = gitOps(command, cwd, (from, to) => resolve(from, to.replace(/^~(?=$|[\\/])/, homedir())));
   const pending = new Map();
@@ -223,15 +225,18 @@ async function pre(input) {
     }
     writeJson('blocked.json', blocked);
     const reason = failed.map((result) => blockReason(result.op, result.findings)).join('\n');
-    process.stdout.write(
-      JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }),
-    );
-    return;
+    if (!check) {
+      process.stdout.write(
+        JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }),
+      );
+    }
+    return { ran: true, decision: 'deny', rulesMissing: failed.some((result) => result.rulesMissing) };
   }
   const pushes = results.filter((result) => result.op === 'push' && result.sha);
   if (pushes.length && /^[A-Za-z0-9_-]{1,100}$/.test(String(input.tool_use_id ?? ''))) {
     writeJson(`push-${input.tool_use_id}.json`, pushes.map(({ root, repo, branch, remote, sha, checks, rulesMissing }) => ({ root, repo, branch, remote, sha, checks, rulesMissing })));
   }
+  return { ran: results.length > 0, decision: 'allow', rulesMissing: results.some((result) => result.rulesMissing) };
 }
 
 // After the command ran: for each push that reached the remote, one line for Claude to record on its ticket.
@@ -255,12 +260,20 @@ function post(input) {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: lines.join('\n') } }));
 }
 
+const check = process.env.NLH_GATE_CHECK === '1';
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 try {
   const input = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
   if (input.hook_event_name === 'PostToolUse') post(input);
-  else await pre(input);
+  else {
+    const verdict = await pre(input, check);
+    if (check) process.stdout.write(JSON.stringify({ nlhGateCheck: verdict }));
+  }
 } catch {
-  // The gate never stops work by failing itself.
+  // The gate never stops work by failing itself. Asked in check mode, it says it did not run and exits with 2.
+  if (check) {
+    process.stdout.write(JSON.stringify({ nlhGateCheck: { ran: false } }));
+    process.exitCode = 2;
+  }
 }

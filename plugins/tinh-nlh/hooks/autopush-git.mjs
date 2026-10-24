@@ -10,7 +10,7 @@
 //    (offline, slow, refused), or the urls changed while reading: no push.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { allowedRemote, transportConfigKeys, transportEnvNames } from './autopush.mjs';
+import { allowedRemote, transportEnvNames, transportViolations } from './autopush.mjs';
 
 export const MAX_PATCH = 20 * 1024 * 1024;
 const LS_REMOTE_TIMEOUT_MS = 25_000;
@@ -34,14 +34,20 @@ function git(dir, args, maxBuffer = 1024 * 1024, input) {
 
 const lines = (text) => (text ?? '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 
-// Names of the settings in the effective git config (system, global, repo, environment) that change how git reaches a
-// server: url rewrites, ssh command, proxies, tls checks, alternate programs (see transportConfigKeys). A failure to
-// read the config counts as one: nothing is pushed.
+// Entries of the effective git config (system, global, repo, environment) that are not on the allow list of settings that
+// leave the transport alone (see transportViolations). `--show-scope -z` prints `scope NUL key NL value NUL` per entry.
+// A config that cannot be read, or read in a shape not understood, counts as a violation: nothing is pushed.
 export function transportKeysOf(root) {
-  const out = git(root, ['config', '--list', '-z'], 8 * 1024 * 1024);
+  const out = git(root, ['config', '--list', '--show-scope', '-z'], 8 * 1024 * 1024);
   if (out === null) return ['git config unreadable'];
-  const keys = out.split('\0').map((entry) => entry.split('\n')[0].trim()).filter(Boolean);
-  return transportConfigKeys(keys);
+  const tokens = out.split('\0').filter((_, i, all) => !(i === all.length - 1 && all[i] === ''));
+  if (tokens.length % 2) return ['git config unreadable'];
+  const entries = [];
+  for (let i = 0; i < tokens.length; i += 2) {
+    const [key, ...rest] = tokens[i + 1].split('\n');
+    entries.push({ scope: tokens[i], key, value: rest.join('\n') });
+  }
+  return transportViolations(entries);
 }
 
 // Facts of the repo at `dir`: top folder, current branch, the checked commit (HEAD now), every fetch and push url of
