@@ -26,6 +26,13 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs"
             ]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/local-schedules-hook.mjs"
+            ]
           }
         ]
       },
@@ -151,6 +158,19 @@
               "${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs"
             ],
             "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "^(Bash|PowerShell)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/autopush-hook.mjs"
+            ],
+            "timeout": 20
           }
         ]
       }
