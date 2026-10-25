@@ -24,6 +24,13 @@
             "type": "command",
             "command": "node",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/sign-in-check.mjs"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs"
             ]
           },
