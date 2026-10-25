@@ -12,6 +12,8 @@ import { pluginFiles, pluginZip } from '../scripts/plugin-zip.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
+// Hai cửa Nếp mà hook lưu chat và báo phiên gọi: cửa riêng của gói, và cửa connector đã nối (tên nhile-governance).
+const DOORS = ['plugin:nlh:nhile-governance', 'nhile-governance'];
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -92,7 +94,7 @@ describe('plugin nlh', () => {
     assert.deepEqual(hooks.StopFailure, [
       {
         matcher: 'rate_limit|billing_error',
-        hooks: [{ type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'stopped', machine_stop: 'quota' }, timeout: 10 }],
+        hooks: DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status: 'stopped', machine_stop: 'quota' }, timeout: 10 })),
       },
     ]);
     // Sau /clear hay gọn ngữ cảnh: gọi thẳng công cụ, đúng tên máy chủ có phạm vi plugin, không truyền gì thêm.
@@ -100,13 +102,8 @@ describe('plugin nlh', () => {
     assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:nlh:${server}`, tool: 'my_context', timeout: 30 }]);
     // Phiên tự báo (phiếu 6d4cb2ad): gọi report_session của connector, không gửi nội dung chat.
     for (const [event, status] of [['Stop', 'idle'], ['SessionEnd', 'stopped']]) {
-      const hook = hooks[event].flatMap((group) => group.hooks).find((item) => item.tool === 'report_session');
-      assert.deepEqual(hook, {
-        type: 'mcp_tool',
-        server: 'plugin:nlh:nhile-governance',
-        tool: 'report_session',
-        input: { session_id: '${session_id}', status },
-      });
+      const found = hooks[event].flatMap((group) => group.hooks).filter((item) => item.tool === 'report_session');
+      assert.deepEqual(found, DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status } })));
     }
   });
 
@@ -270,10 +267,12 @@ describe('plugin nlh', () => {
   test('lưu chat (phiếu abdcdd2f): lượt người lúc UserPromptSubmit, lượt Claude lúc Stop, qua save_chat của connector; không gửi kết quả công cụ', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const save = (event) => hooks[event].flatMap((group) => group.hooks).filter((hook) => hook.tool === 'save_chat');
-    const base = { type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'save_chat' };
+    // Gọi cả hai cửa Nếp (25/10): cửa riêng của gói chưa đăng nhập thì cửa connector đã nối vẫn lưu; hai cửa cùng tới
+    // thì giếng bỏ bản trùng trong 2 phút (api chats.mjs).
+    const both = (input) => DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'save_chat', input, timeout: 5 }));
     // Hạn chờ 5 giây: connector chậm thì Claude vẫn nhận lời ngay, lượt đó chỉ không được lưu.
-    assert.deepEqual(save('UserPromptSubmit'), [{ ...base, input: { session_id: '${session_id}', role: 'user', text: '${prompt}' }, timeout: 5 }]);
-    assert.deepEqual(save('Stop'), [{ ...base, input: { session_id: '${session_id}', role: 'assistant', text: '${last_assistant_message}' }, timeout: 5 }]);
+    assert.deepEqual(save('UserPromptSubmit'), both({ session_id: '${session_id}', role: 'user', text: '${prompt}' }));
+    assert.deepEqual(save('Stop'), both({ session_id: '${session_id}', role: 'assistant', text: '${last_assistant_message}' }));
     assert.deepEqual(save('SessionEnd'), []);
     // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
     // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
@@ -281,11 +280,13 @@ describe('plugin nlh', () => {
     assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_work'), true);
     assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__save_chat'), true);
     assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_context'), false);
+    assert.equal(matcher.test('mcp__nhile-governance__my_work'), true, 'cửa connector đã nối');
+    assert.equal(matcher.test('mcp__nhile-governance__my_context'), false);
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse[0], {
-      matcher: '^mcp__plugin_nlh_nhile-governance__(?!my_context$)',
-      hooks: [{ type: 'mcp_tool', server: 'plugin:nlh:nhile-governance', tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } }],
+      matcher: '^mcp__(plugin_nlh_)?nhile-governance__(?!my_context$)',
+      hooks: DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } })),
     });
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
     const command = readFileSync(join(pluginDir, 'commands/no-save.md'), 'utf8');
