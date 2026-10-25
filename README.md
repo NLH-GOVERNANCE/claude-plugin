@@ -2,20 +2,22 @@
 
 Nếp là nơi cả công ty NhiLe giao việc, theo dõi việc và ký duyệt. Cài Nếp vào Claude một lần, rồi nói chuyện với Claude bằng câu thường để xem và làm việc của mình.
 
-## Cài (một lần, ba bước)
+## Cài (một lần, một bước)
 
-1. Vào Claude (claude.ai hoặc ứng dụng Claude), mở [Customize > Plugins](https://claude.ai/customize/plugins), bấm **Add**, rồi **Add marketplace**, gõ `NLH-GOVERNANCE/claude-plugin`.
-2. Bấm cài **Nếp**.
-3. Mở tab **Connectors** của Nếp, bấm **Add** rồi **Connect**, bấm **Đồng ý và đăng nhập** bằng email công ty.
+Trên máy tính, mở link [Thêm Nếp vào Claude](https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp), bấm **Add**, rồi đăng nhập bằng email công ty. Xong: Claude trên web, ứng dụng máy tính, điện thoại và Claude Code đều có Nếp.
 
-Đã cài từ trước, khi còn tên "tỉnh NhiLe": Nếp tự chuyển sang tên mới, không phải cài lại. Nếu Claude báo không thấy Nếp, làm lại bước 2; nếu báo chưa đăng nhập, làm lại bước 3.
+Nếp là một connector trong tài khoản Claude của chính bạn. Tài khoản nào cũng làm như nhau, kể cả tài khoản cá nhân. Claude báo Nếp cần đăng nhập lại thì mở claude.ai › Customize › Connectors, bấm **Connect** ở Nếp.
 
-Dùng Claude Code: gõ hai dòng sau một lần.
+Dùng Claude Code: thêm gói Nếp để có hook lưu chat, báo phiên, lời dặn đầu phiên. Gõ hai dòng sau một lần:
 
 ```
 /plugin marketplace add NLH-GOVERNANCE/claude-plugin
 /plugin install nlh@nlh-governance
 ```
+
+Gói không mang connector riêng: nó dùng Nếp trong tài khoản ở bước trên. Ai dùng Claude Code bằng khoá API thay vì tài khoản claude.ai thì không có connector của tài khoản. Người đó thêm bằng lệnh `claude mcp add --transport http nhile-governance https://mcp.nlh.vn/mcp`: đúng tên này để hook của gói gọi tới.
+
+Muốn có lệnh tắt như `/work` trên app Claude: [Customize > Plugins](https://claude.ai/customize/plugins), **Add**, **Add marketplace**, gõ `NLH-GOVERNANCE/claude-plugin`, cài **Nếp**. Không bắt buộc.
 
 ## Dùng
 
@@ -60,9 +62,9 @@ Máy đã bật Loa trước khi đổi tên Nếp: gõ **bật Loa** thêm mộ
 - Kênh `speaker` nạp qua `--mcp-config` với `--dangerously-load-development-channels server:speaker`, không qua tên plugin: plugin cài từ claude.ai mang tên `nlh@synced`, Claude Code chỉ nhận kênh của plugin cài từ chợ. `NLH_TOWER=1` chỉ nằm trong cấu hình kênh, nên các phiên khác trên máy không đọc luồng việc; phiên Loa mở cũng không mang `NLH_TOWER*`, nên không giữ khoá Loa khi Loa tắt.
 - Cờ `--dangerously-load-development-channels`: kênh tự làm chưa nằm trong danh sách kênh Anthropic duyệt sẵn (research preview), nên Claude Code chỉ nạp khi mình nói rõ đang thử, hỏi lại mỗi lần mở. Vì sao an toàn: kênh do repo này viết, chỉ đọc việc của chính bạn bằng khoá riêng, chỉ gửi khoá tới `*.nlh.vn`; không nhận duyệt quyền từ xa; luật của tổ chức (`channelsEnabled`) vẫn áp dụng. Một máy chỉ chạy một Loa.
 
-### Khi có tổ chức Team hoặc Enterprise
+### Một connector cho mỗi người (25/10/2026)
 
-Chưa dùng. Owner đồng bộ repo này ở [Organization settings > Plugins & skills](https://claude.ai/admin-settings/skills?tab=inventory) (**Add**, **Sync from GitHub**), đặt `nlh` là **Required**, và thêm connector `https://mcp.nlh.vn/mcp` ở [Organization settings > Connectors](https://claude.ai/admin-settings/connectors).
+Anh Sơn chốt: coi mọi người là tài khoản Claude cá nhân, mỗi người nối Nếp đúng một lần. Gói không mang connector `mcp.nlh.vn` nữa (từ 0.20.0). Có hai lý do. Ở Claude Code, máy chủ của gói thắng connector của tài khoản khi cùng địa chỉ, nên người dùng phải đăng nhập lần hai (code.claude.com/docs/en/mcp, thứ tự ưu tiên theo địa chỉ). Ở phiên Claude Code trên mây, máy chủ của gói không đăng nhập được, nên chat mất mà không ai biết. Hook gọi connector của tài khoản theo mọi tên nó có (`claude.ai Nếp` trên máy, `Nếp` trên mây, cùng hai tên cũ `nhile-governance` và `NhiLe Governance`). Tên nào không có thì hook đó bỏ qua.
 
 ### File .zip (để thử)
 
@@ -70,7 +72,7 @@ Chưa dùng. Owner đồng bộ repo này ở [Organization settings > Plugins &
 node scripts/plugin-zip.mjs nep.zip
 ```
 
-Ở [Customize > Plugins](https://claude.ai/customize/plugins): **Add**, **Upload plugin**, chọn `nep.zip`. Rồi làm bước 3. File .zip không tự cập nhật, nên mọi người dùng đường cài ở trên.
+Ở [Customize > Plugins](https://claude.ai/customize/plugins): **Add**, **Upload plugin**, chọn `nep.zip`. File .zip không tự cập nhật, nên mọi người dùng đường cài ở trên.
 
 ### Kiểm
 

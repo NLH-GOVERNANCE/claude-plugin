@@ -1,33 +1,50 @@
-// SessionStart hook of plugin nlh: is the plugin's own Nếp connection signed in on this machine? Every hook that saves
-// this chat to Nếp or reports this session (save_chat, report_session) calls that connection, plugin:nlh:nhile-governance.
-// Not signed in, they all fail without a word, and the chat never reaches the ledger. Seen 25/10/2026 on a claude.ai/code
-// session of anh Sơn and in the numbers: Thùy, Tân called Nếp hundreds of times a day with one chat session saved
-// (data-map.md, chat into the ledger, D-0067 coordinate 3).
-// Claude Code keeps the servers that asked for sign-in in <config dir>/mcp-needs-auth-cache.json, keyed by server name.
-// Read only that file, only that key; no network, no write. Missing, unreadable or older than a week: say nothing.
+// SessionStart hook of plugin nlh: the Nếp connector line. Nếp lives in the user's own Claude account (custom connector
+// Nếp, https://mcp.nlh.vn/mcp); the plugin has no connector of its own since 25/10/2026. A plugin server at the same URL
+// wins over the account connector in Claude Code and needs a second sign-in (code.claude.com/docs/en/mcp, precedence by
+// endpoint), and in cloud sessions it can never sign in, so chats were lost without a word. Anh Sơn's goal: one Nếp
+// connection per person, and treat everyone as a personal account (25/10).
+// Always prints one line: if Claude has no Nếp tool, tell the user the one link that adds Nếp to their account. If
+// Claude Code lists a Nếp connector as needing sign-in (<config dir>/mcp-needs-auth-cache.json, keyed by server name,
+// within a week), say how to sign in again. Reads only that file; no network, no write.
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const SERVER = 'plugin:nlh:nhile-governance';
+// Names the account connector takes: "claude.ai <name>" in Claude Code on a machine, the bare name in cloud sessions.
+// Nếp is the name the add link fills in; the other two are names people gave it before 25/10.
+export const SERVERS = ['claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance'];
+export const ADD_LINK =
+  'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
 const FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function needsSignIn(cache, now = Date.now()) {
-  const at = Number(cache?.[SERVER]?.timestamp);
-  return Number.isFinite(at) && at <= now + 60_000 && now - at < FRESH_MS;
+  return SERVERS.find((name) => {
+    const at = Number(cache?.[name]?.timestamp);
+    return Number.isFinite(at) && at <= now + 60_000 && now - at < FRESH_MS;
+  }) ?? null;
+}
+
+export function connectorLine(waiting) {
+  const missing =
+    `Nếp connector: Nếp is a connector in the user's own Claude account, not part of this plugin. ` +
+    `If you have no Nếp tool at all (no my_context from any server), say once in your first reply, in Vietnamese: ` +
+    `"Máy này chưa có Nếp: trên máy tính mở ${ADD_LINK} , bấm Add, đăng nhập bằng email công ty, rồi mở phiên mới." ` +
+    `Until then, nothing of this chat reaches the ledger.`;
+  if (!waiting) return `${missing}\n`;
+  return (
+    `${missing} Claude Code lists the Nếp connector (${waiting}) as needing sign-in: if Nếp tools fail, say once: ` +
+    `"Nếp cần đăng nhập lại: mở claude.ai, Customize, Connectors, bấm Connect ở Nếp, rồi mở phiên mới."\n`
+  );
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  let waiting = null;
   try {
     const dir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
-    const cache = JSON.parse(readFileSync(join(dir, 'mcp-needs-auth-cache.json'), 'utf8'));
-    if (needsSignIn(cache)) {
-      process.stdout.write(
-        `Nếp sign-in check: Claude Code on this machine lists the plugin's own Nếp connection (${SERVER}) as needing sign-in. Hooks that save this chat and report this session call that connection, and also a Nếp connection named nhile-governance when this session has one. If you have Nếp tools named mcp__nhile-governance__… (not mcp__plugin_nlh_…), the chat still reaches the ledger through it: say nothing. Otherwise the chat does not reach the ledger; in your first reply, tell the user once, in Vietnamese: "Gói Nếp trên máy này chưa đăng nhập, nên chat phiên này chưa vào giếng: gõ /mcp, chọn ${SERVER}, bấm đăng nhập (phiên chạy trên claude.ai/code thì đăng nhập Nếp trong phần kết nối của tài khoản)." Until then, when a task ends, call save_chat with role summary through any Nếp connection that works.\n`,
-      );
-    }
+    waiting = needsSignIn(JSON.parse(readFileSync(join(dir, 'mcp-needs-auth-cache.json'), 'utf8')));
   } catch {
-    // No cache file, or not JSON: nothing to say.
+    // No cache file, or not JSON: only the line about a missing connector.
   }
+  process.stdout.write(connectorLine(waiting));
 }
