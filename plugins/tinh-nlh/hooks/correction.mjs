@@ -1,12 +1,18 @@
 // UserPromptSubmit hook of plugin nlh, village rules part (ticket 92656544). When the user's prompt sounds like a
 // correction ("nhắc lại", "sao không"... listed in correction-signals.json), add one line of context so the villager
 // fixes the work first, then writes the lesson where it belongs: luật làng for what holds for every trade, its own
-// playbook for its trade. Only adds text, never blocks. No network, no files besides the signal list.
+// playbook for its trade, and records the correction on the work item when it is one. Only adds text, never blocks.
+// No network, no files besides the signal list.
 import { readFileSync } from 'node:fs';
 
 // Anh Sơn's wording, 22/10 (reply on the ticket): send it as is.
-const REMINDER =
+const LESSON =
   'Người dùng đang sửa bạn. Sửa việc trước. Điều chung cho mọi nghề thì thêm một dòng vào luật làng (ô luat-lang); điều chỉ của nghề bạn thì ghi vào playbook dân làng của bạn. Đọc quyết định đã ký liên quan trước.';
+// Data map item 2 (cells data-map.md, 25/10): a person rejecting or editing the machine's result is recorded on the work
+// item as a check, so the ledger can count it (runs.checked_by). Nobody wrote these by memory: 0 human checks on 24/10.
+const CHECK =
+  'Điều người dùng sửa hay bác là kết quả một việc trong Nếp thì ghi lần đó lên việc: add_follow_up kind check, verdict rejected (bác) hay edited (sửa), said_by là người dùng, run_id nếu có, body trích nguyên lời sửa (không chép khoá hay chuyện riêng).';
+const REMINDER = `${LESSON} ${CHECK}`;
 
 // Lower case, no diacritics, single spaces: "Sao KHÔNG" and "sao khong" match the same signal.
 const fold = (text) =>

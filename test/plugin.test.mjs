@@ -266,7 +266,7 @@ describe('plugin nlh', () => {
     assert.match(skill, /`role` `summary`/);
   });
 
-  test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook, câu thường thì không', async () => {
+  test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook và ghi lần sửa lên việc, câu thường thì không', async () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const startup = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
     assert.match(startup, /read village_rules in that result.*\(no such field: get_cell luat-lang, file rules\.md\)/);
@@ -283,7 +283,8 @@ describe('plugin nlh', () => {
         child.stdin.end(typeof prompt === 'string' ? JSON.stringify({ prompt }) : 'không phải json');
       });
     const reminder =
-      'Người dùng đang sửa bạn. Sửa việc trước. Điều chung cho mọi nghề thì thêm một dòng vào luật làng (ô luat-lang); điều chỉ của nghề bạn thì ghi vào playbook dân làng của bạn. Đọc quyết định đã ký liên quan trước.';
+      'Người dùng đang sửa bạn. Sửa việc trước. Điều chung cho mọi nghề thì thêm một dòng vào luật làng (ô luat-lang); điều chỉ của nghề bạn thì ghi vào playbook dân làng của bạn. Đọc quyết định đã ký liên quan trước. ' +
+      'Điều người dùng sửa hay bác là kết quả một việc trong Nếp thì ghi lần đó lên việc: add_follow_up kind check, verdict rejected (bác) hay edited (sửa), said_by là người dùng, run_id nếu có, body trích nguyên lời sửa (không chép khoá hay chuyện riêng).';
     for (const prompt of ['sao không báo chị Nhi', 'Đã chốt rồi mà, nhắc lại lần nữa', 'SAO KHONG bao Danh?', 'lại quên ghi sổ']) {
       assert.deepEqual(JSON.parse(await run(prompt)), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: reminder } }, prompt);
     }
