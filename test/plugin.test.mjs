@@ -194,7 +194,7 @@ describe('plugin nlh', () => {
     assert.equal(await run(), '', 'không có tệp thì im');
     cache({ 'plugin:nlh:nhile-governance': { timestamp: Date.now() - 60_000 } });
     const out = await run();
-    assert.match(out, /^Nếp sign-in check: .*plugin:nlh:nhile-governance.*fail silently/);
+    assert.match(out, /^Nếp sign-in check: .*plugin:nlh:nhile-governance.*mcp__nhile-governance__.*say nothing\. Otherwise the chat does not reach the ledger/);
     assert.match(out, /"Gói Nếp trên máy này chưa đăng nhập, nên chat phiên này chưa vào giếng: gõ \/mcp, chọn plugin:nlh:nhile-governance, bấm đăng nhập/);
     assert.equal(out.split('\n').filter(Boolean).length, 1);
     cache({ 'plugin:nlh:nhile-governance': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });

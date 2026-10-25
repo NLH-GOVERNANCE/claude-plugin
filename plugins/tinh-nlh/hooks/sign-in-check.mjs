@@ -24,7 +24,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     const cache = JSON.parse(readFileSync(join(dir, 'mcp-needs-auth-cache.json'), 'utf8'));
     if (needsSignIn(cache)) {
       process.stdout.write(
-        `Nếp sign-in check: Claude Code on this machine lists the plugin's own Nếp connection (${SERVER}) as needing sign-in. Until it is signed in, the plugin hooks that save this chat to Nếp and report this session fail silently, so this conversation does not reach the ledger. In your first reply, tell the user once, in Vietnamese: "Gói Nếp trên máy này chưa đăng nhập, nên chat phiên này chưa vào giếng: gõ /mcp, chọn ${SERVER}, bấm đăng nhập (phiên chạy trên claude.ai/code thì đăng nhập Nếp trong phần kết nối của tài khoản)." Until then, when a task ends, call save_chat with role summary through any Nếp connection that works.\n`,
+        `Nếp sign-in check: Claude Code on this machine lists the plugin's own Nếp connection (${SERVER}) as needing sign-in. Hooks that save this chat and report this session call that connection, and also a Nếp connection named nhile-governance when this session has one. If you have Nếp tools named mcp__nhile-governance__… (not mcp__plugin_nlh_…), the chat still reaches the ledger through it: say nothing. Otherwise the chat does not reach the ledger; in your first reply, tell the user once, in Vietnamese: "Gói Nếp trên máy này chưa đăng nhập, nên chat phiên này chưa vào giếng: gõ /mcp, chọn ${SERVER}, bấm đăng nhập (phiên chạy trên claude.ai/code thì đăng nhập Nếp trong phần kết nối của tài khoản)." Until then, when a task ends, call save_chat with role summary through any Nếp connection that works.\n`,
       );
     }
   } catch {
