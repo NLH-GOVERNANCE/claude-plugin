@@ -179,6 +179,35 @@ describe('plugin nlh', () => {
     assert.equal(await run('không phải json'), '');
   });
 
+  test('hook trí nhớ máy: ghi vào trí nhớ riêng của máy thì dặn Claude ghi điều người dạy vào Nếp; tệp khác thì im', async () => {
+    const run = (input) =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/memory-to-nep.mjs')], { stdio: ['pipe', 'pipe', 'inherit'] });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end(typeof input === 'string' ? input : JSON.stringify(input));
+      });
+    const write = (file_path, tool_name = 'Write') => ({ hook_event_name: 'PostToolUse', tool_name, tool_input: { file_path, content: 'khoá bí mật không đọc' } });
+    for (const path of [
+      '/home/son/.claude/projects/-home-son-work/memory/MEMORY.md',
+      '/root/.claude/projects/-home-user/memory/feedback_timezone.md',
+      'C:\\Users\\Son\\.claude\\projects\\C--Users-Son-work\\memory\\son_rules.md',
+      '/home/son/.claude/CLAUDE.md',
+    ]) {
+      const out = JSON.parse(await run(write(path, 'Edit')));
+      assert.equal(out.hookSpecificOutput.hookEventName, 'PostToolUse', path);
+      assert.match(out.hookSpecificOutput.additionalContext, /^You just wrote to this machine's own memory.*add_follow_up kind lesson.*said_by the user.*pointer only/);
+    }
+    for (const path of ['/home/son/work/api/CLAUDE.md', '/home/son/work/api/memory/notes.md', '/home/son/.claude/settings.json', '/home/son/.claude/projects/x/notes.md']) {
+      assert.equal(await run(write(path)), '', path);
+    }
+    assert.equal(await run({ hook_event_name: 'PreToolUse', tool_input: { file_path: '/home/son/.claude/CLAUDE.md' } }), '');
+    assert.equal(await run('không phải json'), '');
+    // Lan can: không đọc tệp, không gọi mạng, không ghi, không chạy lệnh.
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/memory-to-nep.mjs'), 'utf8'), /fetch|https?:|node:(fs|http|net|https|child_process)/);
+  });
+
   test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nlh-machine-'));
     const run = () =>
@@ -301,7 +330,8 @@ describe('plugin nlh', () => {
     assert.deepEqual(hooks.PostToolUse[1], gate(30));
     // Thứ ba: tự đẩy nhánh sau git commit (việc eca924c5), chạy riêng sau cổng, hạn 20 giây, không gọi connector.
     assert.deepEqual(hooks.PostToolUse[2], { matcher: '^(Bash|PowerShell)$', hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/autopush-hook.mjs'], timeout: 20 }] });
-    assert.equal(hooks.PostToolUse.length, 3);
+    assert.deepEqual(hooks.PostToolUse[3], { matcher: '^(Write|Edit|MultiEdit)$', hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/memory-to-nep.mjs'], timeout: 5 }] });
+    assert.equal(hooks.PostToolUse.length, 4);
     const matcher = new RegExp(hooks.PreToolUse[0].matcher);
     assert.ok(matcher.test('Bash') && matcher.test('PowerShell') && !matcher.test('mcp__x__Bash'));
   });

@@ -173,6 +173,19 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "^(Write|Edit|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/memory-to-nep.mjs"
+            ],
+            "timeout": 5
+          }
+        ]
       }
     ],
     "StopFailure": [
