@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { addedLines, allowedRemote, autoPushOn, commitDirs, decideAutoPush, gateCommand, gateVerdict, isProtectedBranch, isSafePushArgs, pushArgs, redact, runAutoPush, secretFindings, transportViolations } from '../plugins/tinh-nlh/hooks/autopush.mjs';
+import { addedLines, allowedRemote, autoPushOn, commitDirs, decideAutoPush, gateCommand, gateVerdict, isProtectedBranch, isSafePushArgs, looksLikeKey, pushArgs, redact, runAutoPush, secretFindings, transportViolations } from '../plugins/tinh-nlh/hooks/autopush.mjs';
 import { lsRemote, pushFacts, repoFacts } from '../plugins/tinh-nlh/hooks/autopush-git.mjs';
 import { dataDirs, localSchedules, scheduleFiles, summarizeSchedules } from '../plugins/tinh-nlh/hooks/local-schedules.mjs';
 
@@ -21,6 +21,17 @@ const FAKE_GH = `gh${'p_'}${'a1'.repeat(15)}`;
 const FAKE_AGE = `AGE-SECRET${'-'}KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ`;
 const FAKE_PEM = `-----BEGIN RSA PRIVATE ${'KEY'}-----`;
 const FAKE_SLACK = `xox${'b-'}1234567890-abcdefghij`;
+// Tám mẫu khoá lượt chấm trước thử được (claude-plugin#58 @47382a4), mỗi mẫu một chuỗi giả.
+const FAKE_KEYS = {
+  anthropic: `sk${'-'}ant-api03-${'Fake0'.repeat(10)}`,
+  'sk-': `sk${'-'}proj-${'fAkE9'.repeat(8)}`,
+  aws: `AKIA${'FAKE0FAKE0FAKE00'}`,
+  google: `AIza${'Fake_0'.repeat(6)}`,
+  telegram: `123456789${':'}${'FakeTokenX'.repeat(3)}FAKE0`,
+  vault: `VAULT${'_'}KEY=${'fakevaultvalue00'.repeat(2)}`,
+  'api_key': `api${'_'}key=${'fakeapikeyvalue0'.repeat(2)}`,
+  jwt: `eyJ${'hbGciOiJIUzI1NiJ9'}.eyJ${'zdWIiOiJmYWtlIn0'}.${'ZmFrZXNpZ25hdHVyZQ'}`,
+};
 
 const URL_OK = 'https://github.com/NLH-OS/api.git';
 const SHA = 'a'.repeat(40);
@@ -126,6 +137,35 @@ describe('tự đẩy: hàm quyết định', () => {
     assert.equal(decide({ patch: `diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1,2 +1 @@\n-const k = '${FAKE_GH}';\n  ${FAKE_GH}\n` }).push, true);
     assert.equal(decide({ names: ['.env.example', 'a.env.sample', 'README.md'] }).push, true);
     assert.deepEqual(secretFindings({ names: ['a.mjs'], patch: hunk('x') }), []);
+  });
+
+  test('đủ tám mẫu khoá lượt chấm trước thử được: dòng thêm giống khoá thì không đẩy, không lộ giá trị', () => {
+    for (const [kind, key] of Object.entries(FAKE_KEYS)) {
+      for (const line of [key, `const k = '${key}';`, `  "${kind}": "${key}",`]) {
+        assert.equal(looksLikeKey(line), true, kind);
+        const result = decide({ patch: hunk(line) });
+        assert.deepEqual([result.push, result.reason], [false, 'secret'], kind);
+        assert.ok(!result.notice.includes(key), `không in giá trị: ${kind}`);
+      }
+    }
+    // Mã thường có tên giống khoá mà không có giá trị thật: vẫn đẩy.
+    for (const line of [
+      'const apiKey = process.env.API_KEY;', 'api_key: ${KEY}', 'const VAULT_KEY = getVault();', 'apiKeyHeader = "X-Api-Key"',
+      'task-abcdefghijklmnopqrstuvwxyz', 'sk-skeleton-loader-container-wide', 'risk-1234567890abcdefghijk', 'time 12:30:45', 'import tokenizer from "./tokenizer.js";',
+    ]) {
+      assert.equal(looksLikeKey(line), false, line);
+      assert.equal(decide({ patch: hunk(line) }).push, true, line);
+    }
+  });
+
+  test('lời commit giống khoá thì không đẩy (lời commit đi cùng lần đẩy), báo một dòng không lộ giá trị', () => {
+    for (const key of [FAKE_GH, FAKE_SLACK, ...Object.values(FAKE_KEYS)]) {
+      const result = decide({ messages: `feat: a\n\ntoken ${key}\n` });
+      assert.deepEqual([result.push, result.reason], [false, 'secret'], key.slice(0, 6));
+      assert.match(result.notice, /a key-like commit message/);
+      assert.ok(!result.notice.includes(key));
+    }
+    assert.equal(decide({ messages: 'feat: tự đẩy dò cả lời commit\n\nKhông có khoá.\n' }).push, true);
   });
 
   test('dòng thêm có nội dung "++ ...": đọc theo vị trí, không loại theo tiền tố "+++"', () => {
@@ -425,6 +465,23 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     assert.equal(f.scanFailed, false);
     assert.equal(decideFor(work).push, true);
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('lời commit chứa khoá, tệp sạch: không đẩy, kể cả khi commit đó không phải HEAD', () => {
+    for (const key of [FAKE_GH, FAKE_KEYS.anthropic, FAKE_KEYS.jwt]) {
+      const { dir, work } = repo();
+      writeFileSync(join(work, 'a.mjs'), 'export {};\n');
+      sh(work, 'add', '.');
+      sh(work, 'commit', '-m', `feat: a\n\n${key}`);
+      commit(work, 'b.mjs', 'export const b = 1;\n');
+      const f = pushFacts(work, { env: {}, lsRemote: () => [] });
+      assert.equal(f.scanFailed, false);
+      assert.ok(f.messages.includes(key));
+      const result = decideAutoPush({ env: ON, ...f });
+      assert.deepEqual([result.push, result.reason], [false, 'secret']);
+      assert.match(result.notice, /a key-like commit message/);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('remote hai url đẩy (một lạ) hay insteadOf về host lạ: không đẩy', () => {

@@ -52,7 +52,7 @@ export function transportKeysOf(root) {
 
 // Facts of the repo at `dir`: top folder, current branch, the checked commit (HEAD now), every fetch and push url of
 // origin (--all: a remote can have several), the odd transport settings, and what the commits to scan hold: file names
-// (deleted and renamed paths too, NUL separated) and the patch read as text (--text: binary files too; -m: a merge
+// (deleted and renamed paths too, NUL separated), their messages and the patch read as text (--text: binary files too; -m: a merge
 // commit shows what it changed against each parent; no external diff or textconv).
 // Options: maxPatch (bytes), scan (false: skip the scan), exclude (commit ids the target already has: the scan is the
 // commits of HEAD that are not reachable from them; absent: not reachable from the remote-tracking refs of origin).
@@ -71,12 +71,15 @@ export function repoFacts(dir, { maxPatch = MAX_PATCH, scan = true, exclude } = 
   const [revs, input] = exclude ? [['--stdin'], `${sha}\n${exclude.map((id) => `^${id}`).join('\n')}\n`] : [[sha, '--not', '--remotes=origin'], undefined];
   const names = git(root, [...base, '--name-only', '-z', ...revs], maxPatch, input);
   const patch = git(root, [...base, '-p', ...revs], maxPatch, input);
+  // The messages of the same commits: a push carries them too.
+  const messages = git(root, ['log', '--format=%B', '--no-color', ...revs], maxPatch, input);
   return {
     ...facts,
     names: (names ?? '').split('\0').map((name) => name.trim()).filter(Boolean),
     patch: patch ?? '',
+    messages: messages ?? '',
     // A binary patch git did not print as text cannot be read: the same as a patch too large to read.
-    scanFailed: names === null || patch === null || /^(Binary files .* differ|GIT binary patch)$/m.test(patch ?? ''),
+    scanFailed: names === null || patch === null || messages === null || /^(Binary files .* differ|GIT binary patch)$/m.test(patch ?? ''),
   };
 }
 

@@ -60,7 +60,20 @@ const SECRET_LINE = [
   new RegExp(`github${'_'}pat_[A-Za-z0-9_]{20,}`),
   new RegExp(`xox[abposr]${'-'}[A-Za-z0-9-]{10,}`),
   new RegExp(`-----BEGIN [A-Z ]*PRIVATE ${'KEY'}-----`),
+  // Anthropic, then any other "sk-" key (OpenAI and the like), AWS access key id, Google API key, Telegram bot token.
+  new RegExp(`sk${'-'}ant-[A-Za-z0-9]+-[A-Za-z0-9_-]{20,}`),
+  new RegExp(`\\bsk${'-'}(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{20,}`),
+  new RegExp(`\\b(AKIA|ASIA)${''}[0-9A-Z]{16}\\b`),
+  new RegExp(`AIza${''}[0-9A-Za-z_-]{35}`),
+  new RegExp(`\\b[0-9]{8,10}${':'}[A-Za-z0-9_-]{35}\\b`),
+  // A literal value of 16 characters or more assigned to VAULT_KEY or api_key (API_KEY, api-key, apiKey...); a name
+  // such as process.env.API_KEY, a call or a ${...} placeholder is not a literal value.
+  new RegExp(`VAULT${'_'}KEY['"]?\\s*[:=]\\s*['"]?[A-Za-z0-9_+/=-]{16,}`, 'i'),
+  new RegExp(`(?<![A-Za-z])api[_-]?${'key'}['"]?\\s*[:=]\\s*['"]?[A-Za-z0-9_+/=-]{16,}`, 'i'),
+  // A JSON Web Token (JWT), three base64url parts, the first two JSON objects.
+  new RegExp(`\\beyJ[A-Za-z0-9_-]{8,}\\.${'eyJ'}[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}`),
 ];
+export const looksLikeKey = (line) => SECRET_LINE.some((pattern) => pattern.test(line));
 
 // Added lines of a patch from `git log -p`. Only lines inside a hunk count, whatever they start with: a header is
 // recognised by position (from a "diff --git" line up to the first "@@"), never by its "+++" prefix, so an added line
@@ -76,15 +89,16 @@ export function addedLines(patch) {
   return out;
 }
 
-// Names of files in the commits waiting to be pushed (deleted and renamed paths too), and their patch text read as text,
-// binary files included. Findings name a file or a kind, never the value.
-export function secretFindings({ names = [], patch = '' }) {
+// Names of files in the commits waiting to be pushed (deleted and renamed paths too), their patch text read as text,
+// binary files included, and their commit messages (pushed with the commits). Findings name a file or a kind, never the value.
+export function secretFindings({ names = [], patch = '', messages = '' }) {
   const found = [];
   for (const name of new Set(names)) {
     const base = String(name).split('/').pop();
     if (SECRET_NAME.some((pattern) => pattern.test(base))) found.push(`file ${name}`);
   }
-  if (addedLines(patch).some((line) => SECRET_LINE.some((pattern) => pattern.test(line)))) found.push('a line that looks like a key');
+  if (addedLines(patch).some(looksLikeKey)) found.push('a line that looks like a key');
+  if (String(messages).split('\n').some(looksLikeKey)) found.push('a commit message that looks like a key');
   return found;
 }
 
@@ -178,14 +192,14 @@ export function gateVerdict({ status, signal, error, stdout } = {}, { records = 
   return { allowed: true, reason: 'gate said yes' };
 }
 
-// Facts: { env, isCommit, branch, sha, remoteUrls, pushUrls, transportKeys, remoteUnreadable, names, patch, scanFailed }. Returns { push, reason, notice }:
+// Facts: { env, isCommit, branch, sha, remoteUrls, pushUrls, transportKeys, remoteUnreadable, names, patch, messages, scanFailed }. Returns { push, reason, notice }:
 // notice is the one line for Claude, only when a secret or an unreadable patch stopped the push; every other "no" is
 // silent. EVERY fetch and push url of origin must be on the allow list (one stranger and nothing is pushed), and there
 // must be exactly one of each: git pushes to all push urls, and only one was checked.
 // Off by default (CTO, eca924c5): only the exact string "1" turns auto-push on. Unset, "0", "true", " 1" and the rest: off.
 export const autoPushOn = (env = {}) => env.NLH_AUTOPUSH === '1';
 
-export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteUrls = [], pushUrls = [], transportKeys = [], remoteUnreadable = false, names = [], patch = '', scanFailed = false }) {
+export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteUrls = [], pushUrls = [], transportKeys = [], remoteUnreadable = false, names = [], patch = '', messages = '', scanFailed = false }) {
   if (!autoPushOn(env)) return { push: false, reason: 'off' };
   if (!isCommit) return { push: false, reason: 'not-a-commit' };
   if (isProtectedBranch(branch)) return { push: false, reason: 'protected-branch' };
@@ -219,11 +233,11 @@ export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteU
       notice: `Nếp did not auto-push ${branch}: the commits waiting to be pushed could not be read in full (too large or git failed). Check, then push by hand.`,
     };
   }
-  const found = secretFindings({ names, patch });
+  const found = secretFindings({ names, patch, messages });
   if (found.length) {
     // Counts and kinds only, never a file name or a value: names are written by whoever made the commit, and the line goes to Claude.
     const files = found.filter((item) => item.startsWith('file ')).length;
-    const kinds = [files ? `${files} file(s) with a secret-like name` : '', found.includes('a line that looks like a key') ? 'key-like content' : ''].filter(Boolean).join(' and ');
+    const kinds = [files ? `${files} file(s) with a secret-like name` : '', found.includes('a line that looks like a key') ? 'key-like content' : '', found.includes('a commit message that looks like a key') ? 'a key-like commit message' : ''].filter(Boolean).join(' and ');
     return { push: false, reason: 'secret', notice: `Nếp did not auto-push ${branch}: the commits waiting to be pushed hold ${kinds}. Check, then push by hand.` };
   }
   return { push: true, reason: 'ok', repo: allowedRemote(pushUrls[0]), url: pushUrls[0], sha, branch };
