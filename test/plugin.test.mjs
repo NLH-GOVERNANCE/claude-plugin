@@ -296,6 +296,15 @@ describe('plugin nlh', () => {
     assert.match(skill, /`role` `summary`/);
   });
 
+  test('chat Claude app (việc b7cc9921): skill nep dặn gọi save_chat cuối mỗi câu trả lời, role user nguyên văn, reply là câu trả lời; giữ /no-save, #riêng', () => {
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+    assert.match(skill, /In the Claude app .*once the conversation has used a Nếp tool other than the opening `my_context`, call `save_chat` once at the end of every answer/);
+    assert.match(skill, /`role` `user`, `text` the user's message verbatim, and `reply` your answer \(never tool results\)/);
+    assert.match(skill, /`\/no-save`, call `save_chat` with `role` `opt_out`/);
+    assert.match(skill, /`#riêng` is private: do not save that turn/);
+    assert.doesNotMatch(skill, /only that summary is saved/);
+  });
+
   test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook, câu thường thì không', async () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const startup = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
