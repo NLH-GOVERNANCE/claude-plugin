@@ -334,6 +334,13 @@ describe('plugin nlh', () => {
     assert.doesNotMatch(skill, /only that summary is saved/);
   });
 
+  test('đọc lại chat để làm tiếp (việc 7d0f19bd): skill nep dặn gọi read_my_chats, chỉ chat của chính người dùng, không chép sang việc hay nhóm', () => {
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+    assert.match(skill, /continue an earlier conversation from another device or Claude account.*call `read_my_chats` without `session_id`/);
+    assert.match(skill, /then call it with that `session_id`/);
+    assert.match(skill, /never read it for anyone else, and never copy chat content into a ticket, the ledger or a group/);
+  });
+
   test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook và ghi lần sửa lên việc, câu thường thì không', async () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const startup = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;

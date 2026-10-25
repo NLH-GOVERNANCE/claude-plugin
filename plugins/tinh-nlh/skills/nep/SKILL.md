@@ -41,6 +41,8 @@ In Claude Code and Cowork, the plugin hooks send each turn (user prompt, Claude'
 
 Everywhere, when a piece of work is done, call `save_chat` with `role` `summary`: a few sentences on what was done, the result, what is left. If the user types `/no-save`, call `save_chat` with `role` `opt_out` and stop saving for the whole session. A message that starts with `#riêng` is private: do not save that turn.
 
+User wants to continue an earlier conversation from another device or Claude account ("làm tiếp chuyện lúc nãy trên điện thoại"): call `read_my_chats` without `session_id` to list their recent sessions, ask which one if unclear, then call it with that `session_id` and pick up from the last turns. It only ever returns the user's own chats: never read it for anyone else, and never copy chat content into a ticket, the ledger or a group.
+
 ## Newcomers
 
 User says they are new, or has no cell yet: follow the "Người mới vào" part of the server instructions (call `how_to_use` if not seen).
