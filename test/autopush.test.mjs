@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { addedLines, allowedRemote, commitDirs, decideAutoPush, gateCommand, isProtectedBranch, isSafePushArgs, pushArgs, redact, runAutoPush, secretFindings } from '../plugins/tinh-nlh/hooks/autopush.mjs';
+import { addedLines, allowedRemote, autoPushOn, commitDirs, decideAutoPush, gateCommand, isProtectedBranch, isSafePushArgs, pushArgs, redact, runAutoPush, secretFindings } from '../plugins/tinh-nlh/hooks/autopush.mjs';
 import { pushFacts, repoFacts } from '../plugins/tinh-nlh/hooks/autopush-git.mjs';
 import { dataDirs, localSchedules, scheduleFiles, summarizeSchedules } from '../plugins/tinh-nlh/hooks/local-schedules.mjs';
 
@@ -24,7 +24,8 @@ const FAKE_SLACK = `xox${'b-'}1234567890-abcdefghij`;
 
 const URL_OK = 'https://github.com/NLH-OS/api.git';
 const SHA = 'a'.repeat(40);
-const base = { env: {}, isCommit: true, branch: 'feat/x', sha: SHA, remoteUrls: [URL_OK], pushUrls: [URL_OK], names: ['a.mjs'], patch: 'diff --git a/a.mjs b/a.mjs\n--- a/a.mjs\n+++ b/a.mjs\n@@ -0,0 +1 @@\n+const a = 1;\n' };
+const ON = { NLH_AUTOPUSH: '1' };
+const base = { env: ON, isCommit: true, branch: 'feat/x', sha: SHA, remoteUrls: [URL_OK], pushUrls: [URL_OK], names: ['a.mjs'], patch: 'diff --git a/a.mjs b/a.mjs\n--- a/a.mjs\n+++ b/a.mjs\n@@ -0,0 +1 @@\n+const a = 1;\n' };
 const decide = (extra = {}) => decideAutoPush({ ...base, ...extra });
 const hunk = (...added) => `diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -0,0 +${added.length} @@\n${added.map((line) => `+${line}`).join('\n')}\n`;
 
@@ -143,6 +144,17 @@ describe('tự đẩy: hàm quyết định', () => {
     assert.equal(result.notice.split('\n').length, 1);
   });
 
+  test('mặc định tắt: chỉ đúng chuỗi "1" mới bật; runAutoPush tắt thì không đọc repo, không hỏi mạng', () => {
+    for (const value of [undefined, '0', 'true', 'yes', 'on', 'TRUE', '', ' 1', '1 ', '01']) {
+      const env = value === undefined ? {} : { NLH_AUTOPUSH: value };
+      assert.deepEqual(decide({ env }), { push: false, reason: 'off' }, JSON.stringify(value));
+      assert.equal(autoPushOn(env), false);
+      const fail = () => assert.fail('không được đọc repo khi tắt');
+      assert.equal(runAutoPush('/w', { env, facts: fail, gate: fail, push: fail }), 'off');
+    }
+    assert.equal(autoPushOn({ NLH_AUTOPUSH: '1' }), true);
+  });
+
   test('NLH_AUTOPUSH=0 thì không đẩy; lệnh không phải git commit thì không đẩy', () => {
     assert.deepEqual(decide({ env: { NLH_AUTOPUSH: '0' } }), { push: false, reason: 'off' });
     assert.equal(decide({ env: { NLH_AUTOPUSH: '1' } }).push, true);
@@ -213,7 +225,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     sh(work, 'commit', '-m', `add ${name}`);
   };
   const facts = (work, max) => repoFacts(work, { maxPatch: max });
-  const decideFor = (work, max) => decideAutoPush({ env: {}, ...facts(work, max) });
+  const decideFor = (work, max) => decideAutoPush({ env: ON, ...facts(work, max) });
 
   test('repo sạch: đọc đủ SHA, nhánh, url; đẩy được', () => {
     const { dir, work } = repo();
@@ -265,7 +277,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     assert.equal(sh(work, 'rev-list', '--parents', '-n', '1', 'HEAD').split(' ').length, 3);
     const f = facts(work);
     assert.ok(f.names.includes('notes.txt'));
-    const result = decideAutoPush({ env: {}, ...f });
+    const result = decideAutoPush({ env: ON, ...f });
     assert.equal(result.push, false);
     assert.match(result.notice, /looks like a key/);
     rmSync(dir, { recursive: true, force: true });
@@ -278,7 +290,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     assert.match(sh(work, 'show', '--format=', '-p', 'HEAD'), /Binary files .* differ|GIT binary patch/);
     const f = facts(work);
     assert.equal(f.scanFailed, false);
-    assert.match(decideAutoPush({ env: {}, ...f }).notice, /looks like a key/);
+    assert.match(decideAutoPush({ env: ON, ...f }).notice, /looks like a key/);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -317,7 +329,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
         }
         const f = pushFacts(work, { lsRemote: () => assert.fail('không được hỏi mạng khi có url.*') });
         assert.equal(f.urlRewrites, true, `${where} ${key}`);
-        const result = decideAutoPush({ env: {}, ...f });
+        const result = decideAutoPush({ env: ON, ...f });
         // Về host lạ: url sau khi viết lại không qua danh sách trắng; dù lý do nào cũng không đẩy.
         assert.equal(result.push, false, `${where} ${key}`);
         assert.ok(['remote-not-allowed', 'url-rewrite'].includes(result.reason), result.reason);
@@ -326,14 +338,14 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
       // Viết lại sang url cũng hợp lệ: vẫn không đẩy (đích thật khác url đã kiểm), báo một dòng.
       process.env.GIT_CONFIG_GLOBAL = join(dir, 'empty.gitconfig');
       sh(work, 'config', 'url.https://github.com/NLH-GOVERNANCE/.insteadOf', 'https://github.com/NLH-OS/');
-      const swapped = decideAutoPush({ env: {}, ...pushFacts(work, { lsRemote: () => assert.fail('không hỏi mạng') }) });
+      const swapped = decideAutoPush({ env: ON, ...pushFacts(work, { lsRemote: () => assert.fail('không hỏi mạng') }) });
       assert.deepEqual([swapped.push, swapped.reason], [false, 'url-rewrite']);
       assert.equal(swapped.notice.split('\n').length, 1);
       sh(work, 'config', '--unset-all', 'url.https://github.com/NLH-GOVERNANCE/.insteadOf');
       // Hết quy tắc thì đẩy được lại.
       delete process.env.GIT_CONFIG_GLOBAL;
       process.env.GIT_CONFIG_GLOBAL = join(dir, 'empty.gitconfig');
-      assert.equal(decideAutoPush({ env: {}, ...pushFacts(work, { lsRemote: () => [] }) }).push, true);
+      assert.equal(decideAutoPush({ env: ON, ...pushFacts(work, { lsRemote: () => [] }) }).push, true);
     } finally {
       if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
       else process.env.GIT_CONFIG_GLOBAL = saved;
@@ -348,15 +360,15 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     commit(work, 'a.mjs', 'export {};\n');
     // Giả: ref theo dõi cục bộ nói đích đã có mọi thứ. Quét cục bộ bị lừa; quét theo ls-remote thì không.
     sh(work, 'update-ref', 'refs/remotes/origin/feat/auto', 'HEAD');
-    assert.equal(decideAutoPush({ env: {}, ...repoFacts(work) }).push, true);
-    const real = decideAutoPush({ env: {}, ...pushFacts(work, { lsRemote: () => [] }) });
+    assert.equal(decideAutoPush({ env: ON, ...repoFacts(work) }).push, true);
+    const real = decideAutoPush({ env: ON, ...pushFacts(work, { lsRemote: () => [] }) });
     assert.equal(real.push, false);
     assert.match(real.notice, /looks like a key/);
     // Đích nói nó đã có commit chứa khoá (id lạ cục bộ thì bỏ qua): khoảng quét chỉ còn commit sau đó.
     const ids = [secret, 'b'.repeat(40)];
     const f = pushFacts(work, { lsRemote: () => ids });
     assert.deepEqual(f.names, ['a.mjs']);
-    assert.equal(decideAutoPush({ env: {}, ...f }).push, true);
+    assert.equal(decideAutoPush({ env: ON, ...f }).push, true);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -365,9 +377,10 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     commit(work, 'a.mjs', 'export {};\n');
     const f = pushFacts(work, { lsRemote: () => null });
     assert.equal(f.remoteUnreadable, true);
-    assert.deepEqual([decideAutoPush({ env: {}, ...f }).push, decideAutoPush({ env: {}, ...f }).reason], [false, 'remote-unreadable']);
+    assert.deepEqual([decideAutoPush({ env: ON, ...f }).push, decideAutoPush({ env: ON, ...f }).reason], [false, 'remote-unreadable']);
     const lines = [];
     const result = runAutoPush(work, {
+      env: ON,
       facts: (r) => pushFacts(r, { lsRemote: () => null }),
       gate: () => assert.fail('không hỏi cổng'),
       push: () => assert.fail('không đẩy'),
@@ -386,6 +399,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     const pushed = [];
     let moved = false;
     const deps = {
+      env: ON,
       facts: (r) => pushFacts(r, { lsRemote: () => [] }),
       gate: (f) => (asked.push(f.sha), { denied: false }),
       push: (args) => (pushed.push(args), { ok: true }),
@@ -413,6 +427,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
       const pushed = [];
       let moved = false;
       const result = runAutoPush(work, {
+      env: ON,
         facts: (r) => pushFacts(r, { lsRemote: () => [] }),
         gate: () => ({ denied: false }),
         push: (args) => (pushed.push(args), { ok: true }),
@@ -435,6 +450,7 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     let n = 0;
     const pushed = [];
     const result = runAutoPush(work, {
+      env: ON,
       facts: (r) => pushFacts(r, { lsRemote: () => [] }),
       gate: () => ({ denied: false }),
       push: (args) => (pushed.push(args), { ok: true }),
@@ -442,10 +458,10 @@ describe('tự đẩy: đọc và quét repo git thật', () => {
     });
     assert.equal(result, 'moved');
     assert.deepEqual(pushed, []);
-    assert.equal(runAutoPush(work, { facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: true }), push: (args) => (pushed.push(args), { ok: true }) }), 'gate');
+    assert.equal(runAutoPush(work, { env: ON, facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: true }), push: (args) => (pushed.push(args), { ok: true }) }), 'gate');
     assert.deepEqual(pushed, []);
     assert.equal(runAutoPush(work, { env: { NLH_AUTOPUSH: '0' }, facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: false }), push: (args) => (pushed.push(args), { ok: true }) }), 'off');
-    assert.equal(runAutoPush(work, { facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: false }), push: () => ({ ok: false, message: 'network' }) }), 'failed');
+    assert.equal(runAutoPush(work, { env: ON, facts: (r) => pushFacts(r, { lsRemote: () => [] }), gate: () => ({ denied: false }), push: () => ({ ok: false, message: 'network' }) }), 'failed');
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -479,6 +495,7 @@ describe('tự đẩy: hook chạy thật trên repo git', () => {
     mkdirSync(gateDir);
     writeFileSync(join(gateDir, 'rules.mjs'), 'export function checkPullRequest() { return []; }\n');
     const env = {
+      NLH_AUTOPUSH: '1',
       NLH_AUTOPUSH_SYNC: '1',
       NLH_AUTOPUSH_DIR: join(dir, 'state'),
       NLH_GATE_DIR: gateDir,
@@ -548,6 +565,8 @@ describe('tự đẩy: hook chạy thật trên repo git', () => {
       [dev, commitInput(dev.work), {}],
       [stranger, commitInput(stranger.work), {}],
       [off, commitInput(off.work), { NLH_AUTOPUSH: '0' }],
+      [off, commitInput(off.work), { NLH_AUTOPUSH: '' }],
+      [off, commitInput(off.work), { NLH_AUTOPUSH: 'true' }],
       [other, commitInput(other.work, 'git status; git log -1'), {}],
       [other, { ...commitInput(other.work), hook_event_name: 'PreToolUse' }, {}],
     ]) {
