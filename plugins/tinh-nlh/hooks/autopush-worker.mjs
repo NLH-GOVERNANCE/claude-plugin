@@ -8,7 +8,7 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSyn
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gateCommand, redact, runAutoPush } from './autopush.mjs';
+import { autoPushOn, gateCommand, redact, runAutoPush } from './autopush.mjs';
 import { pushFacts, repoFacts } from './autopush-git.mjs';
 
 const dir = process.env.NLH_AUTOPUSH_DIR || join(homedir(), '.tinh-nlh', 'autopush');
@@ -66,7 +66,8 @@ function afterPush(facts) {
 let lock = null;
 try {
   const root = process.argv[2];
-  if (root) {
+  // Off by default: checked before any folder, git or network, even when the worker is started by hand.
+  if (root && autoPushOn(process.env)) {
     mkdirSync(dir, { recursive: true });
     const first = repoFacts(root, { scan: false });
     const lockFile = join(dir, `${Buffer.from(first?.root ?? root).toString('hex').slice(-40)}.lock`);

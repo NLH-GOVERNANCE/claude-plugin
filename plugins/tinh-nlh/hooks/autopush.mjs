@@ -107,8 +107,11 @@ export function isSafePushArgs(args) {
 // notice is the one line for Claude, only when a secret or an unreadable patch stopped the push; every other "no" is
 // silent. EVERY fetch and push url of origin must be on the allow list (one stranger and nothing is pushed), and there
 // must be exactly one of each: git pushes to all push urls, and only one was checked.
+// Off by default (CTO, eca924c5): only the exact string "1" turns auto-push on. Unset, "0", "true", " 1" and the rest: off.
+export const autoPushOn = (env = {}) => env.NLH_AUTOPUSH === '1';
+
 export function decideAutoPush({ env = {}, isCommit = true, branch, sha, remoteUrls = [], pushUrls = [], urlRewrites = false, remoteUnreadable = false, names = [], patch = '', scanFailed = false }) {
-  if (String(env.NLH_AUTOPUSH ?? '').trim() === '0') return { push: false, reason: 'off' };
+  if (!autoPushOn(env)) return { push: false, reason: 'off' };
   if (!isCommit) return { push: false, reason: 'not-a-commit' };
   if (isProtectedBranch(branch)) return { push: false, reason: 'protected-branch' };
   if (!SHA.test(String(sha ?? ''))) return { push: false, reason: 'no-commit' };
@@ -159,6 +162,8 @@ export const redact = (text) =>
 // push `<sha>:refs/heads/<branch>` with the checked id. Returns a short word for what happened.
 export const MAX_ROUNDS = 3;
 export function runAutoPush(root, { env = {}, facts, gate, push, afterPush = () => {}, log = () => {}, between = () => {} }) {
+  // The worker checks the switch itself before any git or network, even when started by hand.
+  if (!autoPushOn(env)) return 'off';
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const before = facts(root);
     const decision = before ? decideAutoPush({ env, ...before }) : { push: false, reason: 'no-facts' };
