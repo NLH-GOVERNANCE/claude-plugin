@@ -62,7 +62,27 @@
           },
           {
             "type": "mcp_tool",
+            "server": "nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          },
+          {
+            "type": "mcp_tool",
             "server": "plugin:nlh:nhile-governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "nhile-governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -85,6 +105,15 @@
               "session_id": "${session_id}",
               "status": "stopped"
             }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
           }
         ]
       }
@@ -95,6 +124,17 @@
           {
             "type": "mcp_tool",
             "server": "plugin:nlh:nhile-governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "nhile-governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -135,11 +175,20 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^mcp__plugin_nlh_nhile-governance__(?!my_context$)",
+        "matcher": "^mcp__(plugin_nlh_)?nhile-governance__(?!my_context$)",
         "hooks": [
           {
             "type": "mcp_tool",
             "server": "plugin:nlh:nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -182,6 +231,17 @@
           {
             "type": "mcp_tool",
             "server": "plugin:nlh:nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped",
+              "machine_stop": "quota"
+            },
+            "timeout": 10
+          },
+          {
+            "type": "mcp_tool",
+            "server": "nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
