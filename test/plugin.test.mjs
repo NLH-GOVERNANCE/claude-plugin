@@ -2,7 +2,7 @@
 // của gói: không secret, không bin/, hook không gọi mạng, connector đúng địa chỉ bản chính. Chỉ đọc file.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, test } from 'node:test';
@@ -81,6 +81,7 @@ describe('plugin nlh', () => {
     assert.match(byMatcher.startup[0].command, /^echo "[^"$`]+my_context[^"$`]+"$/);
     assert.deepEqual(byMatcher['startup|clear'], [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] },
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/sign-in-check.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/local-schedules-hook.mjs'] },
     ]);
@@ -177,6 +178,34 @@ describe('plugin nlh', () => {
     assert.match(await run(JSON.stringify({ session_id: 'abc' })), /no name yet/);
     assert.equal(await run(JSON.stringify({ session_id: 'có dấu cách' })), '');
     assert.equal(await run('không phải json'), '');
+  });
+
+  test('hook kiểm đăng nhập: cửa riêng của gói chưa đăng nhập trong 7 ngày qua thì dặn Claude báo người dùng một câu; còn lại im', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nlh-signin-'));
+    const run = () =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/sign-in-check.mjs')], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, CLAUDE_CONFIG_DIR: dir } });
+        let out = '';
+        child.stdout.on('data', (chunk) => (out += chunk));
+        child.on('exit', () => resolve(out));
+        child.stdin.end('{}');
+      });
+    const cache = (value) => writeFileSync(join(dir, 'mcp-needs-auth-cache.json'), typeof value === 'string' ? value : JSON.stringify(value));
+    assert.equal(await run(), '', 'không có tệp thì im');
+    cache({ 'plugin:nlh:nhile-governance': { timestamp: Date.now() - 60_000 } });
+    const out = await run();
+    assert.match(out, /^Nếp sign-in check: .*plugin:nlh:nhile-governance.*fail silently/);
+    assert.match(out, /"Gói Nếp trên máy này chưa đăng nhập, nên chat phiên này chưa vào giếng: gõ \/mcp, chọn plugin:nlh:nhile-governance, bấm đăng nhập/);
+    assert.equal(out.split('\n').filter(Boolean).length, 1);
+    cache({ 'plugin:nlh:nhile-governance': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
+    assert.equal(await run(), '', 'cũ hơn 7 ngày thì im');
+    cache({ 'claude.ai Gmail': { timestamp: Date.now() } });
+    assert.equal(await run(), '', 'cửa khác chưa đăng nhập thì không phải việc của Nếp');
+    cache('không phải json');
+    assert.equal(await run(), '');
+    // Lan can: chỉ đọc một tệp, không gọi mạng, không ghi, không chạy lệnh.
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/sign-in-check.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|child_process)|writeFile|appendFile|mkdir/);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {
