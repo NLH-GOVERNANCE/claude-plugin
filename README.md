@@ -15,7 +15,7 @@ Dùng Claude Code: thêm gói Nếp để có hook lưu chat, báo phiên, lời
 /plugin install nlh@nlh-governance
 ```
 
-Gói không mang connector riêng: nó dùng Nếp trong tài khoản ở bước trên. Ai dùng Claude Code bằng khoá API thay vì tài khoản claude.ai thì không có connector của tài khoản. Người đó thêm bằng lệnh `claude mcp add --transport http Nep https://mcp.nlh.vn/mcp`.
+Gói không mang connector riêng: nó dùng Nếp trong tài khoản ở bước trên. Ai dùng Claude Code bằng khoá API thay vì tài khoản claude.ai thì không có connector của tài khoản. Người đó thêm bằng lệnh `claude mcp add --transport http nhile-governance https://mcp.nlh.vn/mcp`: đúng tên này để hook của gói gọi tới.
 
 Muốn có lệnh tắt như `/work` trên app Claude: [Customize > Plugins](https://claude.ai/customize/plugins), **Add**, **Add marketplace**, gõ `NLH-GOVERNANCE/claude-plugin`, cài **Nếp**. Không bắt buộc.
 

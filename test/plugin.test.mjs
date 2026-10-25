@@ -324,6 +324,12 @@ describe('plugin nlh', () => {
       assert.equal(matcher.test(`mcp__${server}__my_context`), false, server);
     }
     assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_work'), false, 'gói không còn connector riêng');
+    // Lệnh thêm tay trong README (Claude Code dùng khoá API) phải đặt đúng một tên hook gọi tới, kẻo có công cụ mà chat
+    // không vào giếng.
+    const added = readFileSync(join(root, 'README.md'), 'utf8').match(/claude mcp add --transport http (\S+) https:\/\/mcp\.nlh\.vn\/mcp/);
+    assert.ok(added, 'README có lệnh thêm tay');
+    assert.ok(DOORS.includes(added[1]), added[1]);
+    assert.equal(matcher.test(`mcp__${added[1]}__my_work`), true);
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse[0], {
