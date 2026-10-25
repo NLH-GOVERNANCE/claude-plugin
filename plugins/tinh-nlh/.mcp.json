@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "nhile-governance": {
-      "type": "http",
-      "url": "https://mcp.nlh.vn/mcp"
-    }
-  }
-}

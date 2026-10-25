@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"Plugin Nếp (nlh) is on. Call the system Nếp when talking to the user; the old name tỉnh NhiLe means the same. First turn of the session, before anything else: call my_context of the NhiLe Governance connector once (who the user is, their cells, open projects, work waiting, work assigned), then tell the user in plain Vietnamese what is waiting for them. If the user asks what they left unfinished, answer from that result without more lookups. Before any work, read village_rules in that result: the rules the whole village agreed, kept without being told again (no such field: get_cell luat-lang, file rules.md). If a Nếp tool fails with a sign-in error: call session_connectors_status; failed means reconnect_session_connector; needs_auth means tell the user in one sentence: gõ /mcp, bấm đăng nhập Nếp.\""
+            "command": "echo \"Plugin Nếp (nlh) is on. Call the system Nếp when talking to the user; the old name tỉnh NhiLe means the same. First turn of the session, before anything else: call my_context of the Nếp connector once (who the user is, their cells, open projects, work waiting, work assigned), then tell the user in plain Vietnamese what is waiting for them. If the user asks what they left unfinished, answer from that result without more lookups. Before any work, read village_rules in that result: the rules the whole village agreed, kept without being told again (no such field: get_cell luat-lang, file rules.md). If a Nếp tool fails with a sign-in error: call session_connectors_status if you have it (failed means reconnect_session_connector); otherwise follow the Nếp connector line printed at session start.\""
           }
         ]
       },
@@ -48,7 +48,37 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:nlh:nhile-governance",
+            "server": "claude.ai Nếp",
+            "tool": "my_context",
+            "timeout": 30
+          },
+          {
+            "type": "mcp_tool",
+            "server": "Nếp",
+            "tool": "my_context",
+            "timeout": 30
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai nhile-governance",
+            "tool": "my_context",
+            "timeout": 30
+          },
+          {
+            "type": "mcp_tool",
+            "server": "nhile-governance",
+            "tool": "my_context",
+            "timeout": 30
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai NhiLe Governance",
+            "tool": "my_context",
+            "timeout": 30
+          },
+          {
+            "type": "mcp_tool",
+            "server": "NhiLe Governance",
             "tool": "my_context",
             "timeout": 30
           }
@@ -60,7 +90,25 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:nlh:nhile-governance",
+            "server": "claude.ai Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -78,7 +126,47 @@
           },
           {
             "type": "mcp_tool",
-            "server": "plugin:nlh:nhile-governance",
+            "server": "claude.ai NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai Nếp",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "Nếp",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai nhile-governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -90,6 +178,28 @@
           {
             "type": "mcp_tool",
             "server": "nhile-governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai NhiLe Governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "NhiLe Governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -106,7 +216,25 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:nlh:nhile-governance",
+            "server": "claude.ai Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -116,6 +244,24 @@
           {
             "type": "mcp_tool",
             "server": "nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "NhiLe Governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -130,7 +276,29 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:nlh:nhile-governance",
+            "server": "claude.ai Nếp",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "Nếp",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai nhile-governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -142,6 +310,28 @@
           {
             "type": "mcp_tool",
             "server": "nhile-governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai NhiLe Governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "NhiLe Governance",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -182,11 +372,29 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^mcp__(plugin_nlh_)?nhile-governance__(?!my_context$)",
+        "matcher": "^mcp__(claude_ai_)?(N_p|Nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)",
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:nlh:nhile-governance",
+            "server": "claude.ai Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -196,6 +404,24 @@
           {
             "type": "mcp_tool",
             "server": "nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "NhiLe Governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -250,7 +476,29 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:nlh:nhile-governance",
+            "server": "claude.ai Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped",
+              "machine_stop": "quota"
+            },
+            "timeout": 10
+          },
+          {
+            "type": "mcp_tool",
+            "server": "Nếp",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped",
+              "machine_stop": "quota"
+            },
+            "timeout": 10
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai nhile-governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -262,6 +510,28 @@
           {
             "type": "mcp_tool",
             "server": "nhile-governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped",
+              "machine_stop": "quota"
+            },
+            "timeout": 10
+          },
+          {
+            "type": "mcp_tool",
+            "server": "claude.ai NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped",
+              "machine_stop": "quota"
+            },
+            "timeout": 10
+          },
+          {
+            "type": "mcp_tool",
+            "server": "NhiLe Governance",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",

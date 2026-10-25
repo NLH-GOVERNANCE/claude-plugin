@@ -12,8 +12,9 @@ import { pluginFiles, pluginZip } from '../scripts/plugin-zip.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
-// Hai cửa Nếp mà hook lưu chat và báo phiên gọi: cửa riêng của gói, và cửa connector đã nối (tên nhile-governance).
-const DOORS = ['plugin:nlh:nhile-governance', 'nhile-governance'];
+// Nếp là connector trong tài khoản Claude của mỗi người, gói không có connector riêng (25/10): hook gọi connector đó theo
+// các tên nó có ("claude.ai <tên>" ở Claude Code trên máy, tên trần ở phiên mây). Nếp là tên link thêm điền sẵn.
+const DOORS = ['claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance'];
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -65,11 +66,11 @@ describe('plugin nlh', () => {
     assert.doesNotThrow(() => new URL(manifest.homepage));
   });
 
-  test('connector: đúng một máy chủ MCP từ xa ở bản chính, không header, không biến môi trường', () => {
-    const { mcpServers } = readJson('plugins/tinh-nlh/.mcp.json');
-    const servers = Object.values(mcpServers);
-    assert.equal(servers.length, 1);
-    assert.deepEqual(servers[0], { type: 'http', url: 'https://mcp.nlh.vn/mcp' });
+  test('connector: gói không mang máy chủ MCP từ xa nào (Nếp nằm trong tài khoản Claude), chỉ còn Loa chạy trên máy', () => {
+    assert.equal(existsSync(join(pluginDir, '.mcp.json')), false);
+    const { mcpServers } = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
+    assert.deepEqual(Object.keys(mcpServers), ['speaker']);
+    assert.doesNotMatch(JSON.stringify(mcpServers), /mcp\.nlh\.vn|"type":"http"/);
   });
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
@@ -97,9 +98,8 @@ describe('plugin nlh', () => {
         hooks: DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status: 'stopped', machine_stop: 'quota' }, timeout: 10 })),
       },
     ]);
-    // Sau /clear hay gọn ngữ cảnh: gọi thẳng công cụ, đúng tên máy chủ có phạm vi plugin, không truyền gì thêm.
-    const [server] = Object.keys(readJson('plugins/tinh-nlh/.mcp.json').mcpServers);
-    assert.deepEqual(byMatcher['clear|compact'], [{ type: 'mcp_tool', server: `plugin:nlh:${server}`, tool: 'my_context', timeout: 30 }]);
+    // Sau /clear hay gọn ngữ cảnh: gọi thẳng my_context của connector Nếp trong tài khoản, theo mọi tên nó có.
+    assert.deepEqual(byMatcher['clear|compact'], DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'my_context', timeout: 30 })));
     // Phiên tự báo (phiếu 6d4cb2ad): gọi report_session của connector, không gửi nội dung chat.
     for (const [event, status] of [['Stop', 'idle'], ['SessionEnd', 'stopped']]) {
       const found = hooks[event].flatMap((group) => group.hooks).filter((item) => item.tool === 'report_session');
@@ -206,7 +206,7 @@ describe('plugin nlh', () => {
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/memory-to-nep.mjs'), 'utf8'), /fetch|https?:|node:(fs|http|net|https|child_process)/);
   });
 
-  test('hook kiểm đăng nhập: cửa riêng của gói chưa đăng nhập trong 7 ngày qua thì dặn Claude báo người dùng một câu; còn lại im', async () => {
+  test('hook dòng connector Nếp: luôn dặn Claude đưa link thêm Nếp khi không có công cụ Nếp; connector Nếp cần đăng nhập lại trong 7 ngày qua thì dặn cách đăng nhập', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nlh-signin-'));
     const run = () =>
       new Promise((resolve) => {
@@ -217,20 +217,32 @@ describe('plugin nlh', () => {
         child.stdin.end('{}');
       });
     const cache = (value) => writeFileSync(join(dir, 'mcp-needs-auth-cache.json'), typeof value === 'string' ? value : JSON.stringify(value));
-    assert.equal(await run(), '', 'không có tệp thì im');
-    cache({ 'plugin:nlh:nhile-governance': { timestamp: Date.now() - 60_000 } });
-    const out = await run();
-    assert.match(out, /^Nếp sign-in check: .*plugin:nlh:nhile-governance.*mcp__nhile-governance__.*say nothing\. Otherwise the chat does not reach the ledger/);
-    assert.match(out, /"Gói Nếp trên máy này chưa đăng nhập, nên chat phiên này chưa vào giếng: gõ \/mcp, chọn plugin:nlh:nhile-governance, bấm đăng nhập/);
-    assert.equal(out.split('\n').filter(Boolean).length, 1);
-    cache({ 'plugin:nlh:nhile-governance': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
-    assert.equal(await run(), '', 'cũ hơn 7 ngày thì im');
+    const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
+    const missing = await run();
+    assert.match(missing, /^Nếp connector: .*If you have no Nếp tool at all \(no my_context from any server\)/);
+    assert.ok(missing.includes(`"Máy này chưa có Nếp: trên máy tính mở ${link} , bấm Add, đăng nhập bằng email công ty, rồi mở phiên mới."`));
+    assert.doesNotMatch(missing, /đăng nhập lại/);
+    assert.equal(missing.split('\n').filter(Boolean).length, 1);
+    // Link mở đúng hộp Add custom connector, điền sẵn tên Nếp và cửa mcp.nlh.vn.
+    const url = new URL(link);
+    assert.equal(url.searchParams.get('modal'), 'add-custom-connector');
+    assert.equal(url.searchParams.get('connectorName'), 'Nếp');
+    assert.equal(url.searchParams.get('connectorUrl'), 'https://mcp.nlh.vn/mcp');
+    for (const name of ['claude.ai Nếp', 'nhile-governance']) {
+      cache({ [name]: { timestamp: Date.now() - 60_000 } });
+      const out = await run();
+      assert.ok(out.includes(`lists the Nếp connector (${name}) as needing sign-in`), name);
+      assert.match(out, /"Nếp cần đăng nhập lại: mở claude\.ai, Customize, Connectors, bấm Connect ở Nếp, rồi mở phiên mới\."/);
+      assert.equal(out.split('\n').filter(Boolean).length, 1);
+    }
+    cache({ 'claude.ai Nếp': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
+    assert.equal(await run(), missing, 'cũ hơn 7 ngày thì chỉ còn dòng thiếu connector');
     cache({ 'claude.ai Gmail': { timestamp: Date.now() } });
-    assert.equal(await run(), '', 'cửa khác chưa đăng nhập thì không phải việc của Nếp');
+    assert.equal(await run(), missing, 'connector khác cần đăng nhập không phải việc của Nếp');
     cache('không phải json');
-    assert.equal(await run(), '');
+    assert.equal(await run(), missing);
     // Lan can: chỉ đọc một tệp, không gọi mạng, không ghi, không chạy lệnh.
-    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/sign-in-check.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|child_process)|writeFile|appendFile|mkdir/);
+    assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/sign-in-check.mjs'), 'utf8'), /fetch\(|node:(http|net|https|child_process)|writeFile|appendFile|mkdir/);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -281,7 +293,7 @@ describe('plugin nlh', () => {
     }
     assert.deepEqual(names, pluginFiles());
     assert.ok(names.includes('.claude-plugin/plugin.json'));
-    assert.ok(names.includes('.mcp.json'));
+    assert.ok(!names.includes('.mcp.json'));
     assert.ok(names.every((name) => !name.startsWith('/') && !name.includes('..')));
   });
 
@@ -296,8 +308,8 @@ describe('plugin nlh', () => {
   test('lưu chat (phiếu abdcdd2f): lượt người lúc UserPromptSubmit, lượt Claude lúc Stop, qua save_chat của connector; không gửi kết quả công cụ', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const save = (event) => hooks[event].flatMap((group) => group.hooks).filter((hook) => hook.tool === 'save_chat');
-    // Gọi cả hai cửa Nếp (25/10): cửa riêng của gói chưa đăng nhập thì cửa connector đã nối vẫn lưu; hai cửa cùng tới
-    // thì giếng bỏ bản trùng trong 2 phút (api chats.mjs).
+    // Gọi connector Nếp trong tài khoản theo mọi tên nó có; tên nào không có thì hook đó bỏ qua. Một người có hai bản
+    // connector cùng tới thì giếng bỏ bản trùng trong 2 phút (api chats.mjs).
     const both = (input) => DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'save_chat', input, timeout: 5 }));
     // Hạn chờ 5 giây: connector chậm thì Claude vẫn nhận lời ngay, lượt đó chỉ không được lưu.
     assert.deepEqual(save('UserPromptSubmit'), both({ session_id: '${session_id}', role: 'user', text: '${prompt}' }));
@@ -306,15 +318,16 @@ describe('plugin nlh', () => {
     // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
     // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
     const matcher = new RegExp(hooks.PostToolUse[0].matcher);
-    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_work'), true);
-    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__save_chat'), true);
-    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_context'), false);
-    assert.equal(matcher.test('mcp__nhile-governance__my_work'), true, 'cửa connector đã nối');
-    assert.equal(matcher.test('mcp__nhile-governance__my_context'), false);
+    for (const server of ['claude_ai_N_p', 'claude_ai_Nep', 'N_p', 'claude_ai_nhile-governance', 'nhile-governance', 'claude_ai_NhiLe_Governance']) {
+      assert.equal(matcher.test(`mcp__${server}__my_work`), true, server);
+      assert.equal(matcher.test(`mcp__${server}__save_chat`), true, server);
+      assert.equal(matcher.test(`mcp__${server}__my_context`), false, server);
+    }
+    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_work'), false, 'gói không còn connector riêng');
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse[0], {
-      matcher: '^mcp__(plugin_nlh_)?nhile-governance__(?!my_context$)',
+      matcher: '^mcp__(claude_ai_)?(N_p|Nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)',
       hooks: DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } })),
     });
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
