@@ -1,11 +1,13 @@
 // PostToolUse hook of plugin nlh (ticket eca924c5): after a Bash or PowerShell `git commit` on a work branch of our
 // organisations, push the branch to origin in the background, so a machine that turns off loses no work. The decision
-// is in autopush.mjs. This hook never blocks and never fails: any error, it does nothing and exits 0. NLH_AUTOPUSH=0 turns it off.
+// is in autopush.mjs. This hook never blocks and never fails: any error, it does nothing and exits 0. Off by default: it
+// runs only on a machine that sets NLH_AUTOPUSH to exactly "1" (CTO, eca924c5; claude-plugin#59 review): anything else and
+// it runs no git, no network, no log.
 import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { commitDirs, decideAutoPush } from './autopush.mjs';
+import { autoPushOn, commitDirs, decideAutoPush } from './autopush.mjs';
 import { repoFacts } from './autopush-git.mjs';
 
 const worker = fileURLToPath(new URL('./autopush-worker.mjs', import.meta.url));
@@ -16,7 +18,7 @@ try {
   const input = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
   const command = String(input.tool_input?.command ?? '');
   const dirs =
-    input.hook_event_name === 'PostToolUse' && /^(Bash|PowerShell)$/.test(String(input.tool_name ?? '')) && process.env.NLH_AUTOPUSH !== '0'
+    input.hook_event_name === 'PostToolUse' && /^(Bash|PowerShell)$/.test(String(input.tool_name ?? '')) && autoPushOn(process.env)
       ? commitDirs(command, input.cwd || process.cwd(), (from, to) => resolve(from, to.replace(/^~(?=$|[\\/])/, homedir())))
       : [];
   const notices = [];
