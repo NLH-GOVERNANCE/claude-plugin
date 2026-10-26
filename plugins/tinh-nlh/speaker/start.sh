@@ -149,6 +149,7 @@ if [ ! -f "$DIR/opened.txt" ]; then
   echo 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
 fi
 echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
+echo 'Dòng vàng "no MCP server configured with that name" là Claude Code báo nhầm: Loa vẫn nối. Bỏ qua dòng đó.'
 echo ''
 # With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
 # tokens). Only the fallback without the channel keeps the 10-minute loop over the pending tool.

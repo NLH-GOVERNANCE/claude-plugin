@@ -50,7 +50,7 @@ Windows and macOS only. On Linux skip to step 5 and say Loa only runs on Windows
    It copies Loa to `~/.tinh-nlh/speaker`, puts the icon **Loa tỉnh NhiLe** on the desktop and opens Loa at login. If it says another shortcut of that name exists, keep it.
 3. **User:** say, in these words:
    - "Mở web Nếp, mục **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới**, chép khoá."
-   - "Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính, dán khoá khi cửa sổ hỏi (chữ không hiện ra), bấm Enter. Lần đầu cửa sổ tự cài phần còn thiếu và mở trình duyệt để đăng nhập Claude. Mỗi lần mở, chọn dòng **I am using this for local development**. Để cửa sổ Loa mở."
+   - "Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính, dán khoá khi cửa sổ hỏi (chữ không hiện ra), bấm Enter. Lần đầu cửa sổ tự cài phần còn thiếu và mở trình duyệt để đăng nhập Claude. Mỗi lần mở, chọn dòng **I am using this for local development**. Dòng vàng 'no MCP server configured with that name' là Claude Code báo nhầm, Loa vẫn nối: bỏ qua. Để cửa sổ Loa mở."
    - "Xong nói tiếp, hay nói bỏ qua Loa."
 
    Wait. If the user pastes something like `nlh_tower_…` into chat, do not repeat or use it; say: "Khoá đó đã lộ: thu hồi ở web (Kết nối, Khoá cho Loa trên máy), tạo khoá mới, dán vào cửa sổ Loa."

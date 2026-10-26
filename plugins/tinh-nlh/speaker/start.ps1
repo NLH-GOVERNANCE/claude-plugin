@@ -169,6 +169,7 @@ if (-not (Test-Path -LiteralPath $opened)) {
   Write-Host 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
+Write-Host 'Dòng vàng "no MCP server configured with that name" là Claude Code báo nhầm: Loa vẫn nối. Bỏ qua dòng đó.'
 Write-Host ''
 $arguments = @('/nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--settings', $settings, '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
 # With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
