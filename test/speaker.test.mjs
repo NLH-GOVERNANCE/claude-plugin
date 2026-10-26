@@ -532,10 +532,10 @@ describe('Loa nhắc lại việc chưa ai nhận', () => {
   const state = (loa) => JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8'));
 
   test('hàm thuần: câu nhắc không tiêu đề; mục có người giữ; dòng tự ghi; việc tới hạn kiểm', () => {
-    assert.equal(reminderSentence(entry('a', at), 2), `Loa nhắc lần 2/3: Việc ${TICKET} của dân làng cto vẫn chưa ai nhận. Mở việc, nhận nếu còn chưa ai nhận, rồi làm.`);
-    assert.match(reminderSentence(entry('a', at, { kind: 'mention', ticket_id: null }), 1), /^Loa nhắc lần 1\/3: Lời gọi dân làng cto trong nhóm vẫn chưa ai nhận\./);
+    assert.equal(reminderSentence(entry('a', at), 1), `Loa nhắc: Việc ${TICKET} của dân làng cto vẫn chưa ai nhận. Mở việc, nhận nếu còn chưa ai nhận, rồi làm.`);
+    assert.match(reminderSentence(entry('a', at, { kind: 'mention', ticket_id: null }), 1), /^Loa nhắc: Lời gọi dân làng cto trong nhóm vẫn chưa ai nhận\./);
     assert.doesNotMatch(reminderSentence(entry('a', at, { title: 'Tiêu đề bí mật', cell: 'cto"><x' }), 1), /Tiêu đề|bí mật|<|>/);
-    assert.equal(REMIND_MAX, 3);
+    assert.equal(REMIND_MAX, 1, 'nhắc một lần (việc 17e647c1 phần 4)');
     assert.equal(REMIND_MS, 30 * MIN);
     assert.ok(taken({ held_by: 'actor' }) && taken({ claimed: true }));
     assert.ok(!taken(entry('a', at)));
@@ -548,7 +548,7 @@ describe('Loa nhắc lại việc chưa ai nhận', () => {
     assert.equal(dueChecks({ held: [], told: [], pending: [] }, now).since, null, 'không có gì tới hạn: không đọc thêm');
   });
 
-  test('việc còn trong luồng sau 30 phút: nhắc đúng một lần mỗi 30 phút, tối đa 3, cùng phiên; mỗi lần một dòng sổ via send ghi là nhắc', async () => {
+  test('việc còn trong luồng sau 30 phút: nhắc đúng một lần, cùng phiên, không nhắc lần hai; một dòng sổ via send ghi là nhắc (việc 17e647c1 phần 4)', async () => {
     const time = fakeClock();
     const loa = inProcess({ feed: () => [entry('your_cell:t:r', at, { session_id: LIVE })], sessions: live, clock: time.clock });
     await loa.server.tick();
@@ -564,16 +564,14 @@ describe('Loa nhắc lại việc chưa ai nhận', () => {
       if (last.meta.entry_id.startsWith('remind') && !loa.rows.some((row) => row.entry_id === last.meta.entry_id)) await loa.call(id++, 'forwarded', { entry_id: last.meta.entry_id, ok: true });
       counts.push(sends(loa).length - 1);
     }
-    assert.deepEqual(counts, [0, 1, 1, 2, 2, 3, 3, 3, 3], 'phút 30, 60, 90; không lần thứ tư');
+    assert.deepEqual(counts, [0, 1, 1, 1, 1, 1, 1, 1, 1], 'phút 30; không lần thứ hai');
     const reminders = sends(loa).slice(1);
-    assert.deepEqual(reminders.map((event) => event.meta.entry_id), ['remind1:your_cell:t:r', 'remind2:your_cell:t:r', 'remind3:your_cell:t:r']);
+    assert.deepEqual(reminders.map((event) => event.meta.entry_id), ['remind1:your_cell:t:r']);
     assert.ok(reminders.every((event) => event.meta.to === 'Ô CTO (son/cto)'));
     assert.equal(reminders[0].content, reminderSentence(entry('x', at), 1));
     assert.deepEqual(loa.rows.map((row) => [row.entry_id, row.via, row.ok, row.reminder]), [
       ['your_cell:t:r', 'send', true, undefined],
       ['remind1:your_cell:t:r', 'send', true, 1],
-      ['remind2:your_cell:t:r', 'send', true, 2],
-      ['remind3:your_cell:t:r', 'send', true, 3],
     ]);
     assert.ok(!JSON.stringify(loa.rows).includes('Việc your'), 'không tiêu đề');
     assert.ok(!readFileSync(join(loa.dir, 'tower-state.json'), 'utf8').includes('Việc your_cell'), 'file trạng thái không chép tiêu đề');
