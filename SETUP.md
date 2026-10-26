@@ -6,7 +6,11 @@ Người dùng dán vào Claude Code một câu:
 Cài Nếp cho máy này theo https://raw.githubusercontent.com/NLH-GOVERNANCE/claude-plugin/main/SETUP.md
 ```
 
-Phần dưới là cho Claude. Người chỉ làm ba việc khi được hỏi: gõ `/reload-plugins` và `/mcp`, đăng nhập Nếp bằng email công ty, dán khoá Loa vào cửa sổ Loa.
+Phần dưới là cho Claude. Claude làm hết, chỉ dừng hỏi bạn ba lần:
+
+1. **Gõ `/reload-plugins`** rồi Enter, khi Claude cài gói xong. Đúng là: Claude Code in một dòng báo đã nạp lại plugin, không có chữ đỏ.
+2. **Gõ `/mcp`** rồi Enter, dùng phím mũi tên chọn dòng **plugin:nlh:nep** (đang ghi cần đăng nhập), bấm Enter. Trình duyệt mở trang đăng nhập Nếp: đăng nhập bằng email công ty, bấm cho phép. Đúng là: trình duyệt báo đăng nhập xong; gõ `/mcp` lại thì dòng **plugin:nlh:nep** có dấu ✓ (connected). Bấm Esc để đóng bảng.
+3. **Dán khoá Loa** vào cửa sổ Loa (Windows và Mac), khoá lấy ở web Nếp › Kết nối. Chữ không hiện khi dán là đúng.
 
 ---
 
@@ -28,14 +32,14 @@ Same commands on every OS:
 2. `claude plugin list`. If `nlh@nlh-governance` is listed: `claude plugin update nlh@nlh-governance`. Otherwise: `claude plugin install nlh@nlh-governance`.
 3. If the old name `tinh-nlh@nlh-governance` is listed, leave it: the marketplace moves it to `nlh` by itself.
 
-**User:** say "Gõ /reload-plugins rồi bấm Enter, xong nói tiếp." Wait.
+**User:** say "Gõ đúng /reload-plugins rồi bấm Enter. Đúng là Claude Code in một dòng báo đã nạp lại plugin. Xong nói tiếp." Wait.
 
 ### 3. Sign in to Nếp
 
 The plugin brings Nếp: a server named `plugin:nlh:nep`, tools `mcp__plugin_nlh_nep__…`.
 
 1. If you have `my_context` from Nếp, call it. It answers: Nếp is signed in, go to step 4.
-2. Otherwise **User:** say "Gõ /mcp, chọn plugin:nlh:nep, bấm Enter. Trình duyệt mở trang Nếp: đăng nhập bằng email công ty. Xong nói tiếp." Wait. (`claude mcp login` needs a real terminal, so you cannot run it from your shell.)
+2. Otherwise **User:** say "Gõ đúng /mcp rồi bấm Enter. Dùng phím mũi tên chọn dòng plugin:nlh:nep (đang ghi cần đăng nhập), bấm Enter. Trình duyệt mở trang Nếp: đăng nhập bằng email công ty, bấm cho phép. Đúng là trình duyệt báo đăng nhập xong, và trong /mcp dòng plugin:nlh:nep có dấu ✓. Bấm Esc, xong nói tiếp." Wait. (`claude mcp login` needs a real terminal, so you cannot run it from your shell.)
 3. Call `my_context`. Still failing: say what `/mcp` shows for `plugin:nlh:nep` in one sentence and stop.
 
 ### 4. Turn on Loa and put its icon on the desktop
