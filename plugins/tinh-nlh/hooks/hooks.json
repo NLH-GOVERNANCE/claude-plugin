@@ -48,6 +48,12 @@
         "hooks": [
           {
             "type": "mcp_tool",
+            "server": "plugin:nlh:nep",
+            "tool": "my_context",
+            "timeout": 30
+          },
+          {
+            "type": "mcp_tool",
             "server": "claude.ai Nếp",
             "tool": "my_context",
             "timeout": 30
@@ -90,6 +96,15 @@
         "hooks": [
           {
             "type": "mcp_tool",
+            "server": "plugin:nlh:nep",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          },
+          {
+            "type": "mcp_tool",
             "server": "claude.ai Nếp",
             "tool": "report_session",
             "input": {
@@ -141,6 +156,17 @@
               "session_id": "${session_id}",
               "status": "idle"
             }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "plugin:nlh:nep",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
           },
           {
             "type": "mcp_tool",
@@ -216,6 +242,15 @@
         "hooks": [
           {
             "type": "mcp_tool",
+            "server": "plugin:nlh:nep",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
+          },
+          {
+            "type": "mcp_tool",
             "server": "claude.ai Nếp",
             "tool": "report_session",
             "input": {
@@ -274,6 +309,17 @@
     "UserPromptSubmit": [
       {
         "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:nlh:nep",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
+          },
           {
             "type": "mcp_tool",
             "server": "claude.ai Nếp",
@@ -372,8 +418,17 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^mcp__(claude_ai_)?(N_p|Nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)",
+        "matcher": "^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)",
         "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:nlh:nep",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
+            }
+          },
           {
             "type": "mcp_tool",
             "server": "claude.ai Nếp",
@@ -474,6 +529,17 @@
       {
         "matcher": "rate_limit|billing_error",
         "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:nlh:nep",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped",
+              "machine_stop": "quota"
+            },
+            "timeout": 10
+          },
           {
             "type": "mcp_tool",
             "server": "claude.ai Nếp",

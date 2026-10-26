@@ -1,7 +1,7 @@
 {
   "name": "nlh",
   "displayName": "Nếp",
-  "version": "0.21.2",
+  "version": "0.22.0",
   "description": "Nếp là nơi công ty giao việc, theo dõi việc và ký duyệt. Cài xong, hỏi Claude \"việc của tôi hôm nay?\" hoặc gõ /work.",
   "author": {
     "name": "NhiLe Holding"
@@ -14,6 +14,10 @@
     "tinh-nlh"
   ],
   "mcpServers": {
+    "nep": {
+      "type": "http",
+      "url": "https://mcp.nlh.vn/mcp"
+    },
     "speaker": {
       "command": "node",
       "args": [
