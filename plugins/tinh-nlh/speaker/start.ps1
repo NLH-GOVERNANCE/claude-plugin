@@ -8,7 +8,9 @@ param(
   [string]$Dir = (Join-Path $env:USERPROFILE '.tinh-nlh\speaker'),
   [string]$Work = (Join-Path $env:USERPROFILE 'TinhNhiLe'),
   # Tests only: print the Claude command line instead of running it.
-  [switch]$DryRun
+  [switch]$DryRun,
+  # Set when an older copy of this launcher ran the new one after an update, so it runs at most once.
+  [switch]$Relaunched
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,9 +44,17 @@ $versionFile = Join-Path $Dir 'version.txt'
 $current = $null
 if (Test-Path -LiteralPath $versionFile) { try { $current = [version](Get-Content -LiteralPath $versionFile -Raw).Trim() } catch { } }
 if ($best -and (-not $current -or $best.Version -ge $current)) {
+  # This launcher is not the plugin's newest one (an update came): run the new one right away, once, instead of using it
+  # only from the next launch (17e647c1, 26/10: the first launch after the update still set the old 10-minute loop).
+  $newStart = Join-Path $best.Root 'speaker\start.ps1'
+  $stale = $PSCommandPath -and ((Get-FileHash -LiteralPath $PSCommandPath).Hash -ne (Get-FileHash -LiteralPath $newStart).Hash)
   Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
-  Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\start.ps1') -Destination (Join-Path $Dir 'start.ps1') -Force
+  Copy-Item -LiteralPath $newStart -Destination (Join-Path $Dir 'start.ps1') -Force
   Set-Content -LiteralPath $versionFile -Value $best.Version.ToString() -Encoding ascii
+  if ($stale -and -not $Relaunched) {
+    & (Join-Path $Dir 'start.ps1') -Dir $Dir -Work $Work -DryRun:$DryRun -Relaunched
+    exit $LASTEXITCODE
+  }
 }
 $speaker = Join-Path $Dir 'speaker.mjs'
 if (-not (Test-Path -LiteralPath $speaker)) { Stop-Loa 'Chưa thấy plugin Nếp trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
@@ -141,6 +151,11 @@ if ($env:TOWER_ORIGIN) { $envs.TOWER_ORIGIN = $env:TOWER_ORIGIN }
 $config = Join-Path $Dir 'speaker-mcp.json'
 $json = @{ mcpServers = @{ speaker = @{ command = $node; args = @($speaker); env = $envs } } } | ConvertTo-Json -Depth 5
 [IO.File]::WriteAllText($config, $json, (New-Object Text.UTF8Encoding $false))
+# Loa needs no hook of the plugin: they call the Nếp connector, which the Loa session (only server speaker) does not
+# have, so each turn printed about ten "Stop hook error: MCP server ... not connected" lines (17e647c1, 26/10). This
+# session only: disableAllHooks, read from a file (PowerShell 5.1 drops the quotes of a JSON argument).
+$settings = Join-Path $Dir 'speaker-settings.json'
+[IO.File]::WriteAllText($settings, '{ "disableAllHooks": true }', (New-Object Text.UTF8Encoding $false))
 
 # 6. Open Claude Code in its own work folder (new cell sessions open here too). claude and node go on the session PATH
 # so plugin hooks run.
@@ -155,7 +170,7 @@ if (-not (Test-Path -LiteralPath $opened)) {
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
+$arguments = @('/nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--settings', $settings, '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
 # With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
 # tokens). Fallback without the dev channel flag: the server still reads the hub and opens sessions; only sends wait
 # for the 10-minute loop, so only the fallback has it.

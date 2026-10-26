@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { KEYCHAIN, KEY_FILE } from '../plugins/tinh-nlh/speaker/speaker.mjs';
@@ -41,10 +41,14 @@ function fakeHome(name = 'user') {
 
 // Hai lối mở cùng mở Claude một cách: câu mở đầu trước, Sonnet, kênh tower qua --mcp-config, cờ dev chỉ cho server:tower.
 // Có kênh thì câu mở đầu chạy skill một lần, không đặt vòng 10 phút (việc 17e647c1 phần 4); chỉ lối dự phòng có vòng.
-const CLAUDE_ARGS = ['/nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
+// Phiên Loa tắt mọi hook của gói qua --settings (việc 17e647c1: hook gọi connector Nếp mà phiên Loa không có, mỗi lượt ~10 dòng lỗi).
+const CLAUDE_ARGS = ['/nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--settings', '<settings>', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
 
 // Lối dự phòng (kênh không mở được): vòng 10 phút qua công cụ pending, không cờ kênh.
 const FALLBACK_ARGS = ['/loop 10m /nlh:speaker-loop', ...CLAUDE_ARGS.slice(1, -2)];
+
+// Điền đường dẫn thật cho hai chỗ giữ chỗ: cấu hình kênh và cấu hình tắt hook, cùng ở thư mục Loa.
+const placed = (dir, sep = '/') => (arg) => (arg === '<config>' ? `${dir}${sep}speaker-mcp.json` : arg === '<settings>' ? `${dir}${sep}speaker-settings.json` : arg);
 
 describe('lệnh "bật Loa" và các file của lối mở', () => {
   test('lệnh /nlh:speaker chạy đúng file setup có trong plugin, theo hệ điều hành; không hỏi khoá trong chat', () => {
@@ -61,7 +65,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     const raw = readFileSync(join(plugin, 'speaker/start.ps1'));
     assert.deepEqual([...raw.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 có BOM cho PowerShell 5.1');
     const ps = raw.toString('utf8');
-    assert.ok(ps.includes(`$arguments = @(${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? '$config' : `'${arg}'`)).join(', ')})`));
+    assert.ok(ps.includes(`$arguments = @(${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? '$config' : arg === '<settings>' ? '$settings' : `'${arg}'`)).join(', ')})`));
     // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
     assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; CLAUDE_BIN = \$claude \}/);
     assert.doesNotMatch(ps, /Tháp/);
@@ -78,6 +82,10 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     // Giữ máy thức khi Loa mở; kênh hỏng thì mở lại không cờ, chỉ nhịp 10 phút, in một dòng (phiếu 98bd8b93).
     assert.match(ps, /SetThreadExecutionState\(\[uint32\]'0x80000001'\)/);
     assert.ok(ps.includes("$fallback = @('/loop 10m /nlh:speaker-loop') + $arguments[1..($arguments.Count - 3)]"));
+    // Tắt hook cho riêng phiên Loa qua tệp; bản lối mở cũ chạy bản mới ngay một lần (việc 17e647c1).
+    assert.ok(ps.includes(`[IO.File]::WriteAllText($settings, '{ "disableAllHooks": true }'`));
+    assert.match(ps, /& \(Join-Path \$Dir 'start\.ps1'\) -Dir \$Dir -Work \$Work -DryRun:\$DryRun -Relaunched/);
+    assert.match(ps, /if \(\$stale -and -not \$Relaunched\)/);
     assert.match(ps, /Kênh báo nhanh chưa mở được\. Loa vẫn chạy, mỗi 10 phút xem việc một lần\./);
   });
 
@@ -90,7 +98,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     const adds = sh.split('\n').filter((line) => line.includes('add-generic-password'));
     assert.equal(adds.length, 1);
     assert.match(adds[0], /^\s*printf 'add-generic-password -U -s %s -a %s -w %s\\n' "\$SERVICE" "\$ACCOUNT" "\$key" \| "\$SECURITY" -i/);
-    assert.ok(sh.includes(`set -- ${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? '"$CONFIG"' : arg.includes(' ') ? `'${arg}'` : arg)).join(' ')}`));
+    assert.ok(sh.includes(`set -- ${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? '"$CONFIG"' : arg === '<settings>' ? '"$SETTINGS"' : arg.includes(' ') ? `'${arg}'` : arg)).join(' ')}`));
     assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude \}/);
     assert.doesNotMatch(sh, /Tháp(?! tỉnh NhiLe\.command)/);
     assert.doesNotMatch(sh, /export NLH_TOWER|skip-permissions|bypassPermissions/);
@@ -169,8 +177,8 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     const dir = join(home, '.tinh-nlh/speaker');
     const dry = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN '));
     const fallbackLine = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN-FALLBACK '));
-    assert.deepEqual(fallbackLine.split(' | ').slice(1), FALLBACK_ARGS.map((arg) => (arg === '<config>' ? `${posix(join(home, '.tinh-nlh/speaker'))}/speaker-mcp.json` : arg)));
-    assert.deepEqual(dry.split(' | ').slice(1), CLAUDE_ARGS.map((arg) => (arg === '<config>' ? `${posix(dir)}/speaker-mcp.json` : arg)));
+    assert.deepEqual(fallbackLine.split(' | ').slice(1), FALLBACK_ARGS.map(placed(posix(join(home, '.tinh-nlh/speaker')))));
+    assert.deepEqual(dry.split(' | ').slice(1), CLAUDE_ARGS.map(placed(posix(dir))));
     assert.equal(readFileSync(join(dir, 'speaker.mjs'), 'utf8'), read('speaker/speaker.mjs'));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
     assert.equal(
@@ -187,6 +195,21 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
       { NLH_TOWER: '1', NLH_TOWER_DIR: same(posix(dir)), NLH_TOWER_WORK: same(`${posix(home)}/TinhNhiLe`), CLAUDE_BIN: same(`${posix(home)}/.local/bin/claude`) },
     );
     assert.ok(!JSON.stringify(config).includes(KEY), 'khoá không vào cấu hình');
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'speaker-settings.json'), 'utf8')), { disableAllHooks: true }, 'phiên Loa tắt mọi hook');
+
+    // Bản lối mở cũ trong thư mục Loa (chép từ lần trước, trước khi gói cập nhật): chép bản mới rồi chạy ngay bản mới một lần.
+    const stale = `${read('speaker/start.sh')}\n# bản cũ\n`;
+    writeFileSync(join(dir, 'start.sh'), stale.replace(/--settings "\$SETTINGS" /, ''));
+    const relaunched = spawnSync(bash, [posix(join(dir, 'start.sh'))], {
+      input: '',
+      encoding: 'utf8',
+      env: { ...process.env, HOME: posix(home), SPEAKER_SECURITY: posix(security), SPEAKER_DRY_RUN: '1', TOWER_ORIGIN: '' },
+    });
+    assert.equal(relaunched.status, 0, relaunched.stdout + relaunched.stderr);
+    assert.equal(readFileSync(join(dir, 'start.sh'), 'utf8'), read('speaker/start.sh'), 'đã chép bản mới');
+    const relaunchedDry = relaunched.stdout.split('\n').filter((line) => line.startsWith('DRYRUN '));
+    assert.equal(relaunchedDry.length, 1, 'chạy bản mới đúng một lần');
+    assert.deepEqual(relaunchedDry[0].split(' | ').slice(1), CLAUDE_ARGS.map(placed(posix(dir))), 'dòng lệnh của bản mới');
 
     const again = run('');
     assert.equal(again.status, 0, again.stdout + again.stderr);
@@ -299,9 +322,9 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     assert.equal(readFileSync(join(dir, 'speaker.mjs'), 'utf8'), read('speaker/speaker.mjs'));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
     const dry = run.stdout.split(/\r?\n/).find((line) => line.startsWith('DRYRUN '));
-    assert.equal(dry, `DRYRUN ${join(home, '.local', 'bin', 'claude.exe')} ${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? join(dir, 'speaker-mcp.json') : arg)).join(' | ')}`);
+    assert.equal(dry, `DRYRUN ${join(home, '.local', 'bin', 'claude.exe')} ${CLAUDE_ARGS.map(placed(dir, sep)).join(' | ')}`);
     const fallback = run.stdout.split(/\r?\n/).find((line) => line.startsWith('DRYRUN-FALLBACK '));
-    assert.equal(fallback, `DRYRUN-FALLBACK ${join(home, '.local', 'bin', 'claude.exe')} ${FALLBACK_ARGS.map((arg) => (arg === '<config>' ? join(dir, 'speaker-mcp.json') : arg)).join(' | ')}`);
+    assert.equal(fallback, `DRYRUN-FALLBACK ${join(home, '.local', 'bin', 'claude.exe')} ${FALLBACK_ARGS.map(placed(dir, sep)).join(' | ')}`);
     const raw = readFileSync(join(dir, 'speaker-mcp.json'));
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { speaker: tower } = JSON.parse(raw.toString('utf8')).mcpServers;
