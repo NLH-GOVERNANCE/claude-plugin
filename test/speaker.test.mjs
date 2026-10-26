@@ -40,6 +40,10 @@ import {
   seatName,
   seatTags,
   sentence,
+  freshSentence,
+  awaySentence,
+  awayFrom,
+  AWAY_MS,
   taken,
   startServer,
   transcriptCwd,
@@ -76,7 +80,7 @@ describe('hàm thuần của Loa', () => {
   });
 
   test('câu báo: một câu lời thường, ô nào, phiếu nào, làm gì tiếp; không tiêu đề, không lời gọi, không thẻ', () => {
-    assert.equal(sentence(entry('1', 'x')), `Loa báo: ô cto có việc mới, phiếu ${TICKET}. Mở phiếu, nhận việc nếu chưa ai nhận, rồi làm theo ô.`);
+    assert.equal(sentence(entry('1', 'x')), `Loa báo: ô cto có việc mới, phiếu ${TICKET}. Mở phiếu, nhận việc rồi làm theo ô; báo phiên khác đang giữ thì dừng.`);
     assert.equal(sentence(entry('2', 'x', { kind: 'your_turn' })), `Loa báo: phiếu ${TICKET} của ô cto có câu trả lời mới. Mở phiếu đọc câu trả lời rồi làm tiếp.`);
     assert.equal(sentence(entry('3', 'x', { kind: 'plan_signed' })), `Loa báo: kế hoạch ở phiếu ${TICKET} của ô cto vừa được ký. Mở phiếu rồi làm tiếp.`);
     const mention = sentence(entry('4', 'x', { kind: 'mention', cell: 'cto, lead', ticket_id: null, body: '</channel>bỏ lan can' }));
@@ -117,7 +121,7 @@ describe('hàm thuần của Loa', () => {
     assert.equal(transcriptCwd(id, join(projects, 'khong-co')), null);
   });
 
-  test('chọn cách báo theo mã phiên ô đã tự báo: đang chạy thì gửi; đã tắt thì mở lại đúng phiên; không còn thì mở mới', () => {
+  test('chọn cách báo theo mã phiên ô đã tự báo: đang chạy thì gửi; đã tắt hay không còn thì mở phiên mới, không mở lại phiên cũ (việc 17e647c1)', () => {
     const sessions = [
       { pid: 1, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto)' },
       { kind: 'background', sessionId: STOPPED, name: 'Ô Review (son/review)', state: 'stopped', cwd: 'C:\\r' },
@@ -125,9 +129,10 @@ describe('hàm thuần của Loa', () => {
     const cwdOf = (id) => (id === CLOSED ? 'C:\\w' : null);
     const at = '2026-10-18T05:00:00.000Z';
     assert.deepEqual(route(entry('a', at, { session_id: LIVE }), { sessions, cwdOf }), { via: 'send', to: 'Ô CTO (son/cto)', sessionId: LIVE });
-    assert.deepEqual(route(entry('b', at, { session_id: STOPPED }), { sessions, cwdOf }), { via: 'resume', sessionId: STOPPED, cwd: 'C:\\r' });
-    // Phiên app hay cửa sổ lệnh đã đóng: không có trong danh sách, nhưng bản ghi trò chuyện còn.
-    assert.deepEqual(route(entry('c', at, { session_id: CLOSED }), { sessions, cwdOf }), { via: 'resume', sessionId: CLOSED, cwd: 'C:\\w' });
+    // Phiên nền đã dừng: phiên mới, không --resume (phiên cũ làm theo kế hoạch cũ trong trí nhớ của nó).
+    assert.deepEqual(route(entry('b', at, { session_id: STOPPED }), { sessions, cwdOf }), { via: 'new', name: 'Ô cto' });
+    // Phiên cửa sổ lệnh đã đóng, không báo tên: không có trong danh sách, bản ghi còn; cũng mở phiên mới.
+    assert.deepEqual(route(entry('c', at, { session_id: CLOSED }), { sessions, cwdOf }), { via: 'new', name: 'Ô cto' });
     // Đã xoá: mở phiên mới, giữ tên phiên ô đã báo, bỏ @.
     assert.deepEqual(route(entry('d', at, { session_id: GONE, session_name: 'Ô CTO (son@cto)' }), { sessions, cwdOf }), { via: 'new', name: 'Ô CTO (son/cto)' });
     assert.deepEqual(route(entry('e', at), { sessions: null, cwdOf }), { via: 'new', name: 'Ô cto' });
@@ -193,26 +198,26 @@ describe('hàm thuần của Loa', () => {
     ];
     const at = '2026-10-21T13:30:00.000Z';
     assert.deepEqual(route(entry('a', at, seat), { sessions, cwdOf: () => 'C:\t' }), { via: 'send', to: 'Dân làng Review của anh Sơn (son/review)', sessionId: APP });
-    // Không có phiên nào đang chạy ngồi ô đó: mở lại đúng phiên đã báo như trước.
-    assert.deepEqual(route(entry('b', at, seat), { sessions: [sessions[0]], cwdOf: () => 'C:\t' }), { via: 'resume', sessionId: STOPPED, cwd: 'C:\t' });
+    // Không có phiên nào đang chạy ngồi ô đó: phiên mới, không mở lại phiên đã báo.
+    assert.deepEqual(route(entry('b', at, seat), { sessions: [sessions[0]], cwdOf: () => 'C:\t' }), { via: 'new', name: 'Ô Review PR của anh Sơn (son/review)' });
   });
 
   test('phiên app đang nghỉ (không có trong danh sách máy) mà đã báo tên: gửi theo tên để app đánh thức, không mở lại bản sao nền', () => {
     const APP = '5e22aee8-b510-4a5b-b071-046ba1d93b27';
     const seat = { cell: 'tech-lead-son', cell_title: 'Tech Lead', cell_handles: ['lead'], person_handle: 'son', session_id: APP, session_name: 'Dân làng - techlead (son/lead)' };
     const at = '2026-10-21T14:15:00.000Z';
-    const resume = { via: 'resume', sessionId: APP, cwd: 'C:/g' };
-    // Gửi theo tên, giữ đường mở lại làm đường lùi khi không phiên nào nhận tên đó.
-    assert.deepEqual(route(entry('a', at, seat), { sessions: [], cwdOf: () => 'C:/g' }), { via: 'send', to: 'Dân làng - techlead (son/lead)', sessionId: APP, fallback: resume });
-    // Danh sách máy không đọc được: không đoán, giữ cách cũ (mở lại theo bản ghi).
-    assert.deepEqual(route(entry('b', at, seat), { sessions: null, cwdOf: () => 'C:/g' }), resume);
-    // Tên đã báo không mang thẻ "(son/lead)" của ô: có thể là phiên khác, không gửi theo tên, mở lại như cũ.
-    assert.deepEqual(route(entry('c', at, { ...seat, session_name: 'Dân làng - techlead' }), { sessions: [], cwdOf: () => 'C:/g' }), resume);
-    // Bản ghi đã xoá: không gửi theo tên, đi tiếp như cũ (phiên mới).
-    assert.deepEqual(route(entry('d', at, seat), { sessions: [], cwdOf: () => null }), { via: 'new', name: 'Ô Tech Lead (son/lead)' });
-    // Phiên nền đã dừng (còn trong danh sách): mở lại đúng phiên đó như trước.
+    const fresh = { via: 'new', name: 'Ô Tech Lead (son/lead)' };
+    // Gửi theo tên, giữ đường mở phiên mới làm đường lùi khi không phiên nào nhận tên đó.
+    assert.deepEqual(route(entry('a', at, seat), { sessions: [], cwdOf: () => 'C:/g' }), { via: 'send', to: 'Dân làng - techlead (son/lead)', sessionId: APP, fallback: fresh });
+    // Danh sách máy không đọc được: không đoán, mở phiên mới.
+    assert.deepEqual(route(entry('b', at, seat), { sessions: null, cwdOf: () => 'C:/g' }), fresh);
+    // Tên đã báo không mang thẻ "(son/lead)" của ô: có thể là phiên khác, không gửi theo tên.
+    assert.deepEqual(route(entry('c', at, { ...seat, session_name: 'Dân làng - techlead' }), { sessions: [], cwdOf: () => 'C:/g' }), fresh);
+    // Bản ghi đã xoá: không gửi theo tên, phiên mới.
+    assert.deepEqual(route(entry('d', at, seat), { sessions: [], cwdOf: () => null }), fresh);
+    // Phiên nền đã dừng (còn trong danh sách): phiên mới, không mở lại.
     const stopped = [{ kind: 'background', sessionId: APP, name: 'Ô Tech Lead (son/lead)', state: 'done', cwd: 'C:/t' }];
-    assert.deepEqual(route(entry('e', at, { ...seat, session_name: 'Ô Tech Lead (son/lead)' }), { sessions: stopped, cwdOf: () => null }), { via: 'resume', sessionId: APP, cwd: 'C:/t' });
+    assert.deepEqual(route(entry('e', at, { ...seat, session_name: 'Ô Tech Lead (son/lead)' }), { sessions: stopped, cwdOf: () => null }), fresh);
   });
 
   test('phiên Claude Desktop đã báo ngồi dân làng (report_session) mà mục chưa kèm mã phiên: gửi theo tên đã báo, không mở phiên trùng (fact 850d6a86)', () => {
@@ -220,18 +225,18 @@ describe('hàm thuần của Loa', () => {
     const seat = { cell: 'review-pr-son', cell_title: 'Review PR của anh Sơn', cell_handles: ['review'], person_handle: 'son' };
     const at = '2026-10-22T08:00:00.000Z';
     const reported = [{ session_id: APP, session_name: 'Dân làng Review của anh Sơn (son/review)', cell: 'review-pr-son', status: 'idle' }];
-    const resume = { via: 'resume', sessionId: APP, cwd: 'C:/r' };
-    // Không có trong danh sách máy (app đang nghỉ), bản ghi trên máy này: gửi theo tên, mở lại làm đường lùi.
-    assert.deepEqual(route(entry('a', at, seat), { sessions: [], cwdOf: () => 'C:/r', reported }), { via: 'send', to: 'Dân làng Review của anh Sơn (son/review)', sessionId: APP, fallback: resume });
+    const fresh = { via: 'new', name: 'Ô Review PR của anh Sơn (son/review)' };
+    // Không có trong danh sách máy (app đang nghỉ), bản ghi trên máy này: gửi theo tên, phiên mới làm đường lùi.
+    assert.deepEqual(route(entry('a', at, seat), { sessions: [], cwdOf: () => 'C:/r', reported }), { via: 'send', to: 'Dân làng Review của anh Sơn (son/review)', sessionId: APP, fallback: fresh });
     // Bản ghi không ở máy này (phiên của máy khác): không gửi, mở phiên mới như cũ.
     assert.deepEqual(route(entry('b', at, seat), { sessions: [], cwdOf: () => null, reported }), { via: 'new', name: 'Ô Review PR của anh Sơn (son/review)' });
     // Phiên đã thôi ngồi, tên có @, hay tên không mang thẻ của ô: không dùng.
     for (const other of [{ status: 'stopped' }, { session_name: 'Review (son@review)' }, { session_name: 'Một phiên khác' }]) {
       assert.equal(reportedSeat(entry('c', at, seat), { sessions: [], cwdOf: () => 'C:/r', reported: [{ ...reported[0], ...other }] }), null, JSON.stringify(other));
     }
-    // Còn trong danh sách máy, đã dừng: mở lại đúng phiên đó; danh sách máy không đọc được: không đoán.
+    // Còn trong danh sách máy, đã dừng: không mở lại (null, rồi phiên mới); danh sách máy không đọc được: không đoán.
     const listed = [{ kind: 'background', sessionId: APP, name: 'Dân làng Review của anh Sơn (son/review)', state: 'done', cwd: 'C:/b' }];
-    assert.deepEqual(reportedSeat(entry('d', at, seat), { sessions: listed, cwdOf: () => null, reported }), { via: 'resume', sessionId: APP, cwd: 'C:/b' });
+    assert.equal(reportedSeat(entry('d', at, seat), { sessions: listed, cwdOf: () => null, reported }), null);
     assert.equal(reportedSeat(entry('e', at, seat), { sessions: null, cwdOf: () => 'C:/r', reported }), null);
   });
 
@@ -366,7 +371,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
 describe('Loa báo việc (server trong tiến trình)', () => {
   const at = '2026-10-18T05:00:00.000Z';
 
-  test('gửi theo tên cho phiên app đang nghỉ mà không phiên nào nhận: forwarded hỏng thì mở lại đúng phiên như cũ', async () => {
+  test('gửi theo tên cho phiên app đang nghỉ mà không phiên nào nhận: forwarded hỏng thì mở phiên mới, không --resume', async () => {
     const APP = '5e22aee8-b510-4a5b-b071-046ba1d93b28';
     const seat = { cell: 'tech-lead-son', cell_title: 'Tech Lead', cell_handles: ['lead'], person_handle: 'son', session_id: APP, session_name: 'Dân làng - techlead (son/lead)' };
     const loa = inProcess({ feed: () => [entry('your_cell:t:8', at, seat)], sessions: [], cwdOf: () => 'C:/g' });
@@ -376,9 +381,10 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     // Luồng việc đọc kèm mã máy (D-0065 · 5/5), mã giữ trong thư mục máy.
     assert.match(loa.reads[0], new RegExp(`&machine_id=${readFileSync(join(loa.dir, 'machine-id'), 'utf8').trim()}$`));
     await loa.call(2, 'forwarded', { entry_id: 'your_cell:t:8', ok: false });
-    assert.deepEqual(loa.spawned.map((item) => [item.args.slice(0, 2), item.cwd]), [[['--bg', `--resume=${APP}`], 'C:/g']]);
-    assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['send', false], ['resume', true]]);
-    assert.equal(loa.pushed().at(-1).meta.action, 'resumed');
+    assert.deepEqual(loa.spawned.map((item) => [item.args.slice(0, 5), item.cwd]), [[['--bg', '--model', 'sonnet', '-n', 'Ô Tech Lead (son/lead)'], 'C:\\TinhNhiLe']]);
+    assert.ok(!loa.spawned.some((item) => item.args.some((arg) => arg.startsWith('--resume'))));
+    assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['send', false], ['new', true]]);
+    assert.equal(loa.pushed().at(-1).meta.action, 'opened');
     loa.close();
   });
 
@@ -389,7 +395,7 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     });
     await loa.server.tick();
     const [event] = loa.pushed();
-    assert.equal(event.content, `Loa báo: ô cto có việc mới, phiếu ${TICKET}. Mở phiếu, nhận việc nếu chưa ai nhận, rồi làm theo ô.`);
+    assert.equal(event.content, `Loa báo: ô cto có việc mới, phiếu ${TICKET}. Mở phiếu, nhận việc rồi làm theo ô; báo phiên khác đang giữ thì dừng.`);
     assert.deepEqual(event.meta, { action: 'send', kind: 'your_cell', cell: 'cto', ticket: TICKET, entry_id: 'your_cell:t:1', to: 'Ô CTO (son/cto) trên máy anh Sơn', session_id: LIVE });
     for (const [key, value] of Object.entries(event.meta)) {
       assert.match(key, /^[A-Za-z0-9_]+$/);
@@ -406,25 +412,25 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     loa.close();
   });
 
-  test('phiên đã tắt: mở lại đúng phiên đó theo mã ở thư mục cũ, kèm câu báo; ghi sổ resume', async () => {
+  test('phiên đã tắt có việc mới: không mở lại phiên cũ (--resume), mở phiên mới dặn đọc bảng trước (việc 17e647c1)', async () => {
     const loa = inProcess({
       feed: () => [entry('your_turn:t:2', at, { kind: 'your_turn', session_id: CLOSED })],
       cwdOf: (id) => (id === CLOSED ? 'C:\\Users\\Admin\\NLH-GOVERNANCE' : null),
     });
     await loa.server.tick();
-    assert.deepEqual(loa.spawned, [{ args: ['--bg', `--resume=${CLOSED}`, sentence(entry('x', at, { kind: 'your_turn' }))], cwd: 'C:\\Users\\Admin\\NLH-GOVERNANCE' }]);
-    assert.deepEqual(loa.rows, [{ entry_id: 'your_turn:t:2', kind: 'your_turn', ticket_id: TICKET, cell: 'cto', session_id: CLOSED, via: 'resume', ok: true }]);
-    assert.equal(loa.pushed()[0].meta.action, 'resumed');
+    const text = sentence(entry('x', at, { kind: 'your_turn' }));
+    assert.deepEqual(loa.spawned, [{ args: ['--bg', '--model', 'sonnet', '-n', 'Ô cto', freshSentence(text)], cwd: 'C:\\TinhNhiLe' }]);
+    assert.match(loa.spawned[0].args.at(-1), /đọc bảng \(continue_work\) trước khi làm\.$/);
+    assert.deepEqual(loa.rows, [{ entry_id: 'your_turn:t:2', kind: 'your_turn', ticket_id: TICKET, cell: 'cto', session_id: null, via: 'new', ok: true }]);
+    assert.equal(loa.pushed()[0].meta.action, 'opened');
     loa.close();
   });
 
-  test('mở lại hỏng: mở phiên mới cho ô ở thư mục của Loa; ghi cả hai dòng; mở mới cũng hỏng thì báo một câu', async () => {
-    // Phiên đã báo mà không báo tên (phiên cửa sổ lệnh cũ): mở lại theo bản ghi. Đã báo tên thì gửi theo tên (test phiên app đang nghỉ).
+  test('mở phiên mới hỏng: ghi một dòng hỏng, báo một câu', async () => {
     const loa = inProcess({ feed: () => [entry('your_cell:t:3', at, { session_id: CLOSED })], cwdOf: () => 'C:\\w', spawnOk: false });
     await loa.server.tick();
-    assert.deepEqual(loa.spawned.map((item) => item.args.slice(0, 2)), [['--bg', `--resume=${CLOSED}`], ['--bg', '--model']]);
-    assert.deepEqual(loa.spawned[1], { args: ['--bg', '--model', 'sonnet', '-n', 'Ô cto', sentence(entry('x', at))], cwd: 'C:\\TinhNhiLe' });
-    assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['resume', false], ['new', false]]);
+    assert.deepEqual(loa.spawned, [{ args: ['--bg', '--model', 'sonnet', '-n', 'Ô cto', freshSentence(sentence(entry('x', at)))], cwd: 'C:\\TinhNhiLe' }]);
+    assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['new', false]]);
     assert.equal(loa.pushed().at(-1).meta.action, 'failed');
     assert.match(loa.pushed().at(-1).content, /^Chưa mở được phiên cho ô cto\./);
     loa.close();
@@ -919,5 +925,124 @@ describe('phiên Loa mở không mang biến của Loa', () => {
     assert.equal(env.NLH_SPAWN_PROBE, 'yes');
     for (const key of ['NLH_TOWER', 'NLH_TOWER_DIR', 'NLH_TOWER_WORK']) assert.equal(key in env, false, key);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// Việc 17e647c1 (anh Sơn 26/10): bật máy sau quãng nghỉ không xả việc tồn; việc đã có nơi giữ ở máy hay phiên mây khác
+// thì Loa ở đây không đánh thức phiên nào; không mở lại phiên cũ (--resume) cho việc mới.
+describe('Loa sau quãng nghỉ, việc có nơi giữ, không mở lại phiên cũ (việc 17e647c1)', () => {
+  const HOUR = 60 * 60 * 1000;
+  const T0 = Date.parse('2026-10-24T08:00:00.000Z');
+
+  test('ngưỡng vắng 2 giờ: tính theo lần đọc cuối, trạng thái cũ chưa có thì theo mốc since', () => {
+    assert.equal(AWAY_MS, 2 * HOUR);
+    assert.equal(awayFrom({ read_at: T0 }, T0 + AWAY_MS), false);
+    assert.equal(awayFrom({ read_at: T0 }, T0 + AWAY_MS + 1), true);
+    // Luồng việc im cả buổi mà Loa vẫn đọc đều: mốc since cũ nhưng lần đọc cuối mới, không phải vắng.
+    assert.equal(awayFrom({ since: new Date(T0 - 48 * HOUR).toISOString(), read_at: T0 }, T0 + 15_000), false);
+    assert.equal(awayFrom({ since: new Date(T0 - 48 * HOUR).toISOString() }, T0), true);
+    assert.equal(awayFrom({ since: null, read_at: null }, T0), false, 'lần chạy đầu không phải vắng');
+    assert.equal(awaySentence(7), 'Trong lúc vắng có 7 việc; mở Claude gõ "làm tiếp" để xem.');
+    assert.equal(awaySentence(100, true), 'Trong lúc vắng có hơn 100 việc; mở Claude gõ "làm tiếp" để xem.');
+  });
+
+  // Loa nạp trạng thái đã lưu khi phiên báo initialized, rồi đọc lần đầu ngay.
+  async function boot({ state, feed, clock, sessions = [{ pid: 7, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto)' }] }) {
+    const dir = temp('loa');
+    writeFileSync(join(dir, 'tower-state.json'), JSON.stringify(state));
+    const reads = [];
+    const spawned = [];
+    const messages = [];
+    const input = new PassThrough();
+    const output = new PassThrough();
+    output.on('data', (chunk) => messages.push(...String(chunk).split('\n').filter(Boolean).map((line) => JSON.parse(line))));
+    const server = startServer({
+      input,
+      output,
+      env: { NLH_TOWER: '1', TOWER_KEY: KEY, TOWER_ORIGIN: 'https://governance-dev.nlh.vn', NLH_TOWER_DIR: dir, NLH_MACHINE_DIR: dir, TOWER_CONFIRM_MS: '0', TOWER_POLL_MS: '999999' },
+      fetchImpl: async (url) => (url.includes('/tower/forwards') ? Response.json({}, { status: 201 }) : (reads.push(url), Response.json({ entries: feed(), more: false }))),
+      run: () => JSON.stringify(sessions),
+      spawnClaude: async (args) => (spawned.push(args), true),
+      cwdOf: () => 'C:/w',
+      log: () => {},
+      onClose: () => {},
+      clock,
+    });
+    for (const message of [{ id: 1, method: 'initialize', params: {} }, { method: 'notifications/initialized' }]) input.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
+    after(() => input.end());
+    // Lần đọc đầu đã xong khi trạng thái lưu lại mang giờ đọc mới.
+    await until(() => reads.length > 0 && JSON.parse(readFileSync(join(dir, 'tower-state.json'), 'utf8')).read_at !== state.read_at);
+    const pushed = () => messages.filter((message) => message.method === 'notifications/claude/channel').map((message) => message.params);
+    const saved = () => JSON.parse(readFileSync(join(dir, 'tower-state.json'), 'utf8'));
+    return { server, reads, spawned, pushed, saved, close: () => input.end() };
+  }
+
+  test('tắt Loa 1 ngày rồi bật: in đúng một dòng, không mở hay gửi vào phiên nào, việc tồn không nhắc; việc mới sau đó báo như thường', async () => {
+    let now = T0 + 24 * HOUR;
+    let feed = [
+      entry('your_cell:a:1', '2026-10-24T09:00:00.000Z', { ticket_id: '11111111-1111-4111-8111-111111111111', session_id: CLOSED }),
+      entry('your_turn:a:2', '2026-10-24T10:00:00.000Z', { kind: 'your_turn', ticket_id: '11111111-1111-4111-8111-111111111111' }),
+      entry('your_cell:b:3', '2026-10-24T11:00:00.000Z', { ticket_id: '22222222-2222-4222-8222-222222222222' }),
+      entry('mention:m:4', '2026-10-24T12:00:00.000Z', { kind: 'mention', ticket_id: null }),
+    ];
+    const told = [{ entry_id: 'your_cell:z:9', kind: 'your_cell', ticket: TICKET, cell: 'cto', at: '2026-10-24T07:00:00.000Z', told_at: T0, reminders: 0, to: 'Ô CTO (son/cto)' }];
+    const loa = await boot({ state: { since: new Date(T0).toISOString(), seen: [], pending: [], told, held: [], read_at: T0 }, feed: () => feed, clock: () => now });
+    // Đọc lại từ mốc cũ để đếm việc tồn, không báo việc nào.
+    assert.match(decodeURIComponent(loa.reads[0]), /since=2026-10-24T07:55:00\.000Z/);
+    assert.deepEqual(loa.pushed().map((item) => [item.content, item.meta.kind]), [['Trong lúc vắng có 3 việc; mở Claude gõ "làm tiếp" để xem.', 'system']]);
+    assert.deepEqual(loa.spawned, [], 'không mở, không mở lại phiên nào');
+    const state = loa.saved();
+    assert.equal(state.since, new Date(now - 60_000).toISOString(), 'bắt đầu lại từ bây giờ như lần chạy đầu');
+    assert.deepEqual([state.told, state.held, state.pending], [[], [], []], 'việc tồn không nhắc, không chờ gửi');
+    // 15 giây sau: không in lại, không báo lại việc tồn.
+    now += 15_000;
+    await loa.server.tick();
+    assert.equal(loa.pushed().length, 1);
+    // Một việc mới tới: báo như thường, vào phiên đang mở.
+    now += 15_000;
+    feed = [...feed, entry('your_cell:c:5', new Date(now - 5_000).toISOString(), { ticket_id: '33333333-3333-4333-8333-333333333333', session_id: LIVE })];
+    await loa.server.tick();
+    assert.deepEqual([loa.pushed().at(-1).meta.action, loa.pushed().at(-1).meta.to, loa.pushed().at(-1).meta.entry_id], ['send', 'Ô CTO (son/cto)', 'your_cell:c:5']);
+    assert.deepEqual(loa.spawned, []);
+    loa.close();
+  });
+
+  test('nghỉ dưới 2 giờ: báo việc như trước, không in dòng vắng', async () => {
+    const now = T0 + HOUR;
+    const loa = await boot({
+      state: { since: new Date(T0).toISOString(), seen: [], read_at: T0 },
+      feed: () => [entry('your_cell:t:1', new Date(T0 + 30 * 60 * 1000).toISOString(), { session_id: LIVE })],
+      clock: () => now,
+    });
+    assert.ok(!loa.pushed().some((item) => item.meta.kind === 'system'));
+    assert.deepEqual([loa.pushed()[0].meta.action, loa.pushed()[0].meta.to], ['send', 'Ô CTO (son/cto)']);
+    loa.close();
+  });
+
+  test('việc đã có nơi giữ ở máy khác hay phiên mây (held_elsewhere): không đánh thức phiên nào, không nhắc; giữ ở máy này (held_here) thì tới đúng phiên giữ', async () => {
+    assert.equal(taken({ held_elsewhere: true }), true);
+    assert.equal(taken({ held_here: true, held_by: 'x' }), false);
+    assert.equal(taken({}), false);
+    const HELD = '44444444-4444-4444-8444-444444444444';
+    const loa = inProcess({
+      feed: () => [
+        entry('your_turn:h:1', '2026-10-26T08:00:00.000Z', { kind: 'your_turn', ticket_id: HELD, held_elsewhere: true, session_id: LIVE }),
+        entry('your_cell:h:2', '2026-10-26T08:00:01.000Z', { ticket_id: HELD, held_elsewhere: true }),
+        entry('your_turn:h:3', '2026-10-26T08:00:02.000Z', { kind: 'your_turn', ticket_id: TICKET, held_here: true, session_id: LIVE }),
+      ],
+      sessions: [{ pid: 7, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto)' }],
+    });
+    await loa.server.tick();
+    assert.deepEqual(loa.spawned, [], 'không mở phiên cho việc nơi khác giữ');
+    assert.deepEqual(loa.pushed().map((item) => [item.meta.entry_id, item.meta.action, item.meta.to]), [['your_turn:h:3', 'send', 'Ô CTO (son/cto)']]);
+    const state = JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8'));
+    assert.ok(!state.told.some((item) => item.ticket === HELD), 'không nhắc việc nơi khác giữ');
+    loa.close();
+  });
+
+  test('không còn --resume ở đâu trong Loa: mọi đường mở phiên là phiên mới', () => {
+    const code = readFileSync(SERVER, 'utf8');
+    assert.doesNotMatch(code, /--resume/);
+    assert.doesNotMatch(code, /via: 'resume'/);
   });
 });
