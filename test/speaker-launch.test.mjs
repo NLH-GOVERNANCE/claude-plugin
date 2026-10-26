@@ -40,7 +40,11 @@ function fakeHome(name = 'user') {
 }
 
 // Hai lối mở cùng mở Claude một cách: câu mở đầu trước, Sonnet, kênh tower qua --mcp-config, cờ dev chỉ cho server:tower.
-const CLAUDE_ARGS = ['/loop 10m /nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
+// Có kênh thì câu mở đầu chạy skill một lần, không đặt vòng 10 phút (việc 17e647c1 phần 4); chỉ lối dự phòng có vòng.
+const CLAUDE_ARGS = ['/nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
+
+// Lối dự phòng (kênh không mở được): vòng 10 phút qua công cụ pending, không cờ kênh.
+const FALLBACK_ARGS = ['/loop 10m /nlh:speaker-loop', ...CLAUDE_ARGS.slice(1, -2)];
 
 describe('lệnh "bật Loa" và các file của lối mở', () => {
   test('lệnh /nlh:speaker chạy đúng file setup có trong plugin, theo hệ điều hành; không hỏi khoá trong chat', () => {
@@ -73,7 +77,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i, 'tự mở đặt ở setup, không ở lối mở');
     // Giữ máy thức khi Loa mở; kênh hỏng thì mở lại không cờ, chỉ nhịp 10 phút, in một dòng (phiếu 98bd8b93).
     assert.match(ps, /SetThreadExecutionState\(\[uint32\]'0x80000001'\)/);
-    assert.match(ps, /\$fallback = \$arguments\[0\.\.\(\$arguments\.Count - 3\)\]/);
+    assert.ok(ps.includes("$fallback = @('/loop 10m /nlh:speaker-loop') + $arguments[1..($arguments.Count - 3)]"));
     assert.match(ps, /Kênh báo nhanh chưa mở được\. Loa vẫn chạy, mỗi 10 phút xem việc một lần\./);
   });
 
@@ -94,7 +98,8 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(sh, /shasum -a 256 "\$part"/);
     assert.doesNotMatch(sh, /LaunchAgents|launchctl|crontab/, 'tự mở đặt ở setup, không ở lối mở');
     assert.match(sh, /\/usr\/bin\/caffeinate -i -w \$\$ &/);
-    assert.match(sh, /"\$CLAUDE" "\$\{@:1:\$#-2\}"/);
+    assert.ok(sh.includes(`LOOP='${FALLBACK_ARGS[0]}'`));
+    assert.match(sh, /"\$CLAUDE" "\$LOOP" "\$\{@:2:\$#-3\}"/);
     assert.match(sh, /Kênh báo nhanh chưa mở được\. Loa vẫn chạy, mỗi 10 phút xem việc một lần\./);
   });
 
@@ -164,7 +169,7 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     const dir = join(home, '.tinh-nlh/speaker');
     const dry = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN '));
     const fallbackLine = first.stdout.split('\n').find((line) => line.startsWith('DRYRUN-FALLBACK '));
-    assert.deepEqual(fallbackLine.split(' | ').slice(1), CLAUDE_ARGS.slice(0, -2).map((arg) => (arg === '<config>' ? `${posix(join(home, '.tinh-nlh/speaker'))}/speaker-mcp.json` : arg)));
+    assert.deepEqual(fallbackLine.split(' | ').slice(1), FALLBACK_ARGS.map((arg) => (arg === '<config>' ? `${posix(join(home, '.tinh-nlh/speaker'))}/speaker-mcp.json` : arg)));
     assert.deepEqual(dry.split(' | ').slice(1), CLAUDE_ARGS.map((arg) => (arg === '<config>' ? `${posix(dir)}/speaker-mcp.json` : arg)));
     assert.equal(readFileSync(join(dir, 'speaker.mjs'), 'utf8'), read('speaker/speaker.mjs'));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
@@ -296,7 +301,7 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     const dry = run.stdout.split(/\r?\n/).find((line) => line.startsWith('DRYRUN '));
     assert.equal(dry, `DRYRUN ${join(home, '.local', 'bin', 'claude.exe')} ${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? join(dir, 'speaker-mcp.json') : arg)).join(' | ')}`);
     const fallback = run.stdout.split(/\r?\n/).find((line) => line.startsWith('DRYRUN-FALLBACK '));
-    assert.equal(fallback, `DRYRUN-FALLBACK ${join(home, '.local', 'bin', 'claude.exe')} ${CLAUDE_ARGS.slice(0, -2).map((arg) => (arg === '<config>' ? join(dir, 'speaker-mcp.json') : arg)).join(' | ')}`);
+    assert.equal(fallback, `DRYRUN-FALLBACK ${join(home, '.local', 'bin', 'claude.exe')} ${FALLBACK_ARGS.map((arg) => (arg === '<config>' ? join(dir, 'speaker-mcp.json') : arg)).join(' | ')}`);
     const raw = readFileSync(join(dir, 'speaker-mcp.json'));
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { speaker: tower } = JSON.parse(raw.toString('utf8')).mcpServers;

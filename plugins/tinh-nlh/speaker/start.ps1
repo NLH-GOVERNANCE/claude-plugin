@@ -155,10 +155,11 @@ if (-not (Test-Path -LiteralPath $opened)) {
 }
 Write-Host 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 Write-Host ''
-$arguments = @('/loop 10m /nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
-# Fallback without the dev channel flag: the server still reads the hub, resumes and opens sessions; only sends wait
-# for the 10-minute loop.
-$fallback = $arguments[0..($arguments.Count - 3)]
+$arguments = @('/nlh:speaker-loop', '-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')
+# With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
+# tokens). Fallback without the dev channel flag: the server still reads the hub and opens sessions; only sends wait
+# for the 10-minute loop, so only the fallback has it.
+$fallback = @('/loop 10m /nlh:speaker-loop') + $arguments[1..($arguments.Count - 3)]
 if ($DryRun) {
   Write-Host "DRYRUN $claude $($arguments -join ' | ')"
   Write-Host "DRYRUN-FALLBACK $claude $($fallback -join ' | ')"

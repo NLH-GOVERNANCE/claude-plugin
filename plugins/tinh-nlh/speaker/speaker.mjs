@@ -21,7 +21,8 @@
 // always wins over a background one; a background copy of such a seat is stopped (`claude stop`, ticket 5d66123d).
 // Every delivery writes one ledger row (POST /tower/forwards): entry, ticket, cell, target session, how, ok or failed.
 // Reminders (ticket 6beaa750): new work or a group call (never an answer, c65f35ed) still in the feed 30 minutes after
-// Loa told its session, and not held by anyone, is told again in one sentence "vẫn chưa ai nhận", at most 3 times, 30 minutes apart, into the same session only (never
+// Loa told its session, and not held by anyone, is told again in one sentence "vẫn chưa ai nhận", once (ticket 17e647c1
+// part 4, 26/10: anh Sơn cut it from 3 to save tokens), into the same session only (never
 // a new one, never a group or a person); each reminder writes its own row with entry_id "remind<n>:<entry id>". An item
 // gone from the feed (claimed, answered, closed) is never reminded. An answer (your_turn) waits 2 minutes and goes out
 // only if it is still in the feed, so a villager that writes its own answer and closes the ticket is not told about it.
@@ -53,7 +54,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '0.7.0';
+export const VERSION = '0.7.1';
 const POLL_MS = Number(process.env.TOWER_POLL_MS) || 15_000;
 // Read a little before the saved mark so items recorded during the previous read still arrive; seen ids stop repeats.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -61,7 +62,7 @@ const OVERLAP_MS = 5 * 60 * 1000;
 const FIRST_LOOKBACK_MS = 60 * 1000;
 // Away this long (no feed read: machine off, asleep or Loa closed) and Loa starts over like a first run, printing one
 // line with the count instead of telling the backlog. 2 hours: longer than a restart, a plugin update or a meeting, and
-// longer than the reminder round (3 × 30 minutes), so a normal working day is told as before; anything longer means the
+// longer than the reminder (30 minutes), so a normal working day is told as before; anything longer means the
 // person was away and the work has already sat on the board (ticket 17e647c1: 2 days away flooded the machine).
 export const AWAY_MS = 2 * 60 * 60 * 1000;
 const SEEN_MAX = 1000;
@@ -73,9 +74,9 @@ export const HUB_CELLS = ['propose-change'];
 const NEW_SESSION_GAP_MS = 10 * 60 * 1000;
 // A send the Loa session never confirmed (forwarded) is dropped after this and recorded as failed.
 const PENDING_MAX_MS = 3 * 60 * 60 * 1000;
-// Reminders: an item told this long ago and still in the feed is told again, at most REMIND_MAX times.
+// Reminders: an item told this long ago and still in the feed is told again, at most REMIND_MAX times (17e647c1: once).
 export const REMIND_MS = 30 * 60 * 1000;
-export const REMIND_MAX = 3;
+export const REMIND_MAX = 1;
 // An answer (your_turn) waits this long, then goes out only if it is still in the feed (TOWER_CONFIRM_MS, 0 = at once).
 const CONFIRM_MS = 2 * 60 * 1000;
 // At most one extra feed read per minute to check held answers, reminders and queued sends; none when nothing is due.
@@ -172,7 +173,8 @@ export function reminderSentence(entry, count) {
   const cell = cellsOf(entry.cell).join(', ') || 'không rõ';
   const ticket = ref(entry.ticket_id);
   const what = ticket ? `Việc ${ticket} của dân làng ${cell}` : `Lời gọi dân làng ${cell} trong nhóm`;
-  return `Loa nhắc lần ${count}/${REMIND_MAX}: ${what} vẫn chưa ai nhận. Mở việc, nhận nếu còn chưa ai nhận, rồi làm.`;
+  const round = REMIND_MAX > 1 ? ` lần ${count}/${REMIND_MAX}` : '';
+  return `Loa nhắc${round}: ${what} vẫn chưa ai nhận. Mở việc, nhận nếu còn chưa ai nhận, rồi làm.`;
 }
 
 // Someone else holds the item (the hub adds held_elsewhere, or held_by or claimed): not waiting, no reminder, and no

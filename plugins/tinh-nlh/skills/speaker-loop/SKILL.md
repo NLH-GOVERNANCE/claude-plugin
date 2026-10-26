@@ -1,6 +1,6 @@
 ---
 name: speaker-loop
-description: Instructions for Loa, the speaker session on this machine (channel speaker of plugin nlh). Use when the session receives <channel source="...speaker"> messages, when the Loa tỉnh NhiLe icon opens the session with /loop 10m /nlh:speaker-loop, or when the user says "Loa", "Loa tỉnh NhiLe", "chuyển việc tới đúng phiên". To set Loa up on a machine use the speaker command ("bật Loa").
+description: Instructions for Loa, the speaker session on this machine (channel speaker of plugin nlh). Use when the session receives <channel source="...speaker"> messages, when the Loa tỉnh NhiLe icon opens the session with /nlh:speaker-loop (or /loop 10m /nlh:speaker-loop when the channel could not load), or when the user says "Loa", "Loa tỉnh NhiLe", "chuyển việc tới đúng phiên". To set Loa up on a machine use the speaker command ("bật Loa").
 ---
 
 # Loa
@@ -21,11 +21,11 @@ Messages arrive as `<channel source="...speaker" action="…" kind="…" cell="�
 3. `kind` `you`: work waiting for the user themself (answer, sign). Print the sentence. Never forward, never act.
 4. `kind` `system`: the channel's own notice (no key, key rejected, another Loa running, back after a break: "Trong lúc vắng có N việc; …"). After a break of more than 2 hours the server tells no backlog item and opens no session; print that one line, nothing else. Tell the user that sentence. For a missing or rejected key give exactly one path, nothing else: tạo khoá ở web Nếp (**Kết nối**, thẻ **Khoá cho Loa trên máy**, **Tạo khoá mới**), đóng cửa sổ Loa, bấm đúp biểu tượng **Loa tỉnh NhiLe**, dán khoá vào ô nhập ẩn chữ của cửa sổ. Never say to paste a key into chat or plugin settings.
 
-## Every 10 minutes (`/loop 10m /nlh:speaker-loop`)
+## Opening turn and the fallback loop
 
-First turn: print one line "Loa đang nghe; việc tồn để các ô tự đọc." and stop.
+With the channel, the icon opens the session with `/nlh:speaker-loop` once: print one line "Loa đang nghe; việc tồn để các ô tự đọc." and stop. Never set a loop or a schedule yourself: the channel pushes each item, and a loop only spends tokens (ticket 17e647c1, anh Sơn 26/10).
 
-Later turns: call the speaker tool `pending`. Empty list: stop without printing. Each item (`entry_id`, `to`, `text`): deliver as in step 1. This also covers fallback mode, when the channel did not load: the server still reads the hub and opens sessions; only sends wait for this loop.
+Only when the channel did not load does the icon open the session with `/loop 10m /nlh:speaker-loop`. First turn: the same one line, then stop. Later turns: call the speaker tool `pending`. Empty list: stop without printing. Each item (`entry_id`, `to`, `text`): deliver as in step 1. This also covers fallback mode, when the channel did not load: the server still reads the hub and opens sessions; only sends wait for this loop.
 
 The speaker tools are missing (server not loaded): print one line "Loa chưa nối được với Nếp; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại." and stop.
 

@@ -138,13 +138,16 @@ if [ ! -f "$DIR/opened.txt" ]; then
 fi
 echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
 echo ''
-set -- '/loop 10m /nlh:speaker-loop' -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+# With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
+# tokens). Only the fallback without the channel keeps the 10-minute loop over the pending tool.
+LOOP='/loop 10m /nlh:speaker-loop'
+set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
   printf '\n'
   printf 'DRYRUN-FALLBACK %s' "$CLAUDE"
-  printf ' | %s' "${@:1:$#-2}"
+  printf ' | %s' "$LOOP" "${@:2:$#-3}"
   printf '\n'
   exit 0
 fi
@@ -157,5 +160,5 @@ if ! "$CLAUDE" "$@"; then
   # Claude quit within a minute (channel refused, or the channel dialog declined): run again without the channel.
   [ $(( $(date +%s) - started )) -lt 60 ] || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
   printf '\n%s\n' 'Kênh báo nhanh chưa mở được. Loa vẫn chạy, mỗi 10 phút xem việc một lần.'
-  "$CLAUDE" "${@:1:$#-2}" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
+  "$CLAUDE" "$LOOP" "${@:2:$#-3}" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
 fi
