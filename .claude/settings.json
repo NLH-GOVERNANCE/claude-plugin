@@ -1,0 +1,8 @@
+{
+  "extraKnownMarketplaces": {
+    "nlh-governance": {
+      "source": { "source": "github", "repo": "NLH-GOVERNANCE/claude-plugin", "ref": "feat/nep-connector-in-plugin" }
+    }
+  },
+  "enabledPlugins": { "nlh@nlh-governance": true }
+}
