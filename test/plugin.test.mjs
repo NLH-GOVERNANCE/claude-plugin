@@ -12,9 +12,9 @@ import { pluginFiles, pluginZip } from '../scripts/plugin-zip.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
-// Nếp là connector trong tài khoản Claude của mỗi người, gói không có connector riêng (25/10): hook gọi connector đó theo
-// các tên nó có ("claude.ai <tên>" ở Claude Code trên máy, tên trần ở phiên mây). Nếp là tên link thêm điền sẵn.
-const DOORS = ['claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance'];
+// Gói mang Nếp (máy chủ nep, tên plugin:nlh:nep; 0.22.0, anh Sơn 26/10). Hook gọi nó trước, rồi connector Nếp trong tài
+// khoản theo các tên nó có ("claude.ai <tên>" trên máy, tên trần ở phiên mây, nơi máy chủ của gói không đăng nhập được).
+const DOORS = ['plugin:nlh:nep', 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance'];
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -66,11 +66,12 @@ describe('plugin nlh', () => {
     assert.doesNotThrow(() => new URL(manifest.homepage));
   });
 
-  test('connector: gói không mang máy chủ MCP từ xa nào (Nếp nằm trong tài khoản Claude), chỉ còn Loa chạy trên máy', () => {
+  test('connector: gói mang Nếp (http, bản chính mcp.nlh.vn, không khoá) và Loa chạy trên máy; không có .mcp.json riêng', () => {
     assert.equal(existsSync(join(pluginDir, '.mcp.json')), false);
     const { mcpServers } = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
-    assert.deepEqual(Object.keys(mcpServers), ['speaker']);
-    assert.doesNotMatch(JSON.stringify(mcpServers), /mcp\.nlh\.vn|"type":"http"/);
+    assert.deepEqual(Object.keys(mcpServers), ['nep', 'speaker']);
+    // Đúng địa chỉ connector của tài khoản: trên máy hai cái trùng địa chỉ thì Claude Code chỉ nối một (của gói).
+    assert.deepEqual(mcpServers.nep, { type: 'http', url: 'https://mcp.nlh.vn/mcp' });
   });
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
@@ -206,41 +207,52 @@ describe('plugin nlh', () => {
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/memory-to-nep.mjs'), 'utf8'), /fetch|https?:|node:(fs|http|net|https|child_process)/);
   });
 
-  test('hook dòng connector Nếp: luôn dặn Claude đưa link thêm Nếp khi không có công cụ Nếp; connector Nếp cần đăng nhập lại trong 7 ngày qua thì dặn cách đăng nhập', async () => {
+  test('hook dòng connector Nếp: trên máy dặn đăng nhập máy chủ Nếp của gói qua /mcp; trên mây Nếp đến từ connector tài khoản, không bao giờ xin đăng nhập máy chủ của gói', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nlh-signin-'));
-    const run = () =>
+    const run = (cloud = false) =>
       new Promise((resolve) => {
-        const child = spawn(process.execPath, [join(pluginDir, 'hooks/sign-in-check.mjs')], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, CLAUDE_CONFIG_DIR: dir } });
+        const env = { ...process.env, CLAUDE_CONFIG_DIR: dir };
+        delete env.CLAUDE_CODE_REMOTE;
+        if (cloud) env.CLAUDE_CODE_REMOTE = 'true';
+        const child = spawn(process.execPath, [join(pluginDir, 'hooks/sign-in-check.mjs')], { stdio: ['pipe', 'pipe', 'inherit'], env });
         let out = '';
         child.stdout.on('data', (chunk) => (out += chunk));
         child.on('exit', () => resolve(out));
         child.stdin.end('{}');
       });
     const cache = (value) => writeFileSync(join(dir, 'mcp-needs-auth-cache.json'), typeof value === 'string' ? value : JSON.stringify(value));
+    const signIn = '"Nếp chưa đăng nhập trên máy này: gõ /mcp, chọn plugin:nlh:nep, bấm Enter, đăng nhập bằng email công ty trong trình duyệt mở ra."';
+    const machine = await run();
+    assert.match(machine, /^Nếp connector: the plugin brings Nếp \(server plugin:nlh:nep\)/);
+    assert.ok(machine.includes(signIn));
+    assert.equal(machine.split('\n').filter(Boolean).length, 1);
+    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 60_000 } });
+    const waiting = await run();
+    assert.ok(waiting.includes('lists plugin:nlh:nep as needing sign-in'));
+    assert.equal(waiting.split('\n').filter(Boolean).length, 1);
+    // Trên mây: máy chủ của gói luôn cần đăng nhập mà không bao giờ đăng nhập được; chỉ connector tài khoản tính.
+    const cloud = await run(true);
+    assert.match(cloud, /^Nếp connector: this is a cloud session\./);
+    assert.match(cloud, /never ask the user to sign in to it/);
+    assert.doesNotMatch(cloud, /gõ \/mcp|needs sign-in/);
     const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
-    const missing = await run();
-    assert.match(missing, /^Nếp connector: .*If you have no Nếp tool at all \(no my_context from any server\)/);
-    assert.ok(missing.includes(`"Máy này chưa có Nếp: trên máy tính mở ${link} , bấm Add, đăng nhập bằng email công ty, rồi mở phiên mới."`));
-    assert.doesNotMatch(missing, /đăng nhập lại/);
-    assert.equal(missing.split('\n').filter(Boolean).length, 1);
+    assert.ok(cloud.includes(`"Phiên trên mây này chưa có Nếp: trên máy tính mở ${link} , bấm Add, đăng nhập bằng email công ty, rồi mở phiên mới."`));
     // Link mở đúng hộp Add custom connector, điền sẵn tên Nếp và cửa mcp.nlh.vn.
     const url = new URL(link);
     assert.equal(url.searchParams.get('modal'), 'add-custom-connector');
     assert.equal(url.searchParams.get('connectorName'), 'Nếp');
     assert.equal(url.searchParams.get('connectorUrl'), 'https://mcp.nlh.vn/mcp');
-    for (const name of ['claude.ai Nếp', 'nhile-governance']) {
-      cache({ [name]: { timestamp: Date.now() - 60_000 } });
-      const out = await run();
-      assert.ok(out.includes(`lists the Nếp connector (${name}) as needing sign-in`), name);
-      assert.match(out, /"Nếp cần đăng nhập lại: mở claude\.ai, Customize, Connectors, bấm Connect ở Nếp, rồi mở phiên mới\."/);
-      assert.equal(out.split('\n').filter(Boolean).length, 1);
-    }
-    cache({ 'claude.ai Nếp': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
-    assert.equal(await run(), missing, 'cũ hơn 7 ngày thì chỉ còn dòng thiếu connector');
+    cache({ Nếp: { timestamp: Date.now() - 60_000 } });
+    const cloudWaiting = await run(true);
+    assert.ok(cloudWaiting.includes('The account connector (Nếp) needs sign-in'));
+    assert.match(cloudWaiting, /"Nếp cần đăng nhập lại: mở claude\.ai, Customize, Connectors, bấm Connect ở Nếp, rồi mở phiên mới\."/);
+    assert.equal(cloudWaiting.split('\n').filter(Boolean).length, 1);
+    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
+    assert.equal(await run(), machine, 'cũ hơn 7 ngày thì chỉ còn dòng đăng nhập');
     cache({ 'claude.ai Gmail': { timestamp: Date.now() } });
-    assert.equal(await run(), missing, 'connector khác cần đăng nhập không phải việc của Nếp');
+    assert.equal(await run(), machine, 'connector khác cần đăng nhập không phải việc của Nếp');
     cache('không phải json');
-    assert.equal(await run(), missing);
+    assert.equal(await run(), machine);
     // Lan can: chỉ đọc một tệp, không gọi mạng, không ghi, không chạy lệnh.
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/sign-in-check.mjs'), 'utf8'), /fetch\(|node:(http|net|https|child_process)|writeFile|appendFile|mkdir/);
     rmSync(dir, { recursive: true, force: true });
@@ -318,22 +330,16 @@ describe('plugin nlh', () => {
     // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
     // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
     const matcher = new RegExp(hooks.PostToolUse[0].matcher);
-    for (const server of ['claude_ai_N_p', 'claude_ai_Nep', 'N_p', 'claude_ai_nhile-governance', 'nhile-governance', 'claude_ai_NhiLe_Governance']) {
+    for (const server of ['plugin_nlh_nep', 'claude_ai_N_p', 'claude_ai_Nep', 'N_p', 'claude_ai_nhile-governance', 'nhile-governance', 'claude_ai_NhiLe_Governance']) {
       assert.equal(matcher.test(`mcp__${server}__my_work`), true, server);
       assert.equal(matcher.test(`mcp__${server}__save_chat`), true, server);
       assert.equal(matcher.test(`mcp__${server}__my_context`), false, server);
     }
-    assert.equal(matcher.test('mcp__plugin_nlh_nhile-governance__my_work'), false, 'gói không còn connector riêng');
-    // Lệnh thêm tay trong README (Claude Code dùng khoá API) phải đặt đúng một tên hook gọi tới, kẻo có công cụ mà chat
-    // không vào giếng.
-    const added = readFileSync(join(root, 'README.md'), 'utf8').match(/claude mcp add --transport http (\S+) https:\/\/mcp\.nlh\.vn\/mcp/);
-    assert.ok(added, 'README có lệnh thêm tay');
-    assert.ok(DOORS.includes(added[1]), added[1]);
-    assert.equal(matcher.test(`mcp__${added[1]}__my_work`), true);
+    assert.equal(matcher.test('mcp__plugin_nlh_speaker__pending'), false, 'Loa không phải Nếp');
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse[0], {
-      matcher: '^mcp__(claude_ai_)?(N_p|Nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)',
+      matcher: '^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)',
       hooks: DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } })),
     });
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);

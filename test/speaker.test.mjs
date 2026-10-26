@@ -885,7 +885,7 @@ describe('plugin.json và lời dặn Loa', () => {
     assert.equal(channel.userConfig.tower_key.sensitive, true);
     assert.equal(channel.userConfig.tower_key.default, undefined);
     assert.doesNotMatch(JSON.stringify(manifest), /Tháp/);
-    assert.deepEqual(Object.keys(manifest.mcpServers), ['speaker']);
+    assert.deepEqual(Object.keys(manifest.mcpServers), ['nep', 'speaker']);
     const server = manifest.mcpServers.speaker;
     assert.deepEqual(server.args, ['${CLAUDE_PLUGIN_ROOT}/speaker/speaker.mjs']);
     assert.equal(server.env.TOWER_KEY, '${user_config.tower_key}');
