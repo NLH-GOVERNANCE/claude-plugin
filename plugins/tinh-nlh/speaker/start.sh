@@ -44,10 +44,17 @@ for file in "$PLUGINS"/cache/*/nlh/*/.claude-plugin/plugin.json "$PLUGINS"/synce
 done
 current="$(cat "$DIR/version.txt" 2>/dev/null)"
 if [ -n "$best_root" ] && { [ -z "$current" ] || [ "$best" = "$current" ] || newer "$best" "$current"; }; then
+  # This launcher is not the plugin's newest one (an update came): run the new one right away, once, instead of using it
+  # only from the next launch (17e647c1, 26/10: the first launch after the update still set the old 10-minute loop).
+  stale=""
+  cmp -s "$0" "$best_root/speaker/start.sh" || stale=1
   cp "$best_root/speaker/speaker.mjs" "$DIR/speaker.mjs"
-  cp "$best_root/speaker/start.sh" "$DIR/start.sh"
-  chmod +x "$DIR/start.sh"
+  # A new file, not written over the one bash is reading now.
+  cp "$best_root/speaker/start.sh" "$DIR/start.sh.new" && chmod +x "$DIR/start.sh.new" && mv -f "$DIR/start.sh.new" "$DIR/start.sh"
   printf '%s\n' "$best" > "$DIR/version.txt"
+  if [ -n "$stale" ] && [ -z "${SPEAKER_RELAUNCHED:-}" ]; then
+    SPEAKER_RELAUNCHED=1 exec /bin/bash "$DIR/start.sh"
+  fi
 fi
 SPEAKER="$DIR/speaker.mjs"
 [ -f "$SPEAKER" ] || stop_loa 'Chưa thấy plugin Nếp trên máy. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
@@ -119,6 +126,11 @@ fi
 # (nor the plugin's own speaker server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
 # and open sessions. Node writes the JSON so paths with spaces stay right.
 CONFIG="$DIR/speaker-mcp.json"
+# Loa needs no hook of the plugin: they call the Nếp connector, which the Loa session (only server speaker) does not
+# have, so each turn printed about ten "Stop hook error: MCP server ... not connected" lines (17e647c1, 26/10). This
+# session only: disableAllHooks, read from a file so no JSON quoting goes through the command line.
+SETTINGS="$DIR/speaker-settings.json"
+printf '%s\n' '{ "disableAllHooks": true }' > "$SETTINGS" || stop_loa 'Chưa ghi được cấu hình của Loa.'
 "$NODE" -e '
 const [node, speaker, dir, origin, claude, work] = process.argv.slice(1);
 const env = { NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude };
@@ -141,7 +153,7 @@ echo ''
 # With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
 # tokens). Only the fallback without the channel keeps the 10-minute loop over the pending tool.
 LOOP='/loop 10m /nlh:speaker-loop'
-set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
