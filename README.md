@@ -2,20 +2,17 @@
 
 Nếp là nơi cả công ty NhiLe giao việc, theo dõi việc và ký duyệt. Cài Nếp vào Claude một lần, rồi nói chuyện với Claude bằng câu thường để xem và làm việc của mình.
 
-## Cài (một lần, một bước)
+## Cài (một lần)
 
-Trên máy tính, mở link [Thêm Nếp vào Claude](https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp), bấm **Add**, rồi đăng nhập bằng email công ty. Xong: Claude trên web, ứng dụng máy tính, điện thoại và Claude Code đều có Nếp.
-
-Nếp là một connector trong tài khoản Claude của chính bạn. Tài khoản nào cũng làm như nhau, kể cả tài khoản cá nhân. Claude báo Nếp cần đăng nhập lại thì mở claude.ai › Customize › Connectors, bấm **Connect** ở Nếp.
-
-Dùng Claude Code: thêm gói Nếp để có hook lưu chat, báo phiên, lời dặn đầu phiên. Gõ hai dòng sau một lần:
+**Claude Code trên máy tính** (Windows, Mac, Linux): dán một câu này vào Claude Code, Claude tự cài gói, Nếp và Loa. Bạn chỉ đăng nhập bằng email công ty và dán khoá Loa khi được hỏi.
 
 ```
-/plugin marketplace add NLH-GOVERNANCE/claude-plugin
-/plugin install nlh@nlh-governance
+Cài Nếp cho máy này theo https://raw.githubusercontent.com/NLH-GOVERNANCE/claude-plugin/main/SETUP.md
 ```
 
-Gói không mang connector riêng: nó dùng Nếp trong tài khoản ở bước trên. Ai dùng Claude Code bằng khoá API thay vì tài khoản claude.ai thì không có connector của tài khoản. Người đó thêm bằng lệnh `claude mcp add --transport http nhile-governance https://mcp.nlh.vn/mcp`: đúng tên này để hook của gói gọi tới.
+Gói mang sẵn Nếp: cài gói là có Nếp, đăng nhập một lần trong trình duyệt. Các bước Claude làm nằm ở [SETUP.md](SETUP.md).
+
+**Claude trên web, ứng dụng máy tính, điện thoại**: mở link [Thêm Nếp vào Claude](https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp), bấm **Add**, rồi đăng nhập bằng email công ty. Phiên Claude Code trên mây cũng lấy Nếp từ đây. Claude báo Nếp cần đăng nhập lại thì mở claude.ai › Customize › Connectors, bấm **Connect** ở Nếp.
 
 Muốn có lệnh tắt như `/work` trên app Claude: [Customize > Plugins](https://claude.ai/customize/plugins), **Add**, **Add marketplace**, gõ `NLH-GOVERNANCE/claude-plugin`, cài **Nếp**. Không bắt buộc.
 
@@ -64,9 +61,13 @@ Máy đã bật Loa trước khi đổi tên Nếp: gõ **bật Loa** thêm mộ
 - Kênh `speaker` nạp qua `--mcp-config` với `--dangerously-load-development-channels server:speaker`, không qua tên plugin: plugin cài từ claude.ai mang tên `nlh@synced`, Claude Code chỉ nhận kênh của plugin cài từ chợ. `NLH_TOWER=1` chỉ nằm trong cấu hình kênh, nên các phiên khác trên máy không đọc luồng việc; phiên Loa mở cũng không mang `NLH_TOWER*`, nên không giữ khoá Loa khi Loa tắt.
 - Cờ `--dangerously-load-development-channels`: kênh tự làm chưa nằm trong danh sách kênh Anthropic duyệt sẵn (research preview), nên Claude Code chỉ nạp khi mình nói rõ đang thử, hỏi lại mỗi lần mở. Vì sao an toàn: kênh do repo này viết, chỉ đọc việc của chính bạn bằng khoá riêng, chỉ gửi khoá tới `*.nlh.vn`; không nhận duyệt quyền từ xa; luật của tổ chức (`channelsEnabled`) vẫn áp dụng. Một máy chỉ chạy một Loa.
 
-### Một connector cho mỗi người (25/10/2026)
+### Gói mang Nếp (26/10/2026)
 
-Anh Sơn chốt: coi mọi người là tài khoản Claude cá nhân, mỗi người nối Nếp đúng một lần. Gói không mang connector `mcp.nlh.vn` nữa (từ 0.20.0). Có hai lý do. Ở Claude Code, máy chủ của gói thắng connector của tài khoản khi cùng địa chỉ, nên người dùng phải đăng nhập lần hai (code.claude.com/docs/en/mcp, thứ tự ưu tiên theo địa chỉ). Ở phiên Claude Code trên mây, máy chủ của gói không đăng nhập được, nên chat mất mà không ai biết. Hook gọi connector của tài khoản theo mọi tên nó có (`claude.ai Nếp` trên máy, `Nếp` trên mây, cùng hai tên cũ `nhile-governance` và `NhiLe Governance`). Tên nào không có thì hook đó bỏ qua.
+Ngày 25/10 (0.20.0) gói bỏ connector riêng, dựa vào connector Nếp trong tài khoản. Anh Sơn nói đó là hiểu sai ý anh: anh muốn cài gói là có luôn Nếp, như [Cloudflare cho Claude Code](https://developers.cloudflare.com/agent-setup/claude-code/). Từ 0.22.0 gói mang lại máy chủ `nep` (`https://mcp.nlh.vn/mcp`, tên trong Claude Code `plugin:nlh:nep`, công cụ `mcp__plugin_nlh_nep__…`).
+
+- Trên máy: máy chủ của gói thắng connector của tài khoản cùng địa chỉ (code.claude.com/docs/en/mcp, thứ tự ưu tiên theo địa chỉ), nên connector tài khoản bị ẩn và người dùng đăng nhập Nếp một lần cho gói (`/mcp`, chọn `plugin:nlh:nep`). `claude mcp login` cần một terminal thật, nên Claude không tự chạy được: người gõ `/mcp`.
+- Trên mây: proxy của phiên đổi địa chỉ connector tài khoản, nên hai cái không trùng và cả hai cùng có. Máy chủ của gói không đăng nhập được ở đó (luôn "cần đăng nhập"); Nếp đến từ connector tài khoản như trước. Dòng đầu phiên (`hooks/sign-in-check.mjs`, theo `CLAUDE_CODE_REMOTE`) dặn Claude không xin người đăng nhập máy chủ của gói trên mây.
+- Hook gọi `plugin:nlh:nep` trước, rồi connector tài khoản theo mọi tên nó có (`claude.ai Nếp` trên máy, `Nếp` trên mây, hai tên cũ `nhile-governance` và `NhiLe Governance`). Tên nào không nối thì hook đó bỏ qua; hai bản cùng lưu một lượt chat thì giếng bỏ bản trùng trong 2 phút.
 
 ### File .zip (để thử)
 
