@@ -13,8 +13,10 @@ import { pathToFileURL } from 'node:url';
 
 // The plugin's own server first, then the account connector: "claude.ai <name>" in Claude Code on a machine, the bare
 // name in cloud sessions. Nếp is the name the add link fills in; the other two are names people gave it before 25/10.
+// Sessions made by create_session and the desktop app name the company's connector by its id instead (ticket 7b4fbf29).
 export const PLUGIN_SERVER = 'plugin:nlh:nep';
-export const SERVERS = [PLUGIN_SERVER, 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance'];
+export const CONNECTOR_ID = '3398cc99-b4dc-41bd-8007-bd4b6792d5cb';
+export const SERVERS = [PLUGIN_SERVER, 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance', CONNECTOR_ID];
 export const ADD_LINK =
   'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
 const FRESH_MS = 7 * 24 * 60 * 60 * 1000;
