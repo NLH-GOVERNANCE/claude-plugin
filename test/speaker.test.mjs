@@ -886,6 +886,11 @@ describe('plugin.json và lời dặn Loa', () => {
     assert.match(skill, /Loa does not open, resume or stop sessions itself and runs no `claude` commands/);
     assert.match(skill, /Loa never reads or copies ticket content \(D-0009\)/);
     assert.match(skill, /call the speaker tool `pending`/);
+    // Mở phiên khi có kênh (việc 17e647c1, 27/10): có công cụ speaker thì nói dòng vàng của Claude Code là báo nhầm;
+    // không có thì nói kênh chưa nối và cách mở lại. Không gọi công cụ chỉ để kiểm.
+    assert.match(skill, /Check that you have the speaker server's tools `pending` and `forwarded` \(`mcp__speaker__…`\), without calling them/);
+    assert.ok(skill.includes(`"Loa đang nghe, kênh đã nối. Dòng vàng 'no MCP server configured with that name' ở trên là Claude Code báo nhầm, bỏ qua."`));
+    assert.ok(skill.includes('"Kênh của Loa chưa nối; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại."'));
     assert.equal(skill.match(/^name: (.+)$/m)?.[1], 'speaker-loop');
     assert.doesNotMatch(skill, /ListAgents|my_context|Tháp/);
     assert.match(skill, /no background session \(`claude --bg`, anh Sơn 26\/10\)/);
