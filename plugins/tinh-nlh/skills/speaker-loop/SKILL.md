@@ -23,9 +23,13 @@ Messages arrive as `<channel source="...speaker" action="…" kind="…" cell="�
 
 ## Opening turn and the fallback loop
 
-With the channel, the icon opens the session with `/nlh:speaker-loop` once: print one line "Loa đang nghe; việc tồn để các ô tự đọc." and stop. Never set a loop or a schedule yourself: the channel pushes each item, and a loop only spends tokens (ticket 17e647c1, anh Sơn 26/10).
+With the channel, the icon opens the session with `/nlh:speaker-loop` once. Check that you have the speaker server's tools `pending` and `forwarded` (`mcp__speaker__…`), without calling them:
+- They are there: print one line "Loa đang nghe, kênh đã nối. Dòng vàng 'no MCP server configured with that name' ở trên là Claude Code báo nhầm, bỏ qua." and stop. The line is a false alarm: Claude Code's channel check only looks at servers in its settings scopes, not at a server loaded with `--mcp-config` as Loa's is, and the channel still delivers (checked 27/10, ticket 17e647c1).
+- They are missing: print one line "Kênh của Loa chưa nối; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại." and stop.
 
-Only when the channel did not load does the icon open the session with `/loop 10m /nlh:speaker-loop`. First turn: the same one line, then stop. Later turns: call the speaker tool `pending`. Empty list: stop without printing. Each item (`entry_id`, `to`, `text`): deliver as in step 1. This also covers fallback mode, when the channel did not load: the server still reads the hub and prints its lines; only sends wait for this loop.
+Never set a loop or a schedule yourself: the channel pushes each item, and a loop only spends tokens (ticket 17e647c1, anh Sơn 26/10).
+
+Only when the channel did not load does the icon open the session with `/loop 10m /nlh:speaker-loop`. First turn: print one line "Loa đang nghe, kênh báo nhanh chưa mở: mỗi 10 phút xem việc một lần." (never the "kênh đã nối" line), then stop. Later turns: call the speaker tool `pending`. Empty list: stop without printing. Each item (`entry_id`, `to`, `text`): deliver as in step 1. This also covers fallback mode, when the channel did not load: the server still reads the hub and prints its lines; only sends wait for this loop.
 
 The speaker tools are missing (server not loaded): print one line "Loa chưa nối được với Nếp; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại." and stop.
 
