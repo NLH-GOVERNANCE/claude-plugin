@@ -67,7 +67,7 @@ Ngày 25/10 (0.20.0) gói bỏ connector riêng, dựa vào connector Nếp tron
 
 - Trên máy: máy chủ của gói thắng connector của tài khoản cùng địa chỉ (code.claude.com/docs/en/mcp, thứ tự ưu tiên theo địa chỉ), nên connector tài khoản bị ẩn và người dùng đăng nhập Nếp một lần cho gói (`/mcp`, chọn `plugin:nlh:nep`). `claude mcp login` cần một terminal thật, nên Claude không tự chạy được: người gõ `/mcp`.
 - Trên mây: proxy của phiên đổi địa chỉ connector tài khoản, nên hai cái không trùng và cả hai cùng có. Máy chủ của gói không đăng nhập được ở đó (luôn "cần đăng nhập"); Nếp đến từ connector tài khoản như trước. Dòng đầu phiên (`hooks/sign-in-check.mjs`, theo `CLAUDE_CODE_REMOTE`) dặn Claude không xin người đăng nhập máy chủ của gói trên mây.
-- Hook gọi `plugin:nlh:nep` trước, rồi connector tài khoản theo mọi tên nó có (`claude.ai Nếp` trên máy, `Nếp` trên mây, hai tên cũ `nhile-governance` và `NhiLe Governance`). Tên nào không nối thì hook đó bỏ qua; hai bản cùng lưu một lượt chat thì giếng bỏ bản trùng trong 2 phút.
+- Hook gọi `plugin:nlh:nep` trước, rồi connector tài khoản theo mọi tên nó có (`claude.ai Nếp` trên máy, `Nếp` trên mây, hai tên cũ `nhile-governance` và `NhiLe Governance`, và mã `3398cc99-b4dc-41bd-8007-bd4b6792d5cb` mà phiên mây tạo bằng `create_session` và app Claude dùng làm tên connector của công ty, việc 7b4fbf29). Tên nào không nối thì hook đó bỏ qua; hai bản cùng lưu một lượt chat thì giếng bỏ bản trùng trong 2 phút.
 
 ### File .zip (để thử)
 

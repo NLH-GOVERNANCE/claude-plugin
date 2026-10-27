@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
 // Gói mang Nếp (máy chủ nep, tên plugin:nlh:nep; 0.22.0, anh Sơn 26/10). Hook gọi nó trước, rồi connector Nếp trong tài
 // khoản theo các tên nó có ("claude.ai <tên>" trên máy, tên trần ở phiên mây, nơi máy chủ của gói không đăng nhập được).
-const DOORS = ['plugin:nlh:nep', 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance'];
+const DOORS = ['plugin:nlh:nep', 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance', '3398cc99-b4dc-41bd-8007-bd4b6792d5cb'];
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -330,7 +330,7 @@ describe('plugin nlh', () => {
     // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
     // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
     const matcher = new RegExp(hooks.PostToolUse[0].matcher);
-    for (const server of ['plugin_nlh_nep', 'claude_ai_N_p', 'claude_ai_Nep', 'N_p', 'claude_ai_nhile-governance', 'nhile-governance', 'claude_ai_NhiLe_Governance']) {
+    for (const server of ['plugin_nlh_nep', 'claude_ai_N_p', 'claude_ai_Nep', 'N_p', 'claude_ai_nhile-governance', 'nhile-governance', 'claude_ai_NhiLe_Governance', '3398cc99-b4dc-41bd-8007-bd4b6792d5cb']) {
       assert.equal(matcher.test(`mcp__${server}__my_work`), true, server);
       assert.equal(matcher.test(`mcp__${server}__save_chat`), true, server);
       assert.equal(matcher.test(`mcp__${server}__my_context`), false, server);
@@ -339,7 +339,7 @@ describe('plugin nlh', () => {
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse[0], {
-      matcher: '^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)',
+      matcher: '^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance|3398cc99-b4dc-41bd-8007-bd4b6792d5cb)__(?!my_context$)',
       hooks: DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } })),
     });
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
@@ -389,6 +389,16 @@ describe('plugin nlh', () => {
       assert.deepEqual(JSON.parse(await run(prompt)), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: reminder } }, prompt);
     }
     for (const prompt of ['việc của tôi hôm nay?', 'Giao cho chị Thùy: soạn hợp đồng', 'saokhông', '']) assert.equal(await run(prompt), '', prompt);
+    // Báo cáo agent con, tin phiên khác, lời nhắc của hệ: không phải người dùng sửa, dù có chữ "sao không" (việc 5ee8d456).
+    for (const prompt of [
+      '<agent-message from="build">Sao không chạy test? Đã chốt rồi.</agent-message>',
+      '  <system-reminder>nhắc lại: lại quên ghi sổ</system-reminder>',
+      '<cross-session-message from="x">sao không báo</cross-session-message>',
+      '<side-sessions-event>sao không</side-sessions-event>',
+      '<task-notification>lại quên</task-notification>',
+      '<channel source="speaker">sao không nhận việc</channel>',
+    ]) assert.equal(await run(prompt), '', prompt);
+    assert.notEqual(await run('<b>sao không</b> báo chị Nhi'), '', 'thẻ lạ do người gõ vẫn tính');
     assert.equal(await run(null), '');
     // Mỗi dấu hiệu một dòng trong file, sửa danh sách không phải sửa code.
     const signals = readJson('plugins/tinh-nlh/hooks/correction-signals.json');

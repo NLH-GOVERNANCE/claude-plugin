@@ -26,7 +26,12 @@ const fold = (text) =>
 
 const signals = JSON.parse(readFileSync(new URL('./correction-signals.json', import.meta.url), 'utf8')).map(fold);
 
+// A turn Claude Code made, not one the user typed: a sub-agent's or another session's report, a reminder, an event
+// (ticket 5ee8d456). Its words are not the user correcting anyone.
+const MACHINE_TURN = /^\s*<(agent-message|system-reminder|cross-session-message|side-sessions-event|task-notification|ci-monitor-event|channel|local-command-stdout)[\s>]/;
+
 function isCorrection(prompt) {
+  if (MACHINE_TURN.test(String(prompt ?? ''))) return false;
   const text = ` ${fold(prompt)} `;
   return signals.some((signal) => text.includes(` ${signal} `));
 }

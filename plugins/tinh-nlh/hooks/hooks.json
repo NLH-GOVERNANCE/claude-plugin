@@ -87,6 +87,12 @@
             "server": "NhiLe Governance",
             "tool": "my_context",
             "timeout": 30
+          },
+          {
+            "type": "mcp_tool",
+            "server": "3398cc99-b4dc-41bd-8007-bd4b6792d5cb",
+            "tool": "my_context",
+            "timeout": 30
           }
         ]
       }
@@ -159,6 +165,15 @@
           },
           {
             "type": "mcp_tool",
+            "server": "3398cc99-b4dc-41bd-8007-bd4b6792d5cb",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "idle"
+            }
+          },
+          {
+            "type": "mcp_tool",
             "server": "plugin:nlh:nep",
             "tool": "save_chat",
             "input": {
@@ -226,6 +241,17 @@
           {
             "type": "mcp_tool",
             "server": "NhiLe Governance",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "assistant",
+              "text": "${last_assistant_message}"
+            },
+            "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "3398cc99-b4dc-41bd-8007-bd4b6792d5cb",
             "tool": "save_chat",
             "input": {
               "session_id": "${session_id}",
@@ -297,6 +323,15 @@
           {
             "type": "mcp_tool",
             "server": "NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "3398cc99-b4dc-41bd-8007-bd4b6792d5cb",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -385,6 +420,17 @@
               "text": "${prompt}"
             },
             "timeout": 5
+          },
+          {
+            "type": "mcp_tool",
+            "server": "3398cc99-b4dc-41bd-8007-bd4b6792d5cb",
+            "tool": "save_chat",
+            "input": {
+              "session_id": "${session_id}",
+              "role": "user",
+              "text": "${prompt}"
+            },
+            "timeout": 5
           }
         ]
       },
@@ -418,7 +464,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)",
+        "matcher": "^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance|3398cc99-b4dc-41bd-8007-bd4b6792d5cb)__(?!my_context$)",
         "hooks": [
           {
             "type": "mcp_tool",
@@ -477,6 +523,15 @@
           {
             "type": "mcp_tool",
             "server": "NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "working"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "3398cc99-b4dc-41bd-8007-bd4b6792d5cb",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
@@ -598,6 +653,17 @@
           {
             "type": "mcp_tool",
             "server": "NhiLe Governance",
+            "tool": "report_session",
+            "input": {
+              "session_id": "${session_id}",
+              "status": "stopped",
+              "machine_stop": "quota"
+            },
+            "timeout": 10
+          },
+          {
+            "type": "mcp_tool",
+            "server": "3398cc99-b4dc-41bd-8007-bd4b6792d5cb",
             "tool": "report_session",
             "input": {
               "session_id": "${session_id}",
