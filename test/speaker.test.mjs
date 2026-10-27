@@ -888,11 +888,15 @@ describe('plugin.json và lời dặn Loa', () => {
     assert.match(skill, /call the speaker tool `pending`/);
     // Mở phiên khi có kênh (việc 17e647c1, 27/10): có công cụ speaker thì nói dòng vàng của Claude Code là báo nhầm;
     // không có thì nói kênh chưa nối và cách mở lại. Không gọi công cụ chỉ để kiểm.
-    assert.match(skill, /Check that you have the speaker server's tools `pending` and `forwarded` \(`mcp__speaker__…`\), without calling them/);
+    assert.match(skill, /check that you have the speaker server's tools `pending` and `forwarded` \(`mcp__speaker__…`\), without calling them/);
     assert.ok(skill.includes(`"Loa đang nghe, kênh đã nối. Dòng vàng 'no MCP server configured with that name' ở trên là Claude Code báo nhầm, bỏ qua."`));
     assert.ok(skill.includes('"Kênh của Loa chưa nối; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại."'));
     // Chế độ dự phòng (kênh không mở, công cụ vẫn có): không nói "kênh đã nối"; luật không tự đặt vòng áp cho mọi nhánh.
-    assert.ok(skill.includes('First turn: print one line "Loa đang nghe, kênh báo nhanh chưa mở: mỗi 10 phút xem việc một lần." (never the "kênh đã nối" line)'));
+    assert.ok(skill.includes('- Fallback mode: print one line "Loa đang nghe, kênh báo nhanh chưa mở: mỗi 10 phút xem việc một lần." (never the "kênh đã nối" line)'));
+    // Một hướng cho model: mở bằng /loop là chế độ dự phòng; thiếu công cụ chỉ có một câu, cho cả hai chế độ.
+    assert.match(skill, /`\/loop 10m \/nlh:speaker-loop`: fallback mode/);
+    assert.equal(skill.split('They are missing').length, 2);
+    assert.doesNotMatch(skill, /Loa chưa nối được với Nếp/);
     assert.match(skill, /\n\nNever set a loop or a schedule yourself:/);
     assert.equal(skill.match(/^name: (.+)$/m)?.[1], 'speaker-loop');
     assert.doesNotMatch(skill, /ListAgents|my_context|Tháp/);
