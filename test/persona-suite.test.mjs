@@ -1,9 +1,11 @@
 // Phép thử phần chấm của bộ ca "người không rành" (scripts/persona-suite.mjs): thời gian, đếm dòng, chữ cấm, câu tiếng Anh,
 // bằng câu trả lời giả. Không gọi Claude thật, nên chạy được trong CI.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
-import { DEFAULT_CASES, blockedTools, allowedTools, englishLines, forbiddenHits, gradeCase, parseStream, renderTable } from '../scripts/persona-suite.mjs';
+import { DEFAULT_CASES, blockedTools, allowedTools, englishLines, forbiddenHits, activeSessions, gradeCase, gradeRuns, median, parseStream, renderTable, renderTrace } from '../scripts/persona-suite.mjs';
 
 const config = JSON.parse(readFileSync(DEFAULT_CASES, 'utf8'));
 const byId = (id) => config.cases.find((c) => c.id === id);
@@ -33,8 +35,92 @@ test('đọc stream: lấy chữ của trợ lý theo thứ tự, thời gian t�
     { t: 9500, text: assistant(say('  '), say('Chào chị.')) },
     { t: 12000, text: assistant(say('Chị có một việc cần ký.')) },
   ];
-  assert.deepEqual(parseStream(lines), { answer: 'Chào chị.\nChị có một việc cần ký.', firstTextMs: 9500 });
-  assert.deepEqual(parseStream([{ t: 5, text: assistant({ type: 'tool_use', name: 'x' }) }]), { answer: '', firstTextMs: null });
+  const parsed = parseStream(lines);
+  assert.equal(parsed.answer, 'Chào chị.\nChị có một việc cần ký.');
+  assert.equal(parsed.firstTextMs, 9500);
+  assert.equal(parsed.startupMs, 100);
+  assert.deepEqual(parseStream([{ t: 5, text: assistant({ type: 'tool_use', name: 'x' }) }]).answer, '');
+  assert.equal(parseStream([{ t: 5, text: assistant({ type: 'tool_use', name: 'x' }) }]).firstTextMs, null);
+});
+
+test('dấu vết công cụ: tên bỏ tiền tố máy chủ, giờ gọi và giờ có kết quả, rồi chữ đầu; thiếu kết quả ghi dấu ?', () => {
+  const user = (id) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'x' }] } });
+  const lines = [
+    { t: 2100, text: assistant({ type: 'tool_use', id: 'a', name: 'mcp__plugin_nlh_nep__my_context', input: {} }) },
+    { t: 5000, text: user('a') },
+    { t: 5200, text: assistant({ type: 'tool_use', id: 'b', name: 'mcp__claude_ai_nhile-governance__show_ticket', input: {} }) },
+    { t: 9000, text: assistant(say('Chào chị.')) },
+  ];
+  const parsed = parseStream(lines);
+  assert.deepEqual(parsed.tools, [
+    { name: 'my_context', startMs: 2100, endMs: 5000 },
+    { name: 'show_ticket', startMs: 5200, endMs: null },
+  ]);
+  assert.equal(renderTrace(parsed), 'my_context 2.1→5s · show_ticket 5.2→?s · chữ đầu 9s');
+  assert.equal(renderTrace({ ...parsed, startupMs: 8000 }), 'mở 8s · my_context 2.1→5s · show_ticket 5.2→?s · chữ đầu 9s');
+  assert.equal(renderTrace({ tools: [], firstTextMs: null }), 'chữ đầu ?s');
+});
+
+test('đồng hồ tính từ lúc phiên mở: khởi động không tính vào 15 giây, nhưng vẫn có cột riêng', () => {
+  const late = { answer: 'Chào chị.', firstTextMs: 21000, startupMs: 8000 };
+  const graded = gradeCase(late, byId('viec-truoc-nhat'), config);
+  assert.deepEqual([graded.time.pass, graded.time.seconds, graded.time.startup], [true, 13, 8]);
+  assert.equal(gradeCase({ ...late, firstTextMs: 23100 }, byId('viec-truoc-nhat'), config).time.pass, false);
+  // Không thấy lúc phiên mở: tính từ lúc chạy, cột khởi động trống.
+  const none = gradeCase({ answer: 'Chào chị.', firstTextMs: 12000 }, byId('viec-truoc-nhat'), config);
+  assert.deepEqual([none.time.seconds, none.time.startup], [12, null]);
+  const table = renderTable([graded, none], config).split('\n');
+  assert.match(table[1], /^viec-truoc-nhat\s+13\s+-\s+8\s/);
+  assert.match(table[2], /^viec-truoc-nhat\s+12\s+-\s+\?\s/);
+});
+
+test('chạy ba lần: thời gian đạt khi trung vị ≤15 giây; chữ cấm, dòng, câu tiếng Anh phải đạt cả ba lần', () => {
+  const run = (seconds, answer = 'Chào chị.') => ({ answer, firstTextMs: seconds * 1000, startupMs: 0 });
+  const grade = (runs, id = 'viec-truoc-nhat') => gradeRuns(runs, byId(id), config);
+  assert.equal(median([14, 20, 9]), 14);
+  assert.equal(median([null, 5, 6]), 6);
+  // Một lần chậm không làm trượt khi trung vị đạt; ghi đủ ba số.
+  const ok = grade([run(9), run(17), run(14)]);
+  assert.deepEqual([ok.time.pass, ok.time.seconds, ok.time.all, ok.pass], [true, 14, [9, 17, 14], true]);
+  // Hai lần chậm: trung vị trượt.
+  const slow = grade([run(9), run(17), run(16)]);
+  assert.deepEqual([slow.time.pass, slow.time.seconds, slow.pass], [false, 16, false]);
+  // Thiếu chữ ở hai trong ba lần: trượt.
+  const none = grade([run(9), { answer: '', firstTextMs: null }, { answer: '', firstTextMs: null }]);
+  assert.deepEqual([none.time.pass, none.time.seconds], [false, null]);
+  // Một lần có chữ cấm là trượt dù hai lần kia sạch và nhanh.
+  const dirty = grade([run(5), run(5, 'Em gộp PR vào repo rồi.'), run(5)]);
+  assert.deepEqual([dirty.time.pass, dirty.words.pass, dirty.words.hits, dirty.pass], [true, false, ['PR', 'repo'], false]);
+  // Quá số dòng ở một lần cũng trượt.
+  const long = 'Chào chị.\nMột.\nHai.\nBa.\nBốn.';
+  const over = grade([run(5), run(5, long), run(5)], 'chao-em');
+  assert.deepEqual([over.rows.pass, over.rows.lines, over.pass], [false, 5, false]);
+  const table = renderTable([ok], config).split('\n');
+  assert.match(table[1], /^viec-truoc-nhat\s+14\s+9 · 17 · 14\s/);
+  assert.equal(renderTable([dirty], config).split('\n')[2], '  viec-truoc-nhat: chữ cấm: PR, repo');
+});
+
+test('số phiên khác đang chạy: đếm file chat vừa ghi trong 2 phút, bỏ phiên của chính bộ ca', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nlh-sessions-'));
+  try {
+    const now = Date.now();
+    const touch = (project, file, agoSeconds) => {
+      mkdirSync(join(dir, project), { recursive: true });
+      const path = join(dir, project, file);
+      writeFileSync(path, '{}');
+      const at = new Date(now - agoSeconds * 1000);
+      utimesSync(path, at, at);
+    };
+    touch('C--Users-Admin-repo', 'a.jsonl', 10);
+    touch('C--Users-Admin-repo', 'b.jsonl', 30);
+    touch('C--Users-Admin-repo', 'old.jsonl', 600);
+    touch('C--Users-Admin-repo', 'note.txt', 5);
+    touch('C--Users-Admin-AppData-Local-Temp-nlh-persona-x1', 'own.jsonl', 5);
+    assert.equal(activeSessions(now, dir), 2);
+    assert.equal(activeSessions(now, join(dir, 'không-có')), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('chữ đầu tiên: đúng 15 giây còn đạt, 15,1 giây trượt, không có chữ nào là trượt', () => {
@@ -65,6 +151,7 @@ test('chữ cấm: bắt từng chữ của ticket, không bắt chữ trùng m�
   assert.deepEqual(hit('Mã việc cf0183a7 đang chờ.'), ['mã việc']);
   assert.deepEqual(hit('Gõ /mcp rồi /reload-plugins, bấm Connect, đăng nhập bằng email công ty.'), ['/mcp', '/reload-plugins', 'Connect', 'email công ty']);
   assert.deepEqual(hit('Mở PowerShell, gõ claude plugin update.'), ['PowerShell', 'lệnh claude']);
+  assert.deepEqual(hit('Claude Code chạy lệnh giúp chị, mở Claude Code là xong.'), []);
   // Không bắt: chữ trùng một phần, ngày tháng toàn số, tên người.
   assert.deepEqual(hit('Em soạn xong rồi. Hôm nay 20251028 chị có một việc. Thùy duyệt giúp.'), []);
   assert.deepEqual(hit('Chị Nhi nhờ em prompt lại.'), []);
@@ -92,15 +179,16 @@ test('bảng kết quả: một dòng mỗi ca, ca trượt kèm lý do, ca đ�
   const results = answers.map(([id, parsed]) => gradeCase(parsed, byId(id), config));
   const table = renderTable(results, config);
   const rows = table.split('\n');
-  assert.match(rows[1], /^chao-em\s+8\.2\s+1\/4\s+sạch\s+đạt$/);
-  assert.match(rows[2], /^co-gi-moi\s+20\s+1\s+có\s+TRƯỢT$/);
+  assert.match(rows[1], /^chao-em\s+8\.2\s+-\s+\?\s+1\/4\s+sạch\s+đạt$/);
+  assert.match(rows[2], /^co-gi-moi\s+20\s+-\s+\?\s+1\s+có\s+TRƯỢT$/);
   assert.equal(rows.length, 4);
   assert.match(rows[3], /^ {2}co-gi-moi: chữ đầu sau 20s · chữ cấm: PR, repo$/);
   assert.doesNotMatch(table, /chao-em:/);
 });
 
 test('công cụ được gọi thật khi chạy bộ ca: chỉ công cụ đọc của Nếp, tên đầy đủ, đủ hai máy chủ; không có công cụ ghi và không có dấu *', () => {
-  const tools = allowedTools(config);
+  const all = allowedTools(config);
+  const tools = all.filter((tool) => tool.startsWith('mcp__'));
   assert.equal(tools.length, config.readTools.length * 2);
   assert.ok(tools.includes('mcp__plugin_nlh_nep__my_context'));
   assert.ok(tools.includes('mcp__claude_ai_nhile-governance__my_context'));
@@ -114,5 +202,15 @@ test('công cụ được gọi thật khi chạy bộ ca: chỉ công cụ đ�
   assert.equal(blocked.length, config.writeTools.length * 2);
   for (const name of writes) assert.ok(config.writeTools.includes(name), name);
   assert.ok(blocked.includes('mcp__plugin_nlh_nep__report_session') && blocked.includes('mcp__claude_ai_nhile-governance__save_chat'));
-  for (const tool of blocked) assert.ok(!tools.includes(tool), tool);
+  for (const tool of blocked) assert.ok(!all.includes(tool), tool);
+});
+
+test('lệnh được chạy thật chỉ là lệnh cập nhật gói (và xem danh sách gói), không có lệnh nào khác', () => {
+  const commands = allowedTools(config).filter((tool) => !tool.startsWith('mcp__'));
+  assert.ok(commands.length > 0);
+  for (const command of commands) assert.match(command, /^(Bash|PowerShell)\(claude plugin (marketplace update nlh-governance|update nlh@nlh-governance|list):\*\)$/, command);
+  assert.ok(commands.includes('Bash(claude plugin update nlh@nlh-governance:*)'));
+  assert.ok(commands.includes('PowerShell(claude plugin update nlh@nlh-governance:*)'));
+  // Cờ --no-update: không còn lệnh nào, chỉ còn công cụ đọc của Nếp.
+  assert.deepEqual(allowedTools(config, { update: false }).filter((tool) => !tool.startsWith('mcp__')), []);
 });

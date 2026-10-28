@@ -34,6 +34,15 @@
     "read_my_chats",
     "library"
   ],
+  "_commandTools": "Lệnh được chạy thật, đúng các lệnh cập nhật gói mà Claude chạy khi người dùng nhờ \"cập nhật Nếp\" (người thật bấm Đồng ý ở phiên thật). Có tiền tố :* nghĩa là lệnh đó kèm thêm đối số vẫn được. Ca cập nhật vì vậy thật sự cập nhật gói đã cài trên máy chạy bộ ca.",
+  "commandTools": [
+    "Bash(claude plugin marketplace update nlh-governance:*)",
+    "Bash(claude plugin update nlh@nlh-governance:*)",
+    "Bash(claude plugin list:*)",
+    "PowerShell(claude plugin marketplace update nlh-governance:*)",
+    "PowerShell(claude plugin update nlh@nlh-governance:*)",
+    "PowerShell(claude plugin list:*)"
+  ],
   "_writeTools": "Công cụ ghi của Nếp, chặn hẳn khi chạy bộ ca. Có công cụ ghi mới thì thêm vào đây.",
   "writeTools": [
     "save_chat",
@@ -158,7 +167,7 @@
     },
     {
       "label": "lệnh claude",
-      "re": "\\bclaude (plugin|mcp|-p|code)\\b",
+      "re": "\\bclaude (plugin|mcp|-p)\\b",
       "flags": "i"
     },
     {
