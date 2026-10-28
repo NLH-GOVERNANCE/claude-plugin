@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ask, ensure, findMarketplace, isAllowed, managedPath, merge, write } from '../plugins/tinh-nlh/speaker/policy.mjs';
+import { OFFICIAL, adminScript, ask, ensure, findMarketplace, isAllowed, managedPath, merge, plan, validMarketplace, write } from '../plugins/tinh-nlh/speaker/policy.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const script = join(root, 'plugins/tinh-nlh/speaker/policy.mjs');
@@ -52,10 +52,39 @@ describe('chỗ đặt và kho của gói', () => {
 });
 
 describe('gộp vào chính sách có sẵn', () => {
-  test('chính sách trống: đúng hai khoá, không thêm gì', () => {
+  // Chấm PR #93: allowedChannelPlugins thay danh sách mặc định của Anthropic, nên máy chưa có danh sách thì giữ bốn kênh chính thức.
+  test('chính sách trống: đúng hai khoá; danh sách gồm bốn kênh chính thức rồi tới gói nlh', () => {
     const { settings, changed } = merge({}, MARKET);
     assert.equal(changed, true);
-    assert.deepEqual(settings, { channelsEnabled: true, allowedChannelPlugins: [ENTRY] });
+    assert.deepEqual(Object.keys(settings).sort(), ['allowedChannelPlugins', 'channelsEnabled']);
+    assert.equal(settings.channelsEnabled, true);
+    assert.deepEqual(settings.allowedChannelPlugins, [...OFFICIAL, ENTRY]);
+    assert.deepEqual(OFFICIAL.map((entry) => entry.plugin), ['telegram', 'discord', 'imessage', 'fakechat']);
+    assert.ok(OFFICIAL.every((entry) => entry.marketplace === 'claude-plugins-official'));
+  });
+
+  test('đã có danh sách của người quản trị: chỉ thêm gói nlh, không thêm kênh chính thức', () => {
+    const list = [{ marketplace: 'cua-ai-do', plugin: 'khac' }];
+    const { settings } = merge({ allowedChannelPlugins: list }, MARKET);
+    assert.deepEqual(settings.allowedChannelPlugins, [...list, ENTRY]);
+    assert.deepEqual(merge({ allowedChannelPlugins: [] }, MARKET).settings.allowedChannelPlugins, [ENTRY], 'danh sách rỗng của người quản trị cũng giữ nguyên ý');
+  });
+
+  test('tên kho đi vào lệnh admin phải là chữ, số, chấm, gạch: tên lạ thì từ chối, không ghi', () => {
+    for (const bad of ["a'; calc; '", 'a b', 'a"b', '', 'x'.repeat(65), null, undefined, 'a$(b)', 'a`b', 'a\nb', '..\\x']) {
+      assert.equal(validMarketplace(bad), false, String(bad));
+      assert.deepEqual(merge({}, bad), { refused: 'bad-marketplace' });
+    }
+    assert.equal(validMarketplace('nlh-governance'), true);
+    assert.equal(validMarketplace('Acme_corp.v2'), true);
+    const file = join(temp(), 'm.json');
+    assert.equal(write(file, "a'; calc; '"), 'refused:bad-marketplace');
+    assert.equal(existsSync(file), false);
+    assert.equal(isAllowed(file, "a'; calc; '"), false);
+    const home = temp();
+    mkdirSync(join(home, '.claude/plugins'), { recursive: true });
+    writeFileSync(join(home, '.claude/plugins/installed_plugins.json'), JSON.stringify({ plugins: { "nlh@a'; calc; '": [] } }));
+    assert.equal(findMarketplace(home), null, 'tên kho lạ trong installed_plugins.json không được nhận');
   });
 
   test('giữ khoá khác và dòng của gói khác; chạy lại không đổi gì', () => {
@@ -78,7 +107,7 @@ describe('ghi file', () => {
     const file = join(temp(), 'ClaudeCode', 'managed-settings.json');
     assert.equal(isAllowed(file, MARKET), false);
     assert.equal(write(file, MARKET), 'ok');
-    assert.deepEqual(json(file), { channelsEnabled: true, allowedChannelPlugins: [ENTRY] });
+    assert.deepEqual(json(file), { channelsEnabled: true, allowedChannelPlugins: [...OFFICIAL, ENTRY] });
     assert.equal(isAllowed(file, MARKET), true);
     assert.deepEqual(readdirSync(join(file, '..')), ['managed-settings.json']);
   });
@@ -88,7 +117,7 @@ describe('ghi file', () => {
     const file = join(dir, 'managed-settings.json');
     writeFileSync(file, `\uFEFF${JSON.stringify({ env: { A: '1' } })}`);
     assert.equal(write(file, MARKET), 'ok');
-    assert.deepEqual(json(file), { env: { A: '1' }, channelsEnabled: true, allowedChannelPlugins: [ENTRY] });
+    assert.deepEqual(json(file), { env: { A: '1' }, channelsEnabled: true, allowedChannelPlugins: [...OFFICIAL, ENTRY] });
     const broken = join(dir, 'broken.json');
     writeFileSync(broken, '{ khong phai json');
     assert.equal(write(broken, MARKET), 'refused:bad-file');
@@ -116,6 +145,43 @@ describe('ensure: một lượt cài', () => {
     assert.equal(result.code, 'ok');
     assert.equal(asked, false);
     assert.deepEqual(result.said, []);
+    assert.equal(result.text, '', 'đã đủ từ trước thì không in gì mỗi lần mở Loa');
+  });
+
+  test('lệnh admin: Windows chỉ là một lệnh PowerShell ghi nội dung đã kiểm vào đúng đường dẫn; macOS một dòng sh, không chạy node của người dùng', () => {
+    const file = 'C:\\Program Files\\ClaudeCode\\managed-settings.json';
+    const text = `${JSON.stringify({ channelsEnabled: true, allowedChannelPlugins: [ENTRY] }, null, 2)}\n`;
+    const win = adminScript('win32', file, text);
+    assert.match(win, /^\$ErrorActionPreference = 'Stop'; \$file = 'C:\\Program Files\\ClaudeCode\\managed-settings\.json';/);
+    assert.doesNotMatch(win, /node|\.mjs|\.tinh-nlh|USERPROFILE/i);
+    const mac = adminScript('darwin', '/Library/Application Support/ClaudeCode/managed-settings.json', text);
+    assert.match(mac, /^\/bin\/mkdir -p '\/Library\/Application Support\/ClaudeCode' && \/usr\/bin\/printf %s '[A-Za-z0-9+\/=]+' \| \/usr\/bin\/base64 -D > '\/Library\/Application Support\/ClaudeCode\/managed-settings\.json\.tmp' && \/bin\/mv -f /);
+    assert.doesNotMatch(mac, /node|\.mjs|\.tinh-nlh/i);
+  });
+
+  test('lệnh admin Windows chạy thật (không nâng quyền) vào thư mục có dấu cách và chữ có dấu: file đúng từng byte, không BOM, không file tạm', { skip: process.platform === 'win32' ? false : 'chỉ Windows' }, () => {
+    const dir = join(temp(), 'Thùy ỉ', 'Program Files');
+    const file = join(dir, 'managed-settings.json');
+    const planned = plan(file, MARKET);
+    const encoded = Buffer.from(adminScript('win32', file, planned.text), 'utf16le').toString('base64');
+    const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const out = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { encoding: 'utf8', cwd: tmpdir() });
+    assert.equal(out.status, 0, out.stdout + out.stderr);
+    const raw = readFileSync(file);
+    assert.notEqual(raw[0], 0xef, 'không BOM');
+    assert.equal(raw.toString('utf8'), planned.text);
+    assert.deepEqual(readdirSync(dir), ['managed-settings.json']);
+    assert.equal(isAllowed(file, MARKET), true);
+  });
+
+  test('cần quyền: tiến trình admin nhận đúng nội dung đã gộp (giữ khoá khác), không nhận tên kho hay đường dẫn lẻ', () => {
+    const file = join(temp(), 'm.json');
+    writeFileSync(file, JSON.stringify({ forceLoginMethod: 'claudeai' }));
+    let received;
+    const result = ensure({ platform: 'win32', file, marketplace: MARKET, writeFn: () => 'denied', elevateFn: (...args) => (received = args) });
+    assert.equal(result.code, 'declined');
+    assert.equal(received.length, 3);
+    assert.deepEqual(JSON.parse(received[2]), { forceLoginMethod: 'claudeai', channelsEnabled: true, allowedChannelPlugins: [...OFFICIAL, ENTRY] });
   });
 
   test('ghi được ngay (người dùng có quyền): không hỏi', () => {
