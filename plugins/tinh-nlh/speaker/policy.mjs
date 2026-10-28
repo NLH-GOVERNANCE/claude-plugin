@@ -7,6 +7,7 @@
 //
 //   node policy.mjs ensure   kiểm; thiếu thì ghi (xin quyền nếu cần); in một dòng tiếng Việt; thoát 0 khi kênh dùng được
 //   node policy.mjs check    thoát 0 khi danh sách đã đủ, không in gì
+//   node policy.mjs mode     in cách mở Loa: "channel plugin:nlh@<kho>", "loop" hoặc "loop-config" (xem loaMode)
 //   node policy.mjs write   ghi gộp, không xin quyền (dùng khi người chạy đã có quyền); thoát 0 đã đủ, 3 không ghi được
 //
 // Cờ: --file (managed-settings.json, để thử), --marketplace (mặc định đọc từ plugin đã cài), --home, --status (nơi ghi
@@ -142,6 +143,14 @@ function elevate(platform, file, text) {
   return 9;
 }
 
+// Loa mở Claude kiểu nào. 'channel plugin:nlh@<kho>': kênh theo tên gói, tin tới ngay. 'loop': chưa được phép (bấm Không,
+// người quản trị tắt kênh), 10 phút xem việc một lần, máy chủ Loa lấy từ gói đã cài. 'loop-config': máy không có gói cài
+// từ kho (chỉ bản đồng bộ từ claude.ai), 10 phút một lần, máy chủ Loa nạp bằng --mcp-config như trước.
+export function loaMode(file = managedPath(), marketplace = findMarketplace()) {
+  if (!marketplace) return 'loop-config';
+  return isAllowed(file, marketplace) ? `channel plugin:${PLUGIN}@${marketplace}` : 'loop';
+}
+
 // Câu đứng ngay trước hộp xin quyền. Windows có nút Có; macOS hỏi mật khẩu máy nên không nhắc nút nào.
 export function ask(platform = process.platform) {
   return platform === 'win32'
@@ -185,9 +194,16 @@ function main(argv) {
     const at = rest.indexOf(name);
     return at >= 0 ? rest[at + 1] : undefined;
   };
-  const file = flag('--file') || managedPath();
+  // LOA_MANAGED_SETTINGS_FILE (tests only) moves where `mode` READS. Writing and elevation never follow it: code running as
+  // the user could otherwise get a file written anywhere with admin rights once the person presses Yes. Writes use the fixed
+  // path or an explicit --file.
+  const file = flag('--file') || (command === 'mode' && process.env.LOA_MANAGED_SETTINGS_FILE) || managedPath();
   const marketplace = flag('--marketplace') || findMarketplace(flag('--home') || homedir());
   if (command === 'check') return isAllowed(file, marketplace) ? 0 : 1;
+  if (command === 'mode') {
+    console.log(loaMode(file, marketplace));
+    return 0;
+  }
   if (command === 'write') return write(file, marketplace) === 'ok' ? 0 : 3;
   if (command === 'ensure') {
     const noElevate = rest.includes('--no-elevate');

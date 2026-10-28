@@ -22,19 +22,20 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'start.ps1') -Destination (Join-
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'pair.mjs') -Destination (Join-Path $Dir 'pair.mjs') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'policy.mjs') -Destination (Join-Path $Dir 'policy.mjs') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'loa.vbs') -Destination (Join-Path $Dir 'loa.vbs') -Force
 Set-Content -LiteralPath (Join-Path $Dir 'version.txt') -Value $version -Encoding ascii
 
 $name = 'Loa tỉnh NhiLe'
 $oldName = 'Tháp tỉnh NhiLe'
 $link = Join-Path $Desktop "$name.lnk"
-$launcher = Join-Path $Dir 'start.ps1'
-$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-# Open Loa at every login of this Windows account: a scheduled task of the user's own, no admin rights, visible window.
+$launcher = Join-Path $Dir 'loa.vbs'
+$wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
+# Open Loa at every login of this Windows account: a scheduled task of the user's own, no admin rights, no window (loa.vbs runs start.ps1 hidden).
 # Registering again replaces it, so running "bật Loa" twice is fine.
 if (-not $NoAutostart) {
   try {
     $user = "$env:USERDOMAIN\$env:USERNAME"
-    $action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`"" -WorkingDirectory $Dir
+    $action = New-ScheduledTaskAction -Execute $wscript -Argument "`"$launcher`" login" -WorkingDirectory $Dir
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
@@ -116,5 +117,5 @@ if (Test-Path -LiteralPath $link) {
     exit 0
   }
 }
-[ThapLink]::Save($link, $powershell, "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`"", $Dir, $name)
+[ThapLink]::Save($link, $wscript, "`"$launcher`"", $Dir, $name)
 Write-Output "Đã có biểu tượng $name trên màn hình chính."

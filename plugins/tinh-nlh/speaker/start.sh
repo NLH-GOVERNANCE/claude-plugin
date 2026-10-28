@@ -16,6 +16,8 @@ SECURITY="${SPEAKER_SECURITY:-/usr/bin/security}"
 
 stop_loa() {
   printf '\n%s\n' "$1"
+  # One line for the next Claude session to say and report to the CTO cell (hooks/machine.mjs); the window above is seen only if it stays open.
+  printf '{"at":"%s","reason":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(printf %s "$1" | tr -d '"\\')" > "$DIR/last-error.json" 2>/dev/null
   read -r -p 'Bấm Enter để đóng. ' _
   exit 1
 }
@@ -117,56 +119,76 @@ if [ -z "${SPEAKER_DRY_RUN:-}" ] && [ -f "$DIR/policy.mjs" ] && ! grep -q '"stat
   "$NODE" "$DIR/policy.mjs" ensure --status "$DIR/policy-status.json"
 fi
 
-# 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine
-# (nor the plugin's own speaker server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
-# and open sessions. Node writes the JSON so paths with spaces stay right.
-CONFIG="$DIR/speaker-mcp.json"
-# Loa needs no hook of the plugin: they call the Nếp connector, which the Loa session (only server speaker) does not
-# have, so each turn printed about ten "Stop hook error: MCP server ... not connected" lines (17e647c1, 26/10). This
-# session only: disableAllHooks, read from a file so no JSON quoting goes through the command line.
+# 5. This session only: NLH_TOWER=1 lives only in the environment of this launch, so no other Claude Code session on the
+# machine reads the feed; the plugin's speaker server, started by Claude Code in this session, inherits it. CLAUDE_BIN and
+# NLH_TOWER_WORK let the channel look up, resume and open sessions.
+export NLH_TOWER=1 NLH_TOWER_DIR="$DIR" NLH_TOWER_WORK="$WORK" CLAUDE_BIN="$CLAUDE"
+# Loa needs no hook of the plugin: they call the Nếp connector, which the Loa session does not have, so each turn printed
+# about ten "Stop hook error: MCP server ... not connected" lines (17e647c1, 26/10). This session only: disableAllHooks,
+# read from a file so no JSON quoting goes through the command line.
 SETTINGS="$DIR/speaker-settings.json"
 printf '%s\n' '{ "disableAllHooks": true }' > "$SETTINGS" || stop_loa 'Chưa ghi được cấu hình của Loa.'
-"$NODE" -e '
+# How to open Claude: "channel plugin:nlh@<market>" (allowed), "loop" (not allowed: the plugin's server, 10-minute loop) or
+# "loop-config" (no plugin from a market, only the one synced from claude.ai: the server comes through --mcp-config).
+MODE=loop-config
+[ -f "$DIR/policy.mjs" ] && MODE="$("$NODE" "$DIR/policy.mjs" mode | head -n 1)"
+CONFIG="$DIR/speaker-mcp.json"
+if [ "$MODE" = loop-config ]; then
+  # Node writes the JSON so paths with spaces stay right.
+  "$NODE" -e '
 const [node, speaker, dir, origin, claude, work] = process.argv.slice(1);
 const env = { NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude };
 if (origin) env.TOWER_ORIGIN = origin;
 process.stdout.write(JSON.stringify({ mcpServers: { speaker: { command: node, args: [speaker], env } } }, null, 2));
 ' "$NODE" "$SPEAKER" "$DIR" "${TOWER_ORIGIN:-}" "$CLAUDE" "$WORK" > "$CONFIG" || stop_loa 'Chưa ghi được cấu hình của Loa.'
+else
+  rm -f "$CONFIG"
+fi
 
 # 6. Open Claude Code in its own work folder (new cell sessions open here too). claude and node go on the session PATH
 # so plugin hooks run.
 mkdir -p "$WORK"
 cd "$WORK" || stop_loa 'Chưa mở được thư mục làm việc của Loa.'
 export PATH="$(dirname "$CLAUDE"):$(dirname "$NODE"):$PATH"
+LOOP='/loop 10m /nlh:speaker-loop'
+case "$MODE" in
+  channel\ *)
+    # With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
+    # tokens). The prompt goes before the flags: the channel flag takes several values, a prompt after it reads as a name.
+    set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --channels "${MODE#channel }"
+    ;;
+  loop-config)
+    set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --mcp-config "$CONFIG" ;;
+  *)
+    set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" ;;
+esac
+# What runs when the channel version quits at once: the same 10-minute loop, with the plugin's server.
+FALLBACK=("$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS")
+[ "$MODE" = loop-config ] && FALLBACK=("$@")
 echo ''
 echo 'Loa đang nghe Nếp. Đừng đóng cửa sổ này.'
 if [ ! -f "$DIR/opened.txt" ]; then
-  echo 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
+  echo 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm nút xanh để cho phép, rồi quay lại đây.'
 fi
-echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
-echo 'Dòng vàng "no MCP server configured with that name" là Claude Code báo nhầm: Loa vẫn nối. Bỏ qua dòng đó.'
 echo ''
-# With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
-# tokens). Only the fallback without the channel keeps the 10-minute loop over the pending tool.
-LOOP='/loop 10m /nlh:speaker-loop'
-set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+date -u +%Y-%m-%dT%H:%M:%SZ > "$DIR/opened.txt"
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
   printf '\n'
   printf 'DRYRUN-FALLBACK %s' "$CLAUDE"
-  printf ' | %s' "$LOOP" "${@:2:$#-3}"
+  printf ' | %s' "${FALLBACK[@]}"
   printf '\n'
   exit 0
 fi
-date -u +%Y-%m-%dT%H:%M:%SZ > "$DIR/opened.txt"
+rm -f "$DIR/last-error.json"
 # Keep the machine awake while Loa is open; caffeinate ends with this shell. The screen may still turn off.
 [ -x /usr/bin/caffeinate ] && /usr/bin/caffeinate -i -w $$ &
-# The opening prompt goes before the flags: the channel flag takes several values, a prompt after it reads as a name.
 started=$(date +%s)
 if ! "$CLAUDE" "$@"; then
-  # Claude quit within a minute (channel refused, or the channel dialog declined): run again without the channel.
+  # Claude quit within a minute (channel refused): run again the 10-minute way.
+  case "$MODE" in channel\ *) ;; *) stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.' ;; esac
   [ $(( $(date +%s) - started )) -lt 60 ] || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
   printf '\n%s\n' 'Kênh báo nhanh chưa mở được. Loa vẫn chạy, mỗi 10 phút xem việc một lần.'
-  "$CLAUDE" "$LOOP" "${@:2:$#-3}" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
+  "$CLAUDE" "${FALLBACK[@]}" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
 fi

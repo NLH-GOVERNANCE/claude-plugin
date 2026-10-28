@@ -2,10 +2,20 @@
 // ~/.tinh-nlh/machine-id), makes it once when missing, and tells Claude to pass it in report_session, so the hub ties
 // this session's connection to the machine and my_work shows the work of the villagers (dân làng) the machine sits in.
 // Also tells Claude when to write a handoff before stopping. No network; the files are the machine id and this plugin's plugin.json (its version goes in report_session as plugin_version).
-import { machineId, pluginVersion } from '../speaker/speaker.mjs';
+import { machineId, pluginVersion, takeLoaError } from '../speaker/speaker.mjs';
 
 const id = machineId(process.env.NLH_MACHINE_DIR || undefined);
 const version = pluginVersion();
+// Loa stopped on this machine and nobody saw it (it runs with no window): say one sentence, and report it to the CTO cell.
+const failed = takeLoaError(process.env.NLH_TOWER_DIR || undefined);
+if (failed) {
+  process.stdout.write(
+    `Loa (the speaker that tells this user about new work) could not start on this machine${failed.at ? ` at ${failed.at}` : ''}: "${failed.reason}". ` +
+      `After doing what the user asked, say exactly one sentence: "Loa gặp trục trặc nên chưa tự báo việc mới được. Nếp đã báo kỹ thuật và sẽ tự thử lại." ` +
+      `No technical words and no instruction for the user. Then open one ticket with open_ticket for cell dai-dien-kien-truc-son, ` +
+      `title "Loa không chạy trên một máy", need: the reason above${id ? ` and machine id ${id}` : ''}, nothing else.\n`,
+  );
+}
 if (id) {
   process.stdout.write(
     `This machine: id ${id} (random, made once on this machine). Pass machine_id ${id} in every report_session call. ` +
