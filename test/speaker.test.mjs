@@ -48,6 +48,7 @@ import {
   AWAY_MS,
   taken,
   startServer,
+  defaultToast,
   transcriptCwd,
 } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
@@ -373,6 +374,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
   const rows = [];
   const reads = [];
   const spawned = [];
+  const toasts = [];
   const fetchImpl = async (url, init = {}) => {
     if (url.includes('/tower/forwards')) {
       rows.push(JSON.parse(init.body));
@@ -393,6 +395,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
       return spawnOk;
     },
     cwdOf,
+    toast: (text) => toasts.push(text),
     log: () => {},
     onClose: () => {},
     ...(clock ? { clock } : {}),
@@ -405,7 +408,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
     await until(() => messages.some((message) => message.id === id));
     return messages.find((message) => message.id === id);
   };
-  return { server, messages, pushed, rows, spawned, reads, call, dir, close: () => input.end() };
+  return { server, messages, pushed, rows, spawned, toasts, reads, call, dir, close: () => input.end() };
 }
 
 describe('Loa báo việc (server trong tiến trình)', () => {
@@ -515,7 +518,18 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.match(you.content, /^Có việc chờ chính bạn trả lời hay ký \(ô cto, phiếu 98bd8b93-[^)]+\)\. Loa không làm thay\.$/);
     assert.ok(!loa.rows.some((row) => row.kind === 'you'));
     assert.equal(JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8')).pending.length, 0, 'không có gì chờ gửi');
+    // Loa ẩn: hai câu này cũng hiện thành thông báo Windows (28/10, laptop không thấy dòng in trong cửa sổ ẩn); dòng nhắc cùng ô trong 10 phút thì không.
+    assert.deepEqual(loa.toasts, [loa.pushed()[0].content, you.content]);
     loa.close();
+  });
+
+  test('thông báo Windows: chỉ khi bộ mở bật cờ, chỉ trên Windows, chỉ khi có toast.ps1; hỏng thì im', () => {
+    const dir = temp('toast');
+    const shown = (env, platform) => defaultToast({ NLH_TOWER_DIR: dir, ...env }, platform)('Ô cto có việc mới.');
+    assert.equal(shown({}, 'win32'), false, 'không cờ');
+    assert.equal(shown({ NLH_TOWER_TOAST: '1' }, 'darwin'), false, 'không phải Windows');
+    assert.equal(shown({ NLH_TOWER_TOAST: '1' }, 'win32'), false, 'chưa có toast.ps1');
+    assert.equal(defaultToast({ NLH_TOWER_TOAST: '1' }, 'win32')('x'), false, 'không biết thư mục Loa');
   });
 
   test('việc chờ gửi mà phiên Loa không xác nhận quá 3 giờ: bỏ, ghi một dòng hỏng', async () => {

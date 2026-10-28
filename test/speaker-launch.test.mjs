@@ -34,7 +34,7 @@ after(() => {
 function fakeHome(name = 'user', layout = 'cache') {
   const home = join(temp('thap-home'), name);
   const installed = layout === 'synced' ? join(home, '.claude/plugins/synced/org-id/plugin-id') : join(home, '.claude/plugins/cache/nlh-governance/nlh', version);
-  for (const path of ['.claude-plugin/plugin.json', 'speaker/speaker.mjs', 'speaker/pair.mjs', 'speaker/policy.mjs', 'speaker/prepare.mjs', 'speaker/loa.vbs', 'speaker/start.ps1', 'speaker/start.sh']) {
+  for (const path of ['.claude-plugin/plugin.json', 'speaker/speaker.mjs', 'speaker/pair.mjs', 'speaker/policy.mjs', 'speaker/prepare.mjs', 'speaker/loa.vbs', 'speaker/toast.ps1', 'speaker/start.ps1', 'speaker/start.sh']) {
     mkdirSync(dirname(join(installed, path)), { recursive: true });
     cpSync(join(plugin, path), join(installed, path));
   }
@@ -109,12 +109,12 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.doesNotMatch(ps, /-lt 60 -and \$mode -like/);
     assert.match(ps, /if \(\$Auto\) \{ Stop-Loa 'Loa đã dừng\. Bấm đúp Loa để mở lại\.' \}/);
     // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
-    assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; CLAUDE_BIN = \$claude \}/);
+    assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; NLH_TOWER_TOAST = '1'; CLAUDE_BIN = \$claude \}/);
     assert.doesNotMatch(ps, /Tháp/);
     assert.doesNotMatch(ps, /\$env:NLH_TOWER\s*=|skip-permissions|bypassPermissions|AsPlainText|ConvertFrom-SecureString -Key|Write-Host \$secure/);
     assert.doesNotMatch(ps, /Read-Host -AsSecureString|ConvertTo-SecureString/, 'không còn ô dán khoá');
     assert.ok(ps.includes('& $node $pair --dir $Dir | Out-Host'));
-    assert.ok(ps.includes("foreach ($name in @('speaker.mjs', 'pair.mjs', 'policy.mjs', 'prepare.mjs', 'loa.vbs'))"), 'chép các file Loa từ gói');
+    assert.ok(ps.includes("foreach ($name in @('speaker.mjs', 'pair.mjs', 'policy.mjs', 'prepare.mjs', 'loa.vbs', 'toast.ps1'))"), 'chép các file Loa từ gói');
     assert.ok(ps.includes(`'${KEY_FILE}'`));
     assert.match(ps, /'https:\/\/claude\.ai\/install\.ps1'/);
     assert.match(ps, /\$base = 'https:\/\/nodejs\.org\/dist\/latest-v22\.x'/);
@@ -599,7 +599,7 @@ process.exitCode = 2;
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { speaker: tower } = JSON.parse(raw.toString('utf8')).mcpServers;
     assert.deepEqual(tower.args, [join(syncedDir, 'speaker.mjs')]);
-    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
+    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), NLH_TOWER_TOAST: '1', CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
     assert.match(tower.command, /node(\.exe)?$/i);
     assert.ok(existsSync(join(home, 'TinhNhiLe')), 'thư mục làm việc của Loa');
 

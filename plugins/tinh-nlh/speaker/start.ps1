@@ -208,7 +208,7 @@ if ($best -and (-not $current -or $best.Version -ge $current)) {
   # only from the next launch (17e647c1, 26/10: the first launch after the update still set the old 10-minute loop).
   $newStart = Join-Path $best.Root 'speaker\start.ps1'
   $stale = $PSCommandPath -and ((Get-FileHash -LiteralPath $PSCommandPath).Hash -ne (Get-FileHash -LiteralPath $newStart).Hash)
-  foreach ($name in @('speaker.mjs', 'pair.mjs', 'policy.mjs', 'prepare.mjs', 'loa.vbs')) {
+  foreach ($name in @('speaker.mjs', 'pair.mjs', 'policy.mjs', 'prepare.mjs', 'loa.vbs', 'toast.ps1')) {
     $from = Join-Path $best.Root "speaker\$name"
     if (Test-Path -LiteralPath $from) { Copy-Item -LiteralPath $from -Destination (Join-Path $Dir $name) -Force }
   }
@@ -343,7 +343,7 @@ if (-not $DryRun) {
 # 5. This session only: NLH_TOWER=1 lives only in the environment of this launch, so no other Claude Code session on the
 # machine reads the feed; the plugin's speaker server, started by Claude Code in this session, inherits it. CLAUDE_BIN and
 # NLH_TOWER_WORK let the channel look up, resume and open sessions. TOWER_ORIGIN (dev hub, trials) is passed on when set.
-$envs = @{ NLH_TOWER = '1'; NLH_TOWER_DIR = $Dir; NLH_TOWER_WORK = $Work; CLAUDE_BIN = $claude }
+$envs = @{ NLH_TOWER = '1'; NLH_TOWER_DIR = $Dir; NLH_TOWER_WORK = $Work; NLH_TOWER_TOAST = '1'; CLAUDE_BIN = $claude }
 foreach ($name in $envs.Keys) { Set-Item -LiteralPath "Env:$name" -Value $envs[$name] }
 # Loa needs no hook of the plugin: they call the Nếp connector, which the Loa session does not have, so each turn printed
 # about ten "Stop hook error: MCP server ... not connected" lines (17e647c1, 26/10). This session only: disableAllHooks,
