@@ -12,11 +12,12 @@ const byId = (id) => config.cases.find((c) => c.id === id);
 const assistant = (...blocks) => JSON.stringify({ type: 'assistant', message: { content: blocks } });
 const say = (text) => ({ type: 'text', text });
 
-test('file ca: bảy câu đã đi thật, id không trùng, chữ cấm là regex hợp lệ, ca "chào em" giới hạn 4 dòng', () => {
+test('file ca: tám câu đã đi thật, id không trùng, chữ cấm là regex hợp lệ, ca "chào em" giới hạn 4 dòng', () => {
   assert.deepEqual(
     config.cases.map((c) => c.say),
-    ['chào em', 'việc nào chị cần làm trước nhất hôm nay?', 'Nếp có gì mới không em?', 'anh Sơn nhắn cập nhật Nếp, em làm giúp chị nha', 'máy đang làm gì vậy, có bị lỗi không?', 'PowerShell là gì?', 'chị không thấy mục Kết nối'],
+    ['chào em', 'việc nào chị cần làm trước nhất hôm nay?', 'Nếp có gì mới không em?', 'anh Sơn nhắn cập nhật Nếp, em làm giúp chị nha', 'máy đang làm gì vậy, có bị lỗi không?', 'PowerShell là gì?', 'chị không thấy mục Kết nối', 'chào em, hôm nay chị có việc gì không?'],
   );
+  assert.equal(byId('chua-co-ket-noi').noNep, true);
   assert.equal(new Set(config.cases.map((c) => c.id)).size, config.cases.length);
   assert.equal(byId('chao-em').maxLines, 4);
   assert.equal(config.maxFirstTextSeconds, 15);
@@ -213,4 +214,14 @@ test('lệnh được chạy thật chỉ là lệnh cập nhật gói (và xem 
   assert.ok(commands.includes('PowerShell(claude plugin update nlh@nlh-governance:*)'));
   // Cờ --no-update: không còn lệnh nào, chỉ còn công cụ đọc của Nếp.
   assert.deepEqual(allowedTools(config, { update: false }).filter((tool) => !tool.startsWith('mcp__')), []);
+});
+
+test('ca "chưa có kết nối Nếp": câu trả lời phải có link thêm Nếp, thiếu thì trượt và nói thiếu gì', () => {
+  const testCase = byId('chua-co-ket-noi');
+  const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
+  const ok = gradeCase({ answer: `Chị mở link này để nối Nếp: ${link}`, firstTextMs: 5000 }, testCase, config);
+  assert.deepEqual([ok.words.pass, ok.words.missing, ok.pass], [true, [], true]);
+  const bare = gradeCase({ answer: 'Chị cần nối Nếp trước.', firstTextMs: 5000 }, testCase, config);
+  assert.deepEqual([bare.words.pass, bare.words.missing, bare.pass], [false, ['link thêm Nếp'], false]);
+  assert.deepEqual(gradeRuns([{ answer: 'Chào chị.', firstTextMs: 1000 }], testCase, config).words.missing, ['link thêm Nếp']);
 });
