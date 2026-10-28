@@ -65,7 +65,7 @@ function openInBrowser(url) {
 const sleepFor = (ms) => new Promise((done) => setTimeout(done, ms));
 // The hub cannot take the ask (404 before its pairing route is live, 5xx, a strange answer): nothing a person can fix. One true
 // sentence, and a technical line for the launcher to leave for the next Claude session to report to the CTO cell (exit code 2).
-const NOT_READY = 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Người lo kỹ thuật sẽ được báo; lần mở máy sau Loa tự hỏi lại.';
+const NOT_READY = 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Lần tới bạn mở Claude, máy sẽ tự báo người lo kỹ thuật.';
 const failure = (message, detail) => ({ ok: false, message, ...(detail ? { detail, hub: true } : {}) });
 
 // One full pairing. Everything outside is injectable so the test runs it without a network or a key store.

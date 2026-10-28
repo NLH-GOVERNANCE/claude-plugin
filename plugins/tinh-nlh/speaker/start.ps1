@@ -281,7 +281,7 @@ if (-not (Test-Path -LiteralPath $keyFile)) {
   # next Claude session, which opens a ticket for the CTO cell. No key is saved, so the next launch asks again by itself.
   if ($paired -eq 2) {
     $detail = if (Test-Path -LiteralPath $detailFile) { (Get-Content -LiteralPath $detailFile -Raw).Trim() } else { 'pair.mjs exit 2' }
-    Stop-Loa 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Người lo kỹ thuật sẽ được báo; lần mở máy sau Loa tự hỏi lại.' $detail -shown
+    Stop-Loa 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Lần tới bạn mở Claude, máy sẽ tự báo người lo kỹ thuật.' $detail -shown
   }
   if ($paired -ne 0 -or -not (Test-Path -LiteralPath $keyFile)) { Stop-Loa 'Loa chưa được phép chạy trên máy này. Bấm đúp Loa lại.' }
 }

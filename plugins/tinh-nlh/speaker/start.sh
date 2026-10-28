@@ -14,10 +14,12 @@ SERVICE=tinh-nlh-tower
 ACCOUNT=tinh-nlh
 SECURITY="${SPEAKER_SECURITY:-/usr/bin/security}"
 
+# $2: a technical line for the people who keep Nếp, left in the same file. $3 = shown: the sentence was already printed by the program that failed.
 stop_loa() {
-  printf '\n%s\n' "$1"
+  if [ "$3" = shown ]; then printf '\n'; else printf '\n%s\n' "$1"; fi
+  reason="$1${2:+ ($2)}"
   # One line for the next Claude session to say and report to the CTO cell (hooks/machine.mjs); the window above is seen only if it stays open.
-  printf '{"at":"%s","reason":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(printf %s "$1" | tr -d '"\\')" > "$DIR/last-error.json" 2>/dev/null
+  printf '{"at":"%s","reason":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(printf %s "$reason" | tr -d '"\\')" > "$DIR/last-error.json" 2>/dev/null
   read -r -p 'Bấm Enter để đóng. ' _
   exit 1
 }
@@ -109,7 +111,16 @@ if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>
   [ -f "$DIR/pair.mjs" ] || stop_loa 'Chưa thấy phần xin phép của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
   echo ''
   echo 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
-  "$NODE" "$DIR/pair.mjs" --dir "$DIR" || stop_loa 'Loa chưa được phép chạy trên máy này.'
+  rm -f "$DIR/pair-detail.txt"
+  "$NODE" "$DIR/pair.mjs" --dir "$DIR"
+  paired=$?
+  # Exit 2: the hub is not ready for this step (nothing a person can fix). pair.mjs said so in one sentence; its technical line goes to
+  # the next Claude session, which opens a ticket for the CTO cell. Same as start.ps1.
+  if [ "$paired" -eq 2 ]; then
+    detail=$(cat "$DIR/pair-detail.txt" 2>/dev/null || echo 'pair.mjs exit 2')
+    stop_loa 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Lần tới bạn mở Claude, máy sẽ tự báo người lo kỹ thuật.' "$detail" shown
+  fi
+  [ "$paired" -eq 0 ] || stop_loa 'Loa chưa được phép chạy trên máy này.'
 fi
 
 # 4b. Channel permission (policy.mjs, ticket 26f86f3d): Claude Code only takes the plugin's channel when the machine's list
