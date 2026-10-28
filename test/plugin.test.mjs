@@ -398,10 +398,29 @@ describe('plugin nlh', () => {
     assert.match(skill, /never read it for anyone else, and never copy chat content into a ticket, the ledger or a group/);
   });
 
+  test('cập nhật Nếp (28/10): mục Update hỏi một câu trước, rẽ theo nơi chạy, kiểm bản sau, hỏng thì giữ bản cũ và mở việc cho CTO không đưa lệnh; SETUP bước 4 báo trước, đọc trước, không ghi đè', () => {
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8').replace(/\r/g, '');
+    const update = skill.slice(skill.indexOf('## Update'), skill.indexOf('The context only holds data of class 1'));
+    assert.match(update, /ask one question first.*Em cập nhật Nếp trên máy này nha\?.*Only after a yes/);
+    assert.match(update, /claude plugin marketplace update nlh-governance.*claude plugin update nlh@nlh-governance/s);
+    assert.match(update, /Then `claude plugin list` again and check the version/);
+    assert.match(update, /keep the version that works.*Nếp chưa tự cập nhật được, đã báo kỹ thuật.*`open_ticket` for cell `dai-dien-kien-truc-son`.*No command, no `\/plugin`, no PowerShell/s);
+    assert.match(update, /Claude app \(chat\), Cowork.*Do not install, give no command, open no ticket/);
+    assert.doesNotMatch(update, /anh Sơn asked/);
+    const setup = readFileSync(join(root, 'SETUP.md'), 'utf8').replace(/\r/g, '');
+    const step = setup.slice(setup.indexOf('4. Turn on auto-update'), setup.indexOf('Do not ask the user to type `/reload-plugins`'));
+    assert.match(step, /First tell the user in one sentence.*Then read the user's `~\/\.claude\/settings\.json` first.*cannot parse it as JSON: skip this step.*never rewrite or overwrite the file/s);
+    assert.match(step, /"autoUpdate": true/);
+    assert.match(step, /keep every other key exactly as it was/);
+  });
+
   test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook và ghi lần sửa lên việc, câu thường thì không', async () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const startup = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
     assert.match(startup, /read village_rules in that result.*\(no such field: get_cell luat-lang, file rules\.md\)/);
+    // Ca chậm (28/10): lời dặn trả lời nhanh nằm ở hook đầu phiên, vì phiên không giao diện không luôn nạp skill.
+    assert.match(startup, /Quick answers:.*needs no my_context.*never say its name.*Việc nào trước:.*never my_work, Grep or Read.*answer with my_machines.*never run a command on the computer of the user/);
+    assert.match(startup, /Update \(the user asks to update Nếp.*never give the user a command.*ask one question first \(Em cập nhật Nếp trên máy này nha\?\).*only after a yes run claude plugin marketplace update nlh-governance.*claude plugin update nlh@nlh-governance.*Nếp chưa tự cập nhật được, đã báo kỹ thuật.*dai-dien-kien-truc-son.*open no ticket/);
     assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },
     ]);
@@ -492,6 +511,9 @@ describe('plugin nlh', () => {
     // "Nếp có gì mới": bản trong skill khớp bản gói, để câu trả lời không nói bản cũ.
     const { version } = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
     assert.ok(skill.includes(`Current: version ${version}.`), 'phần What is new nói sai bản gói');
+    const startupHook = readJson('plugins/tinh-nlh/hooks/hooks.json').hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.ok(startupHook.includes(`say version ${version} and`), 'hook đầu phiên nói sai bản gói');
+    assert.match(startupHook, /not new work and not the waiting list/);
   });
 
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {

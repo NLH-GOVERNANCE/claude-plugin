@@ -167,7 +167,7 @@
     },
     {
       "label": "lệnh claude",
-      "re": "\\bclaude (plugin|mcp|-p|code)\\b",
+      "re": "\\bclaude (plugin|mcp|-p)\\b",
       "flags": "i"
     },
     {
