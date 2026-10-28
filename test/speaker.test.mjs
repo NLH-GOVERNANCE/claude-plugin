@@ -4,7 +4,7 @@
 // stdio với một hub giả trên 127.0.0.1: khai kênh và công cụ, không trùng, kể cả sau khi tắt rồi bật; chỉ đọc khi
 // NLH_TOWER=1; khoá không lộ ra stderr; một máy một Loa.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -25,6 +25,7 @@ import {
   KEY_FILE,
   KEY_STORES,
   KEYCHAIN,
+  LOA_ERROR_FILE,
   machineId,
   machineSessions,
   nextEntries,
@@ -38,6 +39,7 @@ import {
   route,
   savedKey,
   seatName,
+  takeLoaError,
   seatTags,
   sentence,
   noSessionSentence,
@@ -46,6 +48,7 @@ import {
   AWAY_MS,
   taken,
   startServer,
+  defaultToast,
   transcriptCwd,
 } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
@@ -270,8 +273,46 @@ describe('hàm thuần của Loa', () => {
     writeFileSync(join(dir, 'machine-id'), 'tên-máy có dấu cách\n');
     assert.equal(machineId(dir, () => 'c'.repeat(32)), `m-${'c'.repeat(32)}`);
     assert.match(machineId(temp('machine')), /^m-[0-9a-f]{32}$/);
+    // Phiên Claude Code trên web: thư mục nhà mới cho mỗi phiên, nên không phải một máy; không sinh mã, không ghi gì (28/10).
+    const remote = temp('machine');
+    assert.equal(machineId(remote, () => 'd'.repeat(32), { CLAUDE_CODE_REMOTE: 'true' }), null);
+    assert.equal(existsSync(join(remote, 'machine-id')), false);
+    assert.equal(machineId(dir, () => 'e'.repeat(32), { CLAUDE_CODE_REMOTE: 'false' }), `m-${'c'.repeat(32)}`, 'máy thật vẫn giữ mã');
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, id), `https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z&machine_id=${id}`);
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, 'ngắn'), 'https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z');
+  });
+
+  // Loa trục trặc (việc 26f86f3d): lối mở ẩn để lại một dòng; phiên Claude kế tiếp đọc một lần rồi xoá, cùng lý do trong một ngày không báo lại.
+  test('takeLoaError: đọc một lần rồi xoá; cùng lý do trong 24 giờ không báo lại; tệp hỏng hay không có thì không báo', () => {
+    const dir = temp('loa-error');
+    const write = (reason) => writeFileSync(join(dir, LOA_ERROR_FILE), JSON.stringify({ at: '2026-10-28T10:00:00+07:00', reason }));
+    const t0 = Date.parse('2026-10-28T03:00:00Z');
+    assert.equal(takeLoaError(dir, t0), null, 'không có tệp');
+    write('Chưa tải được phần chạy của Loa.');
+    assert.deepEqual(takeLoaError(dir, t0), { at: '2026-10-28T10:00:00+07:00', reason: 'Chưa tải được phần chạy của Loa.' });
+    assert.equal(existsSync(join(dir, LOA_ERROR_FILE)), false, 'đã xoá sau khi đọc');
+    write('Chưa tải được phần chạy của Loa.');
+    assert.equal(takeLoaError(dir, t0 + 3600 * 1000), null, 'cùng lý do trong một ngày');
+    assert.equal(existsSync(join(dir, LOA_ERROR_FILE)), false);
+    write('Chưa tải được phần chạy của Loa.');
+    assert.ok(takeLoaError(dir, t0 + 25 * 3600 * 1000), 'qua một ngày thì báo lại');
+    write('Chưa có khoá cho Loa.');
+    assert.equal(takeLoaError(dir, t0 + 26 * 3600 * 1000).reason, 'Chưa có khoá cho Loa.', 'lý do khác báo ngay');
+    writeFileSync(join(dir, LOA_ERROR_FILE), 'hỏng');
+    assert.equal(takeLoaError(dir, t0), null);
+  });
+
+  test('hook đầu phiên (machine.mjs): Loa trục trặc thì dặn nói đúng một câu tiếng Việt rồi mở một việc cho ô CTO; không có lỗi thì không dặn', () => {
+    const hook = join(fileURLToPath(new URL('..', import.meta.url)), 'plugins/tinh-nlh/hooks/machine.mjs');
+    const run = (dir) => spawnSync(process.execPath, [hook], { encoding: 'utf8', env: { ...process.env, NLH_MACHINE_DIR: dir, NLH_TOWER_DIR: dir } });
+    const dir = temp('loa-error-hook');
+    assert.doesNotMatch(run(dir).stdout, /could not start/);
+    writeFileSync(join(dir, LOA_ERROR_FILE), JSON.stringify({ at: '2026-10-28T10:00:00+07:00', reason: 'Chưa tải được phần chạy của Loa.' }));
+    const said = run(dir).stdout;
+    assert.match(said, /could not start on this machine at 2026-10-28T10:00:00\+07:00: "Chưa tải được phần chạy của Loa\."/);
+    assert.ok(said.includes('"Loa gặp trục trặc nên chưa tự báo việc mới được. Nếp đã báo kỹ thuật và sẽ tự thử lại."'));
+    assert.match(said, /open_ticket for cell dai-dien-kien-truc-son/);
+    assert.doesNotMatch(run(dir).stdout, /could not start/, 'báo một lần');
   });
 
   test('việc của chòi hệ propose-change (chữ ký, lời chấm trên đề xuất) không bao giờ mở hay gửi vào phiên nào', () => {
@@ -333,6 +374,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
   const rows = [];
   const reads = [];
   const spawned = [];
+  const toasts = [];
   const fetchImpl = async (url, init = {}) => {
     if (url.includes('/tower/forwards')) {
       rows.push(JSON.parse(init.body));
@@ -353,6 +395,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
       return spawnOk;
     },
     cwdOf,
+    toast: (text) => toasts.push(text),
     log: () => {},
     onClose: () => {},
     ...(clock ? { clock } : {}),
@@ -365,7 +408,7 @@ function inProcess({ feed, sessions = [], spawnOk = true, cwdOf = () => null, cl
     await until(() => messages.some((message) => message.id === id));
     return messages.find((message) => message.id === id);
   };
-  return { server, messages, pushed, rows, spawned, reads, call, dir, close: () => input.end() };
+  return { server, messages, pushed, rows, spawned, toasts, reads, call, dir, close: () => input.end() };
 }
 
 describe('Loa báo việc (server trong tiến trình)', () => {
@@ -475,7 +518,18 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.match(you.content, /^Có việc chờ chính bạn trả lời hay ký \(ô cto, phiếu 98bd8b93-[^)]+\)\. Loa không làm thay\.$/);
     assert.ok(!loa.rows.some((row) => row.kind === 'you'));
     assert.equal(JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8')).pending.length, 0, 'không có gì chờ gửi');
+    // Loa ẩn: hai câu này cũng hiện thành thông báo Windows (28/10, laptop không thấy dòng in trong cửa sổ ẩn); dòng nhắc cùng ô trong 10 phút thì không.
+    assert.deepEqual(loa.toasts, [loa.pushed()[0].content, you.content]);
     loa.close();
+  });
+
+  test('thông báo Windows: chỉ khi bộ mở bật cờ, chỉ trên Windows, chỉ khi có toast.ps1; hỏng thì im', () => {
+    const dir = temp('toast');
+    const shown = (env, platform) => defaultToast({ NLH_TOWER_DIR: dir, ...env }, platform)('Ô cto có việc mới.');
+    assert.equal(shown({}, 'win32'), false, 'không cờ');
+    assert.equal(shown({ NLH_TOWER_TOAST: '1' }, 'darwin'), false, 'không phải Windows');
+    assert.equal(shown({ NLH_TOWER_TOAST: '1' }, 'win32'), false, 'chưa có toast.ps1');
+    assert.equal(defaultToast({ NLH_TOWER_TOAST: '1' }, 'win32')('x'), false, 'không biết thư mục Loa');
   });
 
   test('việc chờ gửi mà phiên Loa không xác nhận quá 3 giờ: bỏ, ghi một dòng hỏng', async () => {
@@ -829,7 +883,7 @@ describe('server Loa chạy thật qua stdio', () => {
     await settle();
     assert.equal(rejected.pushed().length, 1);
     assert.equal(rejected.pushed()[0].meta.kind, 'system');
-    assert.match(rejected.pushed()[0].content, /Khoá của Loa hết hạn hoặc đã thu hồi\. Mở lại Loa để dán khoá mới\./);
+    assert.match(rejected.pushed()[0].content, /Khoá của Loa hết hạn hoặc đã thu hồi\. Mở lại Loa: trang Nếp sẽ mở, bấm Cho phép\./);
     await rejected.close();
 
     status = 200;
@@ -837,7 +891,7 @@ describe('server Loa chạy thật qua stdio', () => {
     const noKey = open(temp('loa-state'), { TOWER_KEY: '' });
     await until(() => noKey.pushed().length >= 1);
     assert.match(noKey.pushed()[0].content, /^Loa chưa có khoá\./);
-    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
+    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: trang Nếp sẽ mở, bấm Cho phép/);
     assert.equal(requests.length, 0);
     await noKey.close();
 
@@ -874,7 +928,7 @@ describe('plugin.json và lời dặn Loa', () => {
     assert.equal(channel.userConfig.tower_key.sensitive, true);
     assert.equal(channel.userConfig.tower_key.default, undefined);
     assert.doesNotMatch(JSON.stringify(manifest), /Tháp/);
-    assert.deepEqual(Object.keys(manifest.mcpServers), ['nep', 'speaker']);
+    assert.deepEqual(Object.keys(manifest.mcpServers), ['speaker']);
     const server = manifest.mcpServers.speaker;
     assert.deepEqual(server.args, ['${CLAUDE_PLUGIN_ROOT}/speaker/speaker.mjs']);
     assert.equal(server.env.TOWER_KEY, '${user_config.tower_key}');
@@ -886,16 +940,25 @@ describe('plugin.json và lời dặn Loa', () => {
     assert.match(skill, /Loa does not open, resume or stop sessions itself and runs no `claude` commands/);
     assert.match(skill, /Loa never reads or copies ticket content \(D-0009\)/);
     assert.match(skill, /call the speaker tool `pending`/);
-    // Mở phiên khi có kênh (việc 17e647c1, 27/10): có công cụ speaker thì nói dòng vàng của Claude Code là báo nhầm;
-    // không có thì nói kênh chưa nối và cách mở lại. Không gọi công cụ chỉ để kiểm.
-    assert.match(skill, /check that you have the speaker server's tools `pending` and `forwarded` \(`mcp__speaker__…`\), without calling them/);
-    assert.ok(skill.includes(`"Loa đang nghe, kênh đã nối. Dòng vàng 'no MCP server configured with that name' ở trên là Claude Code báo nhầm, bỏ qua."`));
-    assert.ok(skill.includes('"Kênh của Loa chưa nối; đóng cửa sổ rồi bấm đúp Loa tỉnh NhiLe để mở lại."'));
+    // Kênh theo tên gói (việc 26f86f3d): công cụ tên mcp__plugin_nlh_speaker__…; mở bằng --mcp-config thì mcp__speaker__….
+    // Không còn dòng vàng và không còn câu bảo đóng cửa sổ (Loa chạy ngầm). Không gọi công cụ chỉ để kiểm.
+    assert.match(skill, /check that you have the speaker server's tools `pending` and `forwarded` \(`mcp__plugin_nlh_speaker__…`, or `mcp__speaker__…` when Loa was opened with `--mcp-config`\), without calling them/);
+    assert.ok(skill.includes('- Channel mode: print one line "Loa đang nghe, kênh đã nối." and stop.'));
+    assert.ok(skill.includes('"Kênh của Loa chưa nối; bấm đúp biểu tượng Loa tỉnh NhiLe để mở lại."'));
+    assert.doesNotMatch(skill, /Dòng vàng|no MCP server configured|đóng cửa sổ/);
     // Chế độ dự phòng (kênh không mở, công cụ vẫn có): không nói "kênh đã nối"; luật không tự đặt vòng áp cho mọi nhánh.
     assert.ok(skill.includes('- Fallback mode: print one line "Loa đang nghe, kênh báo nhanh chưa mở: mỗi 10 phút xem việc một lần." (never the "kênh đã nối" line)'));
     // Một hướng cho model: mở bằng /loop là chế độ dự phòng; thiếu công cụ chỉ có một câu, cho cả hai chế độ.
     assert.match(skill, /`\/loop 10m \/nlh:speaker-loop`: fallback mode/);
     assert.equal(skill.split('They are missing').length, 2);
+    // Claude Code hoãn nạp công cụ MCP và máy chủ stdio còn đang khởi động: lượt đầu chưa thấy công cụ không có nghĩa là kênh chưa nối.
+    // Phải gọi ToolSearch trước; chỉ khi ToolSearch cũng không có mới in dòng "chưa nối".
+    const first = skill.split('First turn, either mode:')[1].split('Never set a loop')[0];
+    const search = first.indexOf('call ToolSearch once with the query `select:mcp__plugin_nlh_speaker__pending,mcp__plugin_nlh_speaker__forwarded,mcp__speaker__pending,mcp__speaker__forwarded`');
+
+    assert.ok(search > 0, 'gọi ToolSearch để nạp công cụ speaker');
+    assert.ok(search < first.indexOf('They are missing even after ToolSearch'), 'ToolSearch trước, dòng "chưa nối" sau');
+    assert.ok(search < first.indexOf('"Kênh của Loa chưa nối;'), 'không in "chưa nối" trước khi ToolSearch');
     assert.doesNotMatch(skill, /Loa chưa nối được với Nếp/);
     assert.match(skill, /\n\nNever set a loop or a schedule yourself:/);
     assert.equal(skill.match(/^name: (.+)$/m)?.[1], 'speaker-loop');

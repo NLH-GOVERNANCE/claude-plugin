@@ -9,12 +9,13 @@ import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 import { pluginFiles, pluginZip } from '../scripts/plugin-zip.mjs';
+import { pluginVersion } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
-// Gói mang Nếp (máy chủ nep, tên plugin:nlh:nep; 0.22.0, anh Sơn 26/10). Hook gọi nó trước, rồi connector Nếp trong tài
-// khoản theo các tên nó có ("claude.ai <tên>" trên máy, tên trần ở phiên mây, nơi máy chủ của gói không đăng nhập được).
-const DOORS = ['plugin:nlh:nep', 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance'];
+// Từ 0.23.1 gói không mang máy chủ Nếp riêng: Nếp là connector gắn vào tài khoản Claude (không đăng nhập lần hai). Hook vẫn gọi
+// plugin:nlh:nep trước cho máy còn bản cũ (tên không nối thì hook bỏ qua), rồi connector tài khoản theo các tên nó có.
+const DOORS = ['plugin:nlh:nep', 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance', '3398cc99-b4dc-41bd-8007-bd4b6792d5cb'];
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -66,12 +67,12 @@ describe('plugin nlh', () => {
     assert.doesNotThrow(() => new URL(manifest.homepage));
   });
 
-  test('connector: gói mang Nếp (http, bản chính mcp.nlh.vn, không khoá) và Loa chạy trên máy; không có .mcp.json riêng', () => {
+  test('connector: gói chỉ mang Loa (stdio, trên máy), không có máy chủ Nếp riêng (tránh đăng nhập lần hai); không có .mcp.json riêng', () => {
     assert.equal(existsSync(join(pluginDir, '.mcp.json')), false);
     const { mcpServers } = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
-    assert.deepEqual(Object.keys(mcpServers), ['nep', 'speaker']);
-    // Đúng địa chỉ connector của tài khoản: trên máy hai cái trùng địa chỉ thì Claude Code chỉ nối một (của gói).
-    assert.deepEqual(mcpServers.nep, { type: 'http', url: 'https://mcp.nlh.vn/mcp' });
+    assert.deepEqual(Object.keys(mcpServers), ['speaker']);
+    // Máy chủ của gói trùng địa chỉ với connector tài khoản sẽ che nó và đòi đăng nhập riêng (đo 28/10): không mang.
+    assert.doesNotMatch(JSON.stringify(mcpServers), /mcp\.nlh\.vn/);
   });
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
@@ -207,7 +208,7 @@ describe('plugin nlh', () => {
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/memory-to-nep.mjs'), 'utf8'), /fetch|https?:|node:(fs|http|net|https|child_process)/);
   });
 
-  test('hook dòng connector Nếp: trên máy dặn đăng nhập máy chủ Nếp của gói qua /mcp; trên mây Nếp đến từ connector tài khoản, không bao giờ xin đăng nhập máy chủ của gói', async () => {
+  test('hook dòng connector Nếp: một dòng cho mọi cửa; Nếp là connector tài khoản, không bao giờ dặn gõ /mcp hay "email công ty"; cần nối lại thì chỉ dặn mở link rồi mở phiên mới', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nlh-signin-'));
     const run = (cloud = false) =>
       new Promise((resolve) => {
@@ -221,34 +222,30 @@ describe('plugin nlh', () => {
         child.stdin.end('{}');
       });
     const cache = (value) => writeFileSync(join(dir, 'mcp-needs-auth-cache.json'), typeof value === 'string' ? value : JSON.stringify(value));
-    const signIn = '"Nếp chưa đăng nhập trên máy này: gõ /mcp, chọn plugin:nlh:nep, bấm Enter, đăng nhập bằng email công ty trong trình duyệt mở ra."';
-    const machine = await run();
-    assert.match(machine, /^Nếp connector: the plugin brings Nếp \(server plugin:nlh:nep\)/);
-    assert.ok(machine.includes(signIn));
-    assert.equal(machine.split('\n').filter(Boolean).length, 1);
-    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 60_000 } });
-    const waiting = await run();
-    assert.ok(waiting.includes('lists plugin:nlh:nep as needing sign-in'));
-    assert.equal(waiting.split('\n').filter(Boolean).length, 1);
-    // Trên mây: máy chủ của gói luôn cần đăng nhập mà không bao giờ đăng nhập được; chỉ connector tài khoản tính.
-    const cloud = await run(true);
-    assert.match(cloud, /^Nếp connector: this is a cloud session\./);
-    assert.match(cloud, /never ask the user to sign in to it/);
-    assert.doesNotMatch(cloud, /gõ \/mcp|needs sign-in/);
     const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
-    assert.ok(cloud.includes(`"Phiên trên mây này chưa có Nếp: trên máy tính mở ${link} , bấm Add, đăng nhập bằng email công ty, rồi mở phiên mới."`));
+    const machine = await run();
+    assert.match(machine, /^Nếp connector: Nếp comes from the Nếp connector of the user's Claude account; this plugin has no Nếp server of its own\./);
+    assert.ok(machine.includes(`"Nếp chưa nối vào Claude của bạn: mở ${link} , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới."`));
+    assert.equal(machine.split('\n').filter(Boolean).length, 1);
+    // Không chữ nào bắt người dùng gõ /mcp, đăng nhập bằng email công ty, hay bấm nút màn hình không có.
+    const spoken = machine.match(/"[^"]+"/g).join(' ');
+    assert.doesNotMatch(spoken, /\/mcp|email công ty|Connect|Add|Customize|plugin:nlh:nep/);
+    assert.equal(await run(true), machine, 'mây và máy cùng một dòng');
     // Link mở đúng hộp Add custom connector, điền sẵn tên Nếp và cửa mcp.nlh.vn.
     const url = new URL(link);
     assert.equal(url.searchParams.get('modal'), 'add-custom-connector');
     assert.equal(url.searchParams.get('connectorName'), 'Nếp');
     assert.equal(url.searchParams.get('connectorUrl'), 'https://mcp.nlh.vn/mcp');
     cache({ Nếp: { timestamp: Date.now() - 60_000 } });
-    const cloudWaiting = await run(true);
-    assert.ok(cloudWaiting.includes('The account connector (Nếp) needs sign-in'));
-    assert.match(cloudWaiting, /"Nếp cần đăng nhập lại: mở claude\.ai, Customize, Connectors, bấm Connect ở Nếp, rồi mở phiên mới\."/);
-    assert.equal(cloudWaiting.split('\n').filter(Boolean).length, 1);
-    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
-    assert.equal(await run(), machine, 'cũ hơn 7 ngày thì chỉ còn dòng đăng nhập');
+    const waiting = await run();
+    assert.ok(waiting.includes('Claude Code lists Nếp as needing sign-in'));
+    assert.ok(waiting.includes(`"Nếp cần nối lại: mở ${link} , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới."`));
+    assert.equal(waiting.split('\n').filter(Boolean).length, 1);
+    // Mục cũ của máy chủ riêng trong gói (bản 0.22) còn trong tệp thì không tính: máy chủ đó không còn.
+    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 60_000 } });
+    assert.equal(await run(), machine);
+    cache({ Nếp: { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
+    assert.equal(await run(), machine, 'cũ hơn 7 ngày thì chỉ còn dòng nối');
     cache({ 'claude.ai Gmail': { timestamp: Date.now() } });
     assert.equal(await run(), machine, 'connector khác cần đăng nhập không phải việc của Nếp');
     cache('không phải json');
@@ -256,6 +253,37 @@ describe('plugin nlh', () => {
     // Lan can: chỉ đọc một tệp, không gọi mạng, không ghi, không chạy lệnh.
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/sign-in-check.mjs'), 'utf8'), /fetch\(|node:(http|net|https|child_process)|writeFile|appendFile|mkdir/);
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('hướng dẫn cài (SETUP.md, README): người dùng không thấy "email công ty", "tỉnh NhiLe", /mcp hay trang Khoá cho Loa không có thật; câu xong đúng chữ đã chốt', () => {
+    const setup = readFileSync(join(root, 'SETUP.md'), 'utf8').replace(/\r/g, '');
+    const readme = readFileSync(join(root, 'README.md'), 'utf8').replace(/\r/g, '');
+    // Phần cho người (trước "## For Claude") và mọi câu Claude được dặn nói thành lời (trong ngoặc kép sau "say").
+    const forUser = setup.split('## For Claude')[0];
+    const said = [...setup.matchAll(/say "([^"]+)"/g)].map((m) => m[1]).join('\n');
+    for (const text of [forUser, said]) assert.doesNotMatch(text, /email công ty|tỉnh NhiLe|\/mcp|\/reload-plugins|PowerShell|Khoá cho Loa/);
+    // Phần README cho người dùng (trước "## Cho người bảo trì"): không chữ cũ (ô, phiếu, Tháp), không mã việc, không việc chờ ký.
+    const readmeUser = readme.split('## Cho người bảo trì')[0].replace(/\*\*Loa tỉnh NhiLe\*\*/g, '');
+    for (const text of [readmeUser, forUser, said]) assert.doesNotMatch(text, /email công ty|tỉnh NhiLe|phiếu|(^|[\s(])ô([\s).,:;]|$)|Tháp|Danh ký|việc [0-9a-f]{8}|26f86f3d/m);
+    assert.doesNotMatch(readmeUser, /Khoá cho Loa|Tạo khoá mới|bật Loa/);
+    assert.match(said, /đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team/);
+    // Hai câu xong dùng "bạn", không đoán giới; Claude đổi cách xưng hô theo người dùng.
+    assert.ok(setup.includes('"Xong rồi. Từ giờ việc mới sẽ tự hiện trong Claude, bạn không cần hỏi."'));
+    assert.ok(setup.includes('"Xong rồi. Bạn cứ mở Claude và hỏi việc của bạn."'));
+    assert.doesNotMatch(setup.split('### 6. Report')[1], /Xong rồi chị|chị không cần/);
+    // Loa bật bằng nút Cho phép (mục D): SETUP.md gọi lệnh speaker, người dùng chỉ được hỏi đúng một nút, không khoá, không lệnh.
+    assert.match(setup, /### 4\. Loa \(Windows and macOS\)/);
+    assert.match(setup, /Run the plugin command `speaker`/);
+    assert.match(setup, /never ask for or accept a key in chat/);
+    assert.match(said, /bấm Cho phép ở trang Nếp vừa mở/);
+    // Máy chỉ có app Claude (ca thường gặp nhất, 28/10): claude không nằm trong PATH thì không dừng, dùng chính chương trình đang chạy phiên
+    // hay bản đi kèm app; người dùng không nghe "PATH", "lệnh claude", "Claude Code", "bước N".
+    const find = setup.slice(setup.indexOf('### 1. Find the OS'), setup.indexOf('### 2.'));
+    assert.match(find, /CLAUDE_CODE_EXECPATH/);
+    assert.match(find, /Claude-Data.*claude-code.*claude\.exe/);
+    assert.match(find, /by its full path/);
+    assert.doesNotMatch(find, /stop and say Claude Code is not on the PATH/);
+    assert.doesNotMatch(said, /PATH|lệnh claude|Claude Code|step \d|bước \d/i);
   });
 
   test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {
@@ -273,6 +301,26 @@ describe('plugin nlh', () => {
     assert.match(id, /^m-[0-9a-f]{32}$/);
     assert.match(first, new RegExp(`^This machine: id ${id} .*report_session.*status started.*/nlh:handoff.*machine_stop quota or shutdown`));
     assert.equal(await run(), first, 'lần sau cùng mã');
+    // Bản gói (plugin_version) đọc từ plugin.json, đi cùng machine_id trong cùng một lần báo; không dặn gì khác về gói.
+    const version = JSON.parse(readFileSync(join(pluginDir, '.claude-plugin/plugin.json'), 'utf8')).version;
+    assert.match(version, /^\d+\.\d+\.\d+$/);
+    assert.ok(first.includes(`Also pass plugin_version ${version} (this plugin's version) in the same call, nothing else about the plugin.`));
+    assert.equal(pluginVersion(), version);
+    // Múi giờ của máy: Claude nói giờ của công cụ (UTC) theo giờ người dùng, không nói UTC.
+    assert.match(first, /Time zone of this machine: \S+ \(UTC[+-]\d+(\.\d+)?\)\. .*never the word UTC\.\n$/);
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+    assert.match(skill, /Never pick anh or chị from a name\./);
+    assert.match(skill, /Never the word UTC or a zone name\./);
+    assert.match(skill, /never an id, "mã máy", "phiên"/);
+    // Tệp lạ hay không đọc được thì không dặn gì (không bịa bản).
+    const bad = join(dir, 'plugin.json');
+    assert.equal(pluginVersion(bad), null, 'không có tệp');
+    for (const content of ['không phải json', '{}', '{"version":"latest"}', '{"version":"1.2"}', '{"version":"1.2.3 && rm"}']) {
+      writeFileSync(bad, content);
+      assert.equal(pluginVersion(bad), null, content);
+    }
+    writeFileSync(bad, '{"version":"1.2.3-beta.1"}');
+    assert.equal(pluginVersion(bad), '1.2.3-beta.1');
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -330,7 +378,7 @@ describe('plugin nlh', () => {
     // Chỉ lưu phiên thật sự dùng tỉnh NhiLe (ô CTO chốt, phiếu abdcdd2f): Claude gọi một công cụ của tỉnh thì báo working.
     // Trừ my_context: phiên nào mở ra cũng gọi (lời dặn đầu phiên), nên không phải dấu đã dùng tỉnh.
     const matcher = new RegExp(hooks.PostToolUse[0].matcher);
-    for (const server of ['plugin_nlh_nep', 'claude_ai_N_p', 'claude_ai_Nep', 'N_p', 'claude_ai_nhile-governance', 'nhile-governance', 'claude_ai_NhiLe_Governance']) {
+    for (const server of ['plugin_nlh_nep', 'claude_ai_N_p', 'claude_ai_Nep', 'N_p', 'claude_ai_nhile-governance', 'nhile-governance', 'claude_ai_NhiLe_Governance', '3398cc99-b4dc-41bd-8007-bd4b6792d5cb']) {
       assert.equal(matcher.test(`mcp__${server}__my_work`), true, server);
       assert.equal(matcher.test(`mcp__${server}__save_chat`), true, server);
       assert.equal(matcher.test(`mcp__${server}__my_context`), false, server);
@@ -339,7 +387,7 @@ describe('plugin nlh', () => {
     assert.equal(matcher.test('mcp__other__my_work'), false);
     assert.equal(matcher.test('Bash'), false);
     assert.deepEqual(hooks.PostToolUse[0], {
-      matcher: '^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance)__(?!my_context$)',
+      matcher: '^mcp__(claude_ai_|plugin_nlh_)?(N_p|Nep|nep|Nếp|Ne__p|nhile-governance|NhiLe_Governance|3398cc99-b4dc-41bd-8007-bd4b6792d5cb)__(?!my_context$)',
       hooks: DOORS.map((server) => ({ type: 'mcp_tool', server, tool: 'report_session', input: { session_id: '${session_id}', status: 'working' } })),
     });
     assert.doesNotMatch(JSON.stringify(hooks), /tool_response|tool_input|transcript_path/);
@@ -366,10 +414,29 @@ describe('plugin nlh', () => {
     assert.match(skill, /never read it for anyone else, and never copy chat content into a ticket, the ledger or a group/);
   });
 
+  test('cập nhật Nếp (28/10): mục Update hỏi một câu trước, rẽ theo nơi chạy, kiểm bản sau, hỏng thì giữ bản cũ và mở việc cho CTO không đưa lệnh; SETUP bước 4 báo trước, đọc trước, không ghi đè', () => {
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8').replace(/\r/g, '');
+    const update = skill.slice(skill.indexOf('## Update'), skill.indexOf('The context only holds data of class 1'));
+    assert.match(update, /ask one question first.*Em cập nhật Nếp trên máy này nha\?.*Only after a yes/);
+    assert.match(update, /claude plugin marketplace update nlh-governance.*claude plugin update nlh@nlh-governance/s);
+    assert.match(update, /Then `claude plugin list` again and check the version/);
+    assert.match(update, /keep the version that works.*Nếp chưa tự cập nhật được, đã báo kỹ thuật.*`open_ticket` for cell `dai-dien-kien-truc-son`.*No command, no `\/plugin`, no PowerShell/s);
+    assert.match(update, /Claude app \(chat\), Cowork.*Do not install, give no command, open no ticket/);
+    assert.doesNotMatch(update, /anh Sơn asked/);
+    const setup = readFileSync(join(root, 'SETUP.md'), 'utf8').replace(/\r/g, '');
+    const step = setup.slice(setup.indexOf('4. Turn on auto-update'), setup.indexOf('Do not ask the user to type `/reload-plugins`'));
+    assert.match(step, /First tell the user in one sentence.*Then read the user's `~\/\.claude\/settings\.json` first.*cannot parse it as JSON: skip this step.*never rewrite or overwrite the file/s);
+    assert.match(step, /"autoUpdate": true/);
+    assert.match(step, /keep every other key exactly as it was/);
+  });
+
   test('luật làng (việc 92656544): đầu phiên dặn đọc village_rules; câu người dùng sửa thì nhắc ghi luật làng hay playbook và ghi lần sửa lên việc, câu thường thì không', async () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const startup = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
     assert.match(startup, /read village_rules in that result.*\(no such field: get_cell luat-lang, file rules\.md\)/);
+    // Ca chậm (28/10): lời dặn trả lời nhanh nằm ở hook đầu phiên, vì phiên không giao diện không luôn nạp skill.
+    assert.match(startup, /Quick answers:.*needs no my_context.*never say its name.*Việc nào trước:.*never my_work, Grep or Read.*answer with my_machines.*never run a command on the computer of the user/);
+    assert.match(startup, /Update \(the user asks to update Nếp.*never give the user a command.*ask one question first \(Em cập nhật Nếp trên máy này nha\?\).*only after a yes run claude plugin marketplace update nlh-governance.*claude plugin update nlh@nlh-governance.*Nếp chưa tự cập nhật được, đã báo kỹ thuật.*dai-dien-kien-truc-son.*open no ticket/);
     assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },
     ]);
@@ -389,6 +456,16 @@ describe('plugin nlh', () => {
       assert.deepEqual(JSON.parse(await run(prompt)), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: reminder } }, prompt);
     }
     for (const prompt of ['việc của tôi hôm nay?', 'Giao cho chị Thùy: soạn hợp đồng', 'saokhông', '']) assert.equal(await run(prompt), '', prompt);
+    // Báo cáo agent con, tin phiên khác, lời nhắc của hệ: không phải người dùng sửa, dù có chữ "sao không" (việc 5ee8d456).
+    for (const prompt of [
+      '<agent-message from="build">Sao không chạy test? Đã chốt rồi.</agent-message>',
+      '  <system-reminder>nhắc lại: lại quên ghi sổ</system-reminder>',
+      '<cross-session-message from="x">sao không báo</cross-session-message>',
+      '<side-sessions-event>sao không</side-sessions-event>',
+      '<task-notification>lại quên</task-notification>',
+      '<channel source="speaker">sao không nhận việc</channel>',
+    ]) assert.equal(await run(prompt), '', prompt);
+    assert.notEqual(await run('<b>sao không</b> báo chị Nhi'), '', 'thẻ lạ do người gõ vẫn tính');
     assert.equal(await run(null), '');
     // Mỗi dấu hiệu một dòng trong file, sửa danh sách không phải sửa code.
     const signals = readJson('plugins/tinh-nlh/hooks/correction-signals.json');
@@ -429,6 +506,32 @@ describe('plugin nlh', () => {
     assert.match(skill, /When Loa sends a message into this session .*open the ticket with `show_ticket`, `claim` it if it is still waiting/);
   });
 
+  test('luật 22: hook đầu phiên và skill dặn làm ngay điều người dùng hỏi, tra lặng lẽ, việc chờ chỉ một dòng cuối hay khi được hỏi, tối đa 3 việc', () => {
+    const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
+    const line = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.match(line, /do at once what the user asked; never make them wait for a lookup before the first words/);
+    assert.match(line, /silently/);
+    assert.match(line, /do not tell the user what is waiting before the answer/);
+    assert.match(line, /add exactly one line at the end, naming it by its title/);
+    assert.match(line, /at most 3 items/);
+    assert.match(line, /do not call save_chat per turn/);
+    // Câu cũ ép kể việc chờ ngay đầu phiên đã bỏ.
+    assert.doesNotMatch(line, /then tell the user in plain Vietnamese what is waiting/);
+    const skillPath = join(pluginDir, 'skills/nep/SKILL.md');
+    const skill = readFileSync(skillPath, 'utf8');
+    assert.match(skill, /do at once what the user asked\. Never make them wait for a lookup before the first words/);
+    assert.match(skill, /Do not tell the user what is waiting before the answer/);
+    assert.match(skill, /add exactly one line at the end, naming it by its title/);
+    assert.match(skill, /at most 3 items, the ones that need them first/);
+    assert.doesNotMatch(skill, /Hôm nay chưa có việc chờ bạn/);
+    // "Nếp có gì mới": bản trong skill khớp bản gói, để câu trả lời không nói bản cũ.
+    const { version } = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
+    assert.ok(skill.includes(`Current: version ${version}.`), 'phần What is new nói sai bản gói');
+    const startupHook = readJson('plugins/tinh-nlh/hooks/hooks.json').hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.ok(startupHook.includes(`say version ${version} and`), 'hook đầu phiên nói sai bản gói');
+    assert.match(startupHook, /not new work and not the waiting list/);
+  });
+
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {
     // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /work (phiếu bdec651d).
     const promise = /(mở|mở claude|mở chat)[^.\n"]{0,20}là thấy việc/i;
@@ -444,3 +547,11 @@ describe('plugin nlh', () => {
   });
 });
 
+
+test('"chị không thấy mục Kết nối": dòng mở đầu phiên và skill nep đều đưa link thêm Nếp, dặn không gõ /mcp', () => {
+  const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
+  const hooks = readFileSync(join(pluginDir, 'hooks/hooks.json'), 'utf8');
+  const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+  assert.ok(hooks.includes(`the question chị không thấy mục Kết nối gets this link and one line, never /mcp: ${link}`));
+  assert.ok(skill.includes(`one line with this link, never \`/mcp\`: ${link}`));
+});

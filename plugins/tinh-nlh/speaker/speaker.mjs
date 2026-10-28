@@ -95,8 +95,37 @@ const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024
 // ~/.tinh-nlh/machine-id, the plugin's folder on the machine, shared by every Claude session (hooks/machine.mjs) and by
 // Loa. Not ${CLAUDE_PLUGIN_DATA}: that folder differs between the plugin installed from claude.ai and from GitHub, which
 // would give one machine two ids, and Loa runs from its own copy without it. null when the folder cannot be written.
+// Also null in a Claude Code session on the web (CLAUDE_CODE_REMOTE): its home folder is made new for every session, so each
+// one would register another "machine" (28/10: ~17 ids chained since 22/10 filled the 20-machine cap of the account).
+// Loa could not run (the launcher stopped): start.ps1 -Auto leaves one line here, since nobody sees its window. The next
+// Claude session on this machine says it and opens a ticket for the CTO cell (hooks/machine.mjs), once: the file is removed
+// when read, and the same reason within a day is not reported again. null when there is nothing to report. A launch that
+// gets as far as opening Claude removes the file too.
+export const LOA_ERROR_FILE = 'last-error.json';
+export function takeLoaError(dir = join(homedir(), '.tinh-nlh', 'speaker'), now = Date.now()) {
+  const file = join(dir, LOA_ERROR_FILE);
+  let error;
+  try {
+    const { at, reason } = JSON.parse(readFileSync(file, 'utf8').replace(/^﻿/, ''));
+    error = { at: String(at ?? '').slice(0, 40), reason: String(reason ?? '').slice(0, 300) };
+  } catch {
+    return null;
+  }
+  rmSync(file, { force: true });
+  const seenFile = join(dir, 'last-error-seen.json');
+  try {
+    const seen = JSON.parse(readFileSync(seenFile, 'utf8'));
+    if (seen.reason === error.reason && now - Date.parse(seen.at) < 24 * 3600 * 1000) return null;
+  } catch {}
+  try {
+    writeFileSync(seenFile, JSON.stringify({ reason: error.reason, at: new Date(now).toISOString() }));
+  } catch {}
+  return error;
+}
+
 export const MACHINE_ID = /^[A-Za-z0-9_-]{16,64}$/;
-export function machineId(dir = join(homedir(), '.tinh-nlh'), random = () => randomBytes(16).toString('hex')) {
+export function machineId(dir = join(homedir(), '.tinh-nlh'), random = () => randomBytes(16).toString('hex'), env = process.env) {
+  if (env.CLAUDE_CODE_REMOTE === 'true') return null;
   const file = join(dir, 'machine-id');
   const saved = () => {
     try {
@@ -117,6 +146,18 @@ export function machineId(dir = join(homedir(), '.tinh-nlh'), random = () => ran
     return made;
   } catch {
     return saved();
+  }
+}
+
+// Version of the plugin this file ships in (.claude-plugin/plugin.json), for report_session plugin_version, so Nếp can count
+// machines still on an old version. Only a plain version string (1.2.3, 1.2.3-beta.1) counts; null when unreadable.
+export const PLUGIN_VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.-]{1,20})?$/;
+export function pluginVersion(file = fileURLToPath(new URL('../.claude-plugin/plugin.json', import.meta.url))) {
+  try {
+    const version = JSON.parse(readFileSync(file, 'utf8')).version;
+    return PLUGIN_VERSION.test(version) ? version : null;
+  } catch {
+    return null;
   }
 }
 
@@ -533,6 +574,20 @@ export const defaultSpawn = (claude) => (args, cwd) =>
     execFile(claude, args, { cwd, env: childEnv(), encoding: 'utf8', timeout: 120_000, windowsHide: true }, (error) => done(!error));
   });
 
+// A Windows notification for the sentences a person must see although Loa's window is hidden ("no session is open", "work
+// waits for you"); clicking it opens Claude (toast.ps1, 28/10, 26f86f3d). Only when the launcher asked (NLH_TOWER_TOAST=1).
+export const defaultToast = (env = process.env, platform = process.platform) => (text) => {
+  if (env.NLH_TOWER_TOAST !== '1' || platform !== 'win32' || !env.NLH_TOWER_DIR) return false;
+  const script = join(env.NLH_TOWER_DIR, 'toast.ps1');
+  if (!existsSync(script)) return false;
+  try {
+    execFile(POWERSHELL, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', script, '-Title', 'Loa tỉnh NhiLe', '-Text', text], { windowsHide: true, timeout: 20_000 }, () => {});
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // Background sessions that copy a running interactive session seated at the same villager (ticket 5d66123d, 22/10:
 // Danh was asked to sign round 23 twice, 3 seconds apart, by the app session "Dân làng - techlead (son/lead)" and the
 // background "Ô Tech Lead (son/lead)" Loa had opened 14 seconds before it). Seated: the interactive session's name
@@ -562,6 +617,7 @@ export function startServer({
   keyStore = defaultStore(),
   run = defaultRun(env.CLAUDE_BIN || 'claude'),
   spawnClaude = defaultSpawn(env.CLAUDE_BIN || 'claude'),
+  toast = defaultToast(env),
   cwdOf = (id) => transcriptCwd(id),
   log = (line) => process.stderr.write(`speaker: ${line}\n`),
   onClose = () => process.exit(0),
@@ -636,11 +692,15 @@ export function startServer({
     const item = { entry_id: reminder ? `remind${reminder}:${base}` : base, base_id: base, kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '', ...(reminder ? { reminder } : {}) };
     if (HUB_CELLS.includes(item.cell)) {
       const ticket = item.ticket ? ` (phiếu ${item.ticket})` : '';
-      return push(`Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
+      const hubText = `Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`;
+      toast(hubText);
+      return push(hubText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     if (entry.kind === 'you') {
       const ticket = item.ticket ? `, phiếu ${item.ticket}` : '';
-      return push(`Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
+      const youText = `Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`;
+      toast(youText);
+      return push(youText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     // Fresh items only: a line the villager wrote itself is not told; an answer waits confirmMs (see recheck).
     if (!told) {
@@ -673,7 +733,9 @@ export function startServer({
     const last = noSession.get(item.cell);
     if (last !== undefined && clock() - last < NO_SESSION_GAP_MS) return log('no session: already told for this cell');
     noSession.set(item.cell, clock());
-    push(noSessionSentence(seat), { action: 'none', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
+    const noSessionText = noSessionSentence(seat);
+    toast(noSessionText);
+    push(noSessionText, { action: 'none', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
   }
 
   // One feed read from `since`, or null when it cannot be read (then nothing is decided this round).
@@ -754,7 +816,7 @@ export function startServer({
   async function tick() {
     const { key, configured } = currentKey();
     const origin = hubOrigin(env.TOWER_ORIGIN);
-    if (!key) return said.has('rejected') ? undefined : notice('no_key', 'Loa chưa có khoá. Đóng cửa sổ Loa rồi mở lại bằng biểu tượng Loa tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ. Không dán khoá vào chat.');
+    if (!key) return said.has('rejected') ? undefined : notice('no_key', 'Loa chưa có khoá. Đóng cửa sổ Loa rồi mở lại bằng biểu tượng Loa tỉnh NhiLe: trang Nếp sẽ mở, bấm Cho phép. Không dán khoá vào chat.');
     if (!origin) return notice('bad_origin', 'Địa chỉ hub trong cấu hình của Loa không phải https của nlh.vn. Loa không gửi khoá tới đó.');
     let response;
     try {
@@ -766,7 +828,7 @@ export function startServer({
     if (response.status === 401) {
       if (!configured) keyStore.forget(dir);
       fileKey = null;
-      return notice('rejected', 'Khoá của Loa hết hạn hoặc đã thu hồi. Mở lại Loa để dán khoá mới.');
+      return notice('rejected', 'Khoá của Loa hết hạn hoặc đã thu hồi. Mở lại Loa: trang Nếp sẽ mở, bấm Cho phép.');
     }
     if (response.status === 403) return notice('not_allowed', 'Người dùng không còn trong danh sách được dùng hệ. Loa dừng đọc.');
     if (!response.ok) {

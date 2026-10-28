@@ -2,7 +2,7 @@
 # Loa tỉnh NhiLe on macOS. The "Loa tỉnh NhiLe.command" desktop file (made by the "bật Loa" command, setup.sh) opens
 # this file from the copy in ~/.tinh-nlh/speaker, so a plugin installed from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
-# hash checked); ask for the key in a hidden prompt if none is saved (Keychain); then open Claude Code on Sonnet as Loa.
+# hash checked); if no key is saved, ask for it with the "Cho phép" button (pair.mjs, Keychain); then open Claude Code on Sonnet as Loa.
 # Same steps as start.ps1 on Windows.
 set -u
 
@@ -14,8 +14,12 @@ SERVICE=tinh-nlh-tower
 ACCOUNT=tinh-nlh
 SECURITY="${SPEAKER_SECURITY:-/usr/bin/security}"
 
+# $2: a technical line for the people who keep Nếp, left in the same file. $3 = shown: the sentence was already printed by the program that failed.
 stop_loa() {
-  printf '\n%s\n' "$1"
+  if [ "$3" = shown ]; then printf '\n'; else printf '\n%s\n' "$1"; fi
+  reason="$1${2:+ ($2)}"
+  # One line for the next Claude session to say and report to the CTO cell (hooks/machine.mjs); the window above is seen only if it stays open.
+  printf '{"at":"%s","reason":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(printf %s "$reason" | tr -d '"\\')" > "$DIR/last-error.json" 2>/dev/null
   read -r -p 'Bấm Enter để đóng. ' _
   exit 1
 }
@@ -49,6 +53,8 @@ if [ -n "$best_root" ] && { [ -z "$current" ] || [ "$best" = "$current" ] || new
   stale=""
   cmp -s "$0" "$best_root/speaker/start.sh" || stale=1
   cp "$best_root/speaker/speaker.mjs" "$DIR/speaker.mjs"
+  cp "$best_root/speaker/pair.mjs" "$DIR/pair.mjs"
+  [ -f "$best_root/speaker/policy.mjs" ] && cp "$best_root/speaker/policy.mjs" "$DIR/policy.mjs"
   # A new file, not written over the one bash is reading now.
   cp "$best_root/speaker/start.sh" "$DIR/start.sh.new" && chmod +x "$DIR/start.sh.new" && mv -f "$DIR/start.sh.new" "$DIR/start.sh"
   printf '%s\n' "$best" > "$DIR/version.txt"
@@ -97,81 +103,103 @@ if [ -z "$NODE" ]; then
   fi
 fi
 
-# 4. Loa key: if none, ask in a hidden prompt, check its shape, save to the Keychain (only this macOS account can open
-# it). The key reaches security through stdin (security -i), never a command line, the screen or Claude's environment.
-# A key the hub rejects is removed by the channel and asked again next launch.
+# 4. Loa key: if none, the machine makes its own key and asks for it with the "Cho phép" button (pair.mjs, item D): it sends
+# only the key's hash, opens the Nếp page of a short code, and saves the key to the Keychain (only this macOS account can open
+# it) once the person pressed Cho phép. The key reaches the hub only over https, at the status poll; never the web, a URL, chat or the screen; the hub's ledger keeps only the hash. A key the hub
+# rejects is removed by the channel and asked again next launch.
 if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>&1; then
+  [ -f "$DIR/pair.mjs" ] || stop_loa 'Chưa thấy phần xin phép của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
   echo ''
-  echo 'Lấy khoá ở web Nếp: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
-  echo 'Chữ không hiện ra khi dán, đó là bình thường. Dán xong bấm Enter.'
-  saved=""
-  for _ in 1 2 3; do
-    IFS= read -r -s -p 'Khoá cho Loa: ' key
-    echo ''
-    key="$(printf '%s' "$key" | tr -d '[:space:]')"
-    if [[ "$key" =~ ^nlh_tower_[0-9a-f]{64}$ ]]; then
-      printf 'add-generic-password -U -s %s -a %s -w %s\n' "$SERVICE" "$ACCOUNT" "$key" | "$SECURITY" -i >/dev/null 2>&1 && saved=1
-      key=""
-      [ -n "$saved" ] || stop_loa 'Chưa lưu được khoá vào Keychain. Bấm đúp Loa lại.'
-      echo 'Đã lưu khoá Loa trên máy này.'
-      break
-    fi
-    key=""
-    echo 'Chuỗi vừa dán không phải khoá Loa (bắt đầu bằng nlh_tower_). Dán lại.'
-  done
-  [ -n "$saved" ] || stop_loa 'Chưa lưu khoá. Bấm đúp Loa lại khi đã có khoá.'
+  echo 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
+  rm -f "$DIR/pair-detail.txt"
+  "$NODE" "$DIR/pair.mjs" --dir "$DIR"
+  paired=$?
+  # Exit 2: the hub is not ready for this step (nothing a person can fix). pair.mjs said so in one sentence; its technical line goes to
+  # the next Claude session, which opens a ticket for the CTO cell. Same as start.ps1.
+  if [ "$paired" -eq 2 ]; then
+    detail=$(cat "$DIR/pair-detail.txt" 2>/dev/null || echo 'pair.mjs exit 2')
+    stop_loa 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Lần tới bạn mở Claude, máy sẽ tự báo người lo kỹ thuật.' "$detail" shown
+  fi
+  [ "$paired" -eq 0 ] || stop_loa 'Loa chưa được phép chạy trên máy này.'
 fi
 
-# 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine
-# (nor the plugin's own speaker server) reads the feed. CLAUDE_BIN and NLH_TOWER_WORK let the channel look up, resume
-# and open sessions. Node writes the JSON so paths with spaces stay right.
-CONFIG="$DIR/speaker-mcp.json"
-# Loa needs no hook of the plugin: they call the Nếp connector, which the Loa session (only server speaker) does not
-# have, so each turn printed about ten "Stop hook error: MCP server ... not connected" lines (17e647c1, 26/10). This
-# session only: disableAllHooks, read from a file so no JSON quoting goes through the command line.
+# 4b. Channel permission (policy.mjs, ticket 26f86f3d): Claude Code only takes the plugin's channel when the machine's list
+# allows it. Written once, with the one permission box of macOS; "No" is kept in policy-status.json and never asked again,
+# Loa then runs the 10-minute way. Already allowed: nothing is shown.
+if [ -z "${SPEAKER_DRY_RUN:-}" ] && [ -f "$DIR/policy.mjs" ] && ! grep -q '"status":"declined"' "$DIR/policy-status.json" 2>/dev/null; then
+  "$NODE" "$DIR/policy.mjs" ensure --status "$DIR/policy-status.json"
+fi
+
+# 5. This session only: NLH_TOWER=1 lives only in the environment of this launch, so no other Claude Code session on the
+# machine reads the feed; the plugin's speaker server, started by Claude Code in this session, inherits it. CLAUDE_BIN and
+# NLH_TOWER_WORK let the channel look up, resume and open sessions.
+export NLH_TOWER=1 NLH_TOWER_DIR="$DIR" NLH_TOWER_WORK="$WORK" CLAUDE_BIN="$CLAUDE"
+# Loa needs no hook of the plugin: they call the Nếp connector, which the Loa session does not have, so each turn printed
+# about ten "Stop hook error: MCP server ... not connected" lines (17e647c1, 26/10). This session only: disableAllHooks,
+# read from a file so no JSON quoting goes through the command line.
 SETTINGS="$DIR/speaker-settings.json"
 printf '%s\n' '{ "disableAllHooks": true }' > "$SETTINGS" || stop_loa 'Chưa ghi được cấu hình của Loa.'
-"$NODE" -e '
+# How to open Claude: "channel plugin:nlh@<market>" (allowed), "loop" (not allowed: the plugin's server, 10-minute loop) or
+# "loop-config" (no plugin from a market, only the one synced from claude.ai: the server comes through --mcp-config).
+MODE=loop-config
+[ -f "$DIR/policy.mjs" ] && MODE="$("$NODE" "$DIR/policy.mjs" mode | head -n 1)"
+CONFIG="$DIR/speaker-mcp.json"
+if [ "$MODE" = loop-config ]; then
+  # Node writes the JSON so paths with spaces stay right.
+  "$NODE" -e '
 const [node, speaker, dir, origin, claude, work] = process.argv.slice(1);
 const env = { NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude };
 if (origin) env.TOWER_ORIGIN = origin;
 process.stdout.write(JSON.stringify({ mcpServers: { speaker: { command: node, args: [speaker], env } } }, null, 2));
 ' "$NODE" "$SPEAKER" "$DIR" "${TOWER_ORIGIN:-}" "$CLAUDE" "$WORK" > "$CONFIG" || stop_loa 'Chưa ghi được cấu hình của Loa.'
+else
+  rm -f "$CONFIG"
+fi
 
 # 6. Open Claude Code in its own work folder (new cell sessions open here too). claude and node go on the session PATH
 # so plugin hooks run.
 mkdir -p "$WORK"
 cd "$WORK" || stop_loa 'Chưa mở được thư mục làm việc của Loa.'
 export PATH="$(dirname "$CLAUDE"):$(dirname "$NODE"):$PATH"
+LOOP='/loop 10m /nlh:speaker-loop'
+case "$MODE" in
+  channel\ *)
+    # With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
+    # tokens). The prompt goes before the flags: the channel flag takes several values, a prompt after it reads as a name.
+    set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --channels "${MODE#channel }"
+    ;;
+  loop-config)
+    set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --mcp-config "$CONFIG" ;;
+  *)
+    set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" ;;
+esac
+# What runs when the channel version quits at once: the same 10-minute loop, with the plugin's server.
+FALLBACK=("$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS")
+[ "$MODE" = loop-config ] && FALLBACK=("$@")
 echo ''
 echo 'Loa đang nghe Nếp. Đừng đóng cửa sổ này.'
 if [ ! -f "$DIR/opened.txt" ]; then
-  echo 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm Authorize, quay lại đây bấm Enter.'
+  echo 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm nút xanh để cho phép, rồi quay lại đây.'
 fi
-echo 'Mỗi lần mở, hộp "Loading development channels" hiện ra: chọn "I am using this for local development", bấm Enter.'
-echo 'Dòng vàng "no MCP server configured with that name" là Claude Code báo nhầm: Loa vẫn nối. Bỏ qua dòng đó.'
 echo ''
-# With the channel, the opening prompt runs the skill once, no loop: the channel pushes each item (17e647c1 part 4, saves
-# tokens). Only the fallback without the channel keeps the 10-minute loop over the pending tool.
-LOOP='/loop 10m /nlh:speaker-loop'
-set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --mcp-config "$CONFIG" --dangerously-load-development-channels server:speaker
+date -u +%Y-%m-%dT%H:%M:%SZ > "$DIR/opened.txt"
 if [ -n "${SPEAKER_DRY_RUN:-}" ]; then
   printf 'DRYRUN %s' "$CLAUDE"
   printf ' | %s' "$@"
   printf '\n'
   printf 'DRYRUN-FALLBACK %s' "$CLAUDE"
-  printf ' | %s' "$LOOP" "${@:2:$#-3}"
+  printf ' | %s' "${FALLBACK[@]}"
   printf '\n'
   exit 0
 fi
-date -u +%Y-%m-%dT%H:%M:%SZ > "$DIR/opened.txt"
+rm -f "$DIR/last-error.json"
 # Keep the machine awake while Loa is open; caffeinate ends with this shell. The screen may still turn off.
 [ -x /usr/bin/caffeinate ] && /usr/bin/caffeinate -i -w $$ &
-# The opening prompt goes before the flags: the channel flag takes several values, a prompt after it reads as a name.
 started=$(date +%s)
 if ! "$CLAUDE" "$@"; then
-  # Claude quit within a minute (channel refused, or the channel dialog declined): run again without the channel.
+  # Claude quit within a minute (channel refused): run again the 10-minute way.
+  case "$MODE" in channel\ *) ;; *) stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.' ;; esac
   [ $(( $(date +%s) - started )) -lt 60 ] || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
   printf '\n%s\n' 'Kênh báo nhanh chưa mở được. Loa vẫn chạy, mỗi 10 phút xem việc một lần.'
-  "$CLAUDE" "$LOOP" "${@:2:$#-3}" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
+  "$CLAUDE" "${FALLBACK[@]}" || stop_loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.'
 fi

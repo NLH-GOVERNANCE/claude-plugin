@@ -1,0 +1,239 @@
+{
+  "_ghi_chu": "Bộ ca chấm người không rành kỹ thuật. Dân làng Trải nghiệm thêm ca bằng cách thêm một dòng vào cases (id không dấu, say là câu người thật gõ), không sửa code. Sửa danh sách chữ cấm ở forbidden. maxLines: điều (2), chỉ ca nào ghi mới chấm. allow: chữ cấm mà chính người dùng đã nói ra trong câu hỏi nên được nhắc lại. noNep: chạy không có kết nối Nếp nào (máy chưa gắn Nếp vào tài khoản Claude). must: những chuỗi câu trả lời phải có.",
+  "maxFirstTextSeconds": 15,
+  "_readTools": "Chỉ những công cụ đọc của Nếp này được tự duyệt khi chạy bộ ca (tên đầy đủ, không dấu *), vì ca chạy bằng tài khoản thật trên giếng thật; writeTools bị chặn hẳn (--disallowedTools), Claude định gọi thì bị từ chối và câu trả lời vẫn được chấm. Không chặn được: hook của gói (lưu câu hỏi, báo phiên) chạy riêng, nên mỗi ca vẫn ghi một lượt chat và báo phiên lên giếng.",
+  "readTools": [
+    "my_context",
+    "how_to_use",
+    "whoami",
+    "show_ticket",
+    "show_board",
+    "show_goal",
+    "show_inbox",
+    "show_org",
+    "show_station",
+    "show_stats",
+    "show_station_results",
+    "show_blind_rounds",
+    "find_tickets",
+    "find_actions",
+    "find_signatures",
+    "get_cell",
+    "get_autonomy_level",
+    "list_cells",
+    "list_lessons",
+    "list_people",
+    "list_schedules",
+    "list_spaces",
+    "list_stations",
+    "my_desk",
+    "my_machines",
+    "my_work",
+    "read_conversation",
+    "read_decision",
+    "read_my_chats",
+    "library"
+  ],
+  "_commandTools": "Lệnh được chạy thật, đúng các lệnh cập nhật gói mà Claude chạy khi người dùng nhờ \"cập nhật Nếp\" (người thật bấm Đồng ý ở phiên thật). Có tiền tố :* nghĩa là lệnh đó kèm thêm đối số vẫn được. Ca cập nhật vì vậy thật sự cập nhật gói đã cài trên máy chạy bộ ca.",
+  "commandTools": [
+    "Bash(claude plugin marketplace update nlh-governance:*)",
+    "Bash(claude plugin update nlh@nlh-governance:*)",
+    "Bash(claude plugin list:*)",
+    "PowerShell(claude plugin marketplace update nlh-governance:*)",
+    "PowerShell(claude plugin update nlh@nlh-governance:*)",
+    "PowerShell(claude plugin list:*)"
+  ],
+  "_writeTools": "Công cụ ghi của Nếp, chặn hẳn khi chạy bộ ca. Có công cụ ghi mới thì thêm vào đây.",
+  "writeTools": [
+    "save_chat",
+    "open_ticket",
+    "add_follow_up",
+    "report_session",
+    "run_action",
+    "continue_work",
+    "propose_change",
+    "request_signature",
+    "record_run",
+    "save_cell",
+    "post_message",
+    "invite_person",
+    "invite_people",
+    "remove_person",
+    "set_machine_seats",
+    "connect_channel",
+    "connect_app",
+    "connect_backup_routine",
+    "build_station",
+    "edit_station",
+    "build_unit",
+    "approve_unit",
+    "attach_to_unit",
+    "detach_from_unit",
+    "link_station_agent",
+    "merge_proposal",
+    "set_autonomy_level",
+    "set_lesson_state",
+    "set_my_handle",
+    "set_schedule",
+    "run_schedule",
+    "add_lesson",
+    "grade_blind_item",
+    "save_brain_blind_set",
+    "record_outside_miss",
+    "record_station_result",
+    "hide_private_messages",
+    "reveal_personal_info",
+    "submit_legacy_data"
+  ],
+  "cases": [
+    {
+      "id": "chao-em",
+      "say": "chào em",
+      "maxLines": 4,
+      "mustNot": [{ "label": "đoán xưng hô", "re": "(?<!\\p{L})(anh|chị)(?!\\p{L})", "flags": "iu" }]
+    },
+    {
+      "id": "viec-truoc-nhat",
+      "say": "việc nào chị cần làm trước nhất hôm nay?",
+      "mustNot": [{ "label": "gọi anh ở ca chị", "re": "\\banh\\b", "flags": "i" }]
+    },
+    {
+      "id": "co-gi-moi",
+      "say": "Nếp có gì mới không em?",
+      "mustNot": [{ "label": "đoán xưng hô", "re": "(?<!\\p{L})(anh|chị)(?!\\p{L})", "flags": "iu" }]
+    },
+    {
+      "id": "cap-nhat-giup",
+      "say": "anh Sơn nhắn cập nhật Nếp, em làm giúp chị nha"
+    },
+    {
+      "id": "may-dang-lam-gi",
+      "say": "máy đang làm gì vậy, có bị lỗi không?",
+      "mustNot": [{ "label": "đoán xưng hô", "re": "(?<!\\p{L})(anh|chị)(?!\\p{L})", "flags": "iu" }]
+    },
+    {
+      "id": "powershell-la-gi",
+      "say": "PowerShell là gì?",
+      "allow": [
+        "PowerShell"
+      ]
+    },
+    {
+      "id": "khong-thay-ket-noi",
+      "say": "chị không thấy mục Kết nối",
+      "mustNot": [{ "label": "gọi anh ở ca chị", "re": "\\banh\\b", "flags": "i" }]
+    },
+    {
+      "id": "chua-co-ket-noi",
+      "say": "chào em, hôm nay chị có việc gì không?",
+      "noNep": true,
+      "maxLines": 4,
+      "mustNot": [{ "label": "gọi anh ở ca chị", "re": "\\banh\\b", "flags": "i" }],
+      "must": [
+        { "label": "link thêm Nếp", "re": "claude\\.ai/customize/connectors\\?modal=add-custom-connector", "flags": "" }
+      ]
+    }
+  ],
+  "forbidden": [
+    {
+      "label": "PR",
+      "re": "\\bPRs?\\b",
+      "flags": ""
+    },
+    {
+      "label": "repo",
+      "re": "\\brepos?\\b",
+      "flags": "i"
+    },
+    {
+      "label": "hub",
+      "re": "\\bhub\\b",
+      "flags": "i"
+    },
+    {
+      "label": "commit",
+      "re": "\\bcommits?\\b",
+      "flags": "i"
+    },
+    {
+      "label": "D-00xx",
+      "re": "\\bD-\\d{4}\\b",
+      "flags": ""
+    },
+    {
+      "label": "mã việc",
+      "re": "\\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\\d)[0-9a-f]{8}\\b",
+      "flags": "i"
+    },
+    {
+      "label": "/mcp",
+      "re": "/mcp\\b",
+      "flags": "i"
+    },
+    {
+      "label": "/reload-plugins",
+      "re": "/reload-plugins",
+      "flags": "i"
+    },
+    {
+      "label": "PowerShell",
+      "re": "\\bPowerShell\\b",
+      "flags": "i"
+    },
+    {
+      "label": "lệnh claude",
+      "re": "\\bclaude (plugin|mcp|-p)\\b",
+      "flags": "i"
+    },
+    {
+      "label": "Connect",
+      "re": "\\bConnect\\b",
+      "flags": ""
+    },
+    {
+      "label": "email công ty",
+      "re": "email công ty",
+      "flags": "i"
+    },
+    {
+      "label": "UTC",
+      "re": "\\b(UTC|GMT)\\b",
+      "flags": ""
+    },
+    {
+      "label": "mã máy",
+      "re": "mã máy|tự sinh",
+      "flags": "i"
+    },
+    {
+      "label": "phiên (chữ bên trong)",
+      "re": "mỗi phiên|phiên (cũ|khác|đó|đang)",
+      "flags": "i"
+    }
+  ],
+  "english": {
+    "_ghi_chu": "Một dòng có từ ba chữ khác nhau trở lên trong words (chữ không dấu, nguyên từ) thì tính là câu tiếng Anh.",
+    "minDistinct": 3,
+    "words": [
+      "the",
+      "and",
+      "you",
+      "your",
+      "is",
+      "are",
+      "of",
+      "for",
+      "with",
+      "this",
+      "that",
+      "please",
+      "click",
+      "open",
+      "not",
+      "will",
+      "has",
+      "have",
+      "was"
+    ]
+  }
+}

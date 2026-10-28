@@ -17,6 +17,8 @@ mkdir -p "$DIR"
 cp "$HERE/start.sh" "$DIR/start.sh"
 chmod +x "$DIR/start.sh"
 cp "$HERE/speaker.mjs" "$DIR/speaker.mjs"
+cp "$HERE/pair.mjs" "$DIR/pair.mjs"
+cp "$HERE/policy.mjs" "$DIR/policy.mjs"
 printf '%s\n' "$version" > "$DIR/version.txt"
 
 name='Loa tỉnh NhiLe'
