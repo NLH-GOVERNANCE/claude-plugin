@@ -115,7 +115,7 @@ if (-not $node) {
 
 # 4. Loa key: if none, the machine makes its own key and asks for it with the "Cho phép" button (pair.mjs, item D): it sends
 # only the key's hash, opens the Nếp page of a short code, and saves the key (Windows DPAPI: only this Windows account on this
-# machine can open it) once the person pressed Cho phép. The key never goes through the hub, the web, chat or the screen.
+# machine can open it) once the person pressed Cho phép. The key reaches the hub only over https, at the status poll; never the web, a URL, chat or the screen; the hub's ledger keeps only the hash.
 # A key the hub rejects is deleted by the channel and asked again next launch. A key at an old place (~\.tinh-nlh\thap before
 # Loa was named speaker, or Thap.cmd) is copied over.
 $keyFile = Join-Path $Dir 'tower-key.dpapi'

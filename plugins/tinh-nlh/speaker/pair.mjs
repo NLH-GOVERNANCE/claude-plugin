@@ -1,5 +1,6 @@
 // Loa asks for its key with the "Cho phép" button (item D, ticket fda82ca8; api#659, docs/loa-allow-button.md).
-// The machine makes the key itself and sends only its SHA-256: the key never goes through the hub, the web or chat.
+// The machine makes the key itself and sends only its SHA-256 when it asks for a code. The key reaches the hub only over https, in the Authorization header of the status poll;
+// it never goes to the web, a URL, chat or the screen, and the hub's ledger keeps only the hash.
 //   1. key = nlh_tower_<64 hex>, kept in memory only until the person allows it;
 //   2. POST /tower/pair { machine_id, key_hash } -> a short code (ABCD-2345), valid 10 minutes;
 //   3. open the web page of that code; the person presses "Cho phép" there (the one tap);

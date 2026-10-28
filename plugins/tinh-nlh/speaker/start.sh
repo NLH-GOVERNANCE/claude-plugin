@@ -100,7 +100,7 @@ fi
 
 # 4. Loa key: if none, the machine makes its own key and asks for it with the "Cho phép" button (pair.mjs, item D): it sends
 # only the key's hash, opens the Nếp page of a short code, and saves the key to the Keychain (only this macOS account can open
-# it) once the person pressed Cho phép. The key never goes through the hub, the web, chat or the screen. A key the hub
+# it) once the person pressed Cho phép. The key reaches the hub only over https, at the status poll; never the web, a URL, chat or the screen; the hub's ledger keeps only the hash. A key the hub
 # rejects is removed by the channel and asked again next launch.
 if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>&1; then
   [ -f "$DIR/pair.mjs" ] || stop_loa 'Chưa thấy phần xin khoá của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
