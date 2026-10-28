@@ -829,7 +829,7 @@ describe('server Loa chạy thật qua stdio', () => {
     await settle();
     assert.equal(rejected.pushed().length, 1);
     assert.equal(rejected.pushed()[0].meta.kind, 'system');
-    assert.match(rejected.pushed()[0].content, /Khoá của Loa hết hạn hoặc đã thu hồi\. Mở lại Loa để dán khoá mới\./);
+    assert.match(rejected.pushed()[0].content, /Khoá của Loa hết hạn hoặc đã thu hồi\. Mở lại Loa: trang Nếp sẽ mở, bấm Cho phép\./);
     await rejected.close();
 
     status = 200;
@@ -837,7 +837,7 @@ describe('server Loa chạy thật qua stdio', () => {
     const noKey = open(temp('loa-state'), { TOWER_KEY: '' });
     await until(() => noKey.pushed().length >= 1);
     assert.match(noKey.pushed()[0].content, /^Loa chưa có khoá\./);
-    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
+    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: trang Nếp sẽ mở, bấm Cho phép/);
     assert.equal(requests.length, 0);
     await noKey.close();
 
@@ -896,6 +896,13 @@ describe('plugin.json và lời dặn Loa', () => {
     // Một hướng cho model: mở bằng /loop là chế độ dự phòng; thiếu công cụ chỉ có một câu, cho cả hai chế độ.
     assert.match(skill, /`\/loop 10m \/nlh:speaker-loop`: fallback mode/);
     assert.equal(skill.split('They are missing').length, 2);
+    // Claude Code hoãn nạp công cụ MCP và máy chủ stdio còn đang khởi động: lượt đầu chưa thấy công cụ không có nghĩa là kênh chưa nối.
+    // Phải gọi ToolSearch trước; chỉ khi ToolSearch cũng không có mới in dòng "chưa nối".
+    const first = skill.split('First turn, either mode:')[1].split('Never set a loop')[0];
+    const search = first.indexOf('call ToolSearch once with the query `select:mcp__speaker__pending,mcp__speaker__forwarded`');
+    assert.ok(search > 0, 'gọi ToolSearch để nạp công cụ speaker');
+    assert.ok(search < first.indexOf('They are missing even after ToolSearch'), 'ToolSearch trước, dòng "chưa nối" sau');
+    assert.ok(search < first.indexOf('"Kênh của Loa chưa nối;'), 'không in "chưa nối" trước khi ToolSearch');
     assert.doesNotMatch(skill, /Loa chưa nối được với Nếp/);
     assert.match(skill, /\n\nNever set a loop or a schedule yourself:/);
     assert.equal(skill.match(/^name: (.+)$/m)?.[1], 'speaker-loop');

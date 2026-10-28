@@ -10,9 +10,9 @@ Only works in Claude Code on a computer (Claude app, Code tab; or a Claude Code 
    - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/speaker/setup.ps1"`
    - macOS: `/bin/bash "${CLAUDE_PLUGIN_ROOT}/speaker/setup.sh"`
 2. Repeat the line it printed, then give the two remaining steps in plain Vietnamese, no commands, no codes:
-   - Ở web Nếp, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới**, chép khoá.
-   - Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính, dán khoá khi cửa sổ hỏi (chữ không hiện ra), bấm Enter. Lần đầu cửa sổ tự cài phần còn thiếu và mở trình duyệt để đăng nhập Claude. Đừng đóng cửa sổ Loa.
+   - Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính. Lần đầu cửa sổ tự cài phần còn thiếu, rồi mở trang Nếp.
+   - Ở trang Nếp vừa mở, bấm **Cho phép** (mã trên trang phải giống mã trong cửa sổ Loa). Khoá về thẳng máy này, không ai phải chép hay dán. Đừng đóng cửa sổ Loa.
 3. If it printed that Loa will open at login, add one sentence: từ lần sau Loa tự mở khi bạn đăng nhập máy, chỉ cần chọn dòng "I am using this for local development" khi cửa sổ hỏi.
 4. If it printed that another shortcut exists, say: máy này đã có Loa, bấm đúp lối tắt đó như mọi lần.
 
-Never ask for the key, never accept it in chat. If the user pastes something that looks like a key (`nlh_tower_…`) into chat, do not repeat or use it; say one sentence: khoá đó đã lộ, thu hồi ở web (**Kết nối**, **Khoá cho Loa trên máy**), tạo khoá mới, dán vào cửa sổ Loa.
+Never ask for the key, never accept it in chat. If the user pastes something that looks like a key (`nlh_tower_…`) into chat, do not repeat or use it; say one sentence: khoá đó đã lộ, nhờ người giữ Nếp thu hồi khoá của máy này, rồi mở lại Loa và bấm Cho phép để có khoá mới.

@@ -2,7 +2,7 @@
 # Loa tỉnh NhiLe on macOS. The "Loa tỉnh NhiLe.command" desktop file (made by the "bật Loa" command, setup.sh) opens
 # this file from the copy in ~/.tinh-nlh/speaker, so a plugin installed from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
-# hash checked); ask for the key in a hidden prompt if none is saved (Keychain); then open Claude Code on Sonnet as Loa.
+# hash checked); if no key is saved, ask for it with the "Cho phép" button (pair.mjs, Keychain); then open Claude Code on Sonnet as Loa.
 # Same steps as start.ps1 on Windows.
 set -u
 
@@ -49,6 +49,7 @@ if [ -n "$best_root" ] && { [ -z "$current" ] || [ "$best" = "$current" ] || new
   stale=""
   cmp -s "$0" "$best_root/speaker/start.sh" || stale=1
   cp "$best_root/speaker/speaker.mjs" "$DIR/speaker.mjs"
+  cp "$best_root/speaker/pair.mjs" "$DIR/pair.mjs"
   # A new file, not written over the one bash is reading now.
   cp "$best_root/speaker/start.sh" "$DIR/start.sh.new" && chmod +x "$DIR/start.sh.new" && mv -f "$DIR/start.sh.new" "$DIR/start.sh"
   printf '%s\n' "$best" > "$DIR/version.txt"
@@ -97,29 +98,15 @@ if [ -z "$NODE" ]; then
   fi
 fi
 
-# 4. Loa key: if none, ask in a hidden prompt, check its shape, save to the Keychain (only this macOS account can open
-# it). The key reaches security through stdin (security -i), never a command line, the screen or Claude's environment.
-# A key the hub rejects is removed by the channel and asked again next launch.
+# 4. Loa key: if none, the machine makes its own key and asks for it with the "Cho phép" button (pair.mjs, item D): it sends
+# only the key's hash, opens the Nếp page of a short code, and saves the key to the Keychain (only this macOS account can open
+# it) once the person pressed Cho phép. The key reaches the hub only over https, at the status poll; never the web, a URL, chat or the screen; the hub's ledger keeps only the hash. A key the hub
+# rejects is removed by the channel and asked again next launch.
 if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>&1; then
+  [ -f "$DIR/pair.mjs" ] || stop_loa 'Chưa thấy phần xin khoá của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
   echo ''
-  echo 'Lấy khoá ở web Nếp: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
-  echo 'Chữ không hiện ra khi dán, đó là bình thường. Dán xong bấm Enter.'
-  saved=""
-  for _ in 1 2 3; do
-    IFS= read -r -s -p 'Khoá cho Loa: ' key
-    echo ''
-    key="$(printf '%s' "$key" | tr -d '[:space:]')"
-    if [[ "$key" =~ ^nlh_tower_[0-9a-f]{64}$ ]]; then
-      printf 'add-generic-password -U -s %s -a %s -w %s\n' "$SERVICE" "$ACCOUNT" "$key" | "$SECURITY" -i >/dev/null 2>&1 && saved=1
-      key=""
-      [ -n "$saved" ] || stop_loa 'Chưa lưu được khoá vào Keychain. Bấm đúp Loa lại.'
-      echo 'Đã lưu khoá Loa trên máy này.'
-      break
-    fi
-    key=""
-    echo 'Chuỗi vừa dán không phải khoá Loa (bắt đầu bằng nlh_tower_). Dán lại.'
-  done
-  [ -n "$saved" ] || stop_loa 'Chưa lưu khoá. Bấm đúp Loa lại khi đã có khoá.'
+  echo 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
+  "$NODE" "$DIR/pair.mjs" --dir "$DIR" || stop_loa 'Chưa có khoá cho Loa.'
 fi
 
 # 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine

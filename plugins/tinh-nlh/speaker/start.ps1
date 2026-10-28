@@ -1,7 +1,7 @@
 ﻿# Loa tỉnh NhiLe on Windows. The "Loa tỉnh NhiLe" desktop shortcut (made by the "bật Loa" command, setup.ps1) opens
 # this file from the copy in ~\.tinh-nlh\speaker, so a plugin installed from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
-# hash checked); ask for the key in a hidden prompt if none is saved (DPAPI); then open Claude Code on Sonnet as Loa.
+# hash checked); if no key is saved, ask for it with the "Cho phép" button (pair.mjs, DPAPI); then open Claude Code on Sonnet as Loa.
 # The speaker channel loads through --mcp-config (server:speaker), not by plugin name: a plugin installed from claude.ai is
 # named @synced and cannot declare channels. File saved as UTF-8 with BOM so PowerShell 5.1 reads Vietnamese text.
 param(
@@ -49,6 +49,7 @@ if ($best -and (-not $current -or $best.Version -ge $current)) {
   $newStart = Join-Path $best.Root 'speaker\start.ps1'
   $stale = $PSCommandPath -and ((Get-FileHash -LiteralPath $PSCommandPath).Hash -ne (Get-FileHash -LiteralPath $newStart).Hash)
   Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
+  Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\pair.mjs') -Destination (Join-Path $Dir 'pair.mjs') -Force
   Copy-Item -LiteralPath $newStart -Destination (Join-Path $Dir 'start.ps1') -Force
   Set-Content -LiteralPath $versionFile -Value $best.Version.ToString() -Encoding ascii
   if ($stale -and -not $Relaunched) {
@@ -112,35 +113,21 @@ if (-not $node) {
   }
 }
 
-# 4. Loa key: if none, ask in a hidden prompt, check its shape, save with Windows DPAPI (only this Windows account on
-# this machine can open it). The key never goes through chat, the screen or an environment variable. A key the hub
-# rejects is deleted by the channel and asked again next launch. A key at an old place (~\.tinh-nlh\thap before Loa
-# was named speaker, or Thap.cmd) is copied over.
+# 4. Loa key: if none, the machine makes its own key and asks for it with the "Cho phép" button (pair.mjs, item D): it sends
+# only the key's hash, opens the Nếp page of a short code, and saves the key (Windows DPAPI: only this Windows account on this
+# machine can open it) once the person pressed Cho phép. The key reaches the hub only over https, at the status poll; never the web, a URL, chat or the screen; the hub's ledger keeps only the hash.
+# A key the hub rejects is deleted by the channel and asked again next launch. A key at an old place (~\.tinh-nlh\thap before
+# Loa was named speaker, or Thap.cmd) is copied over.
 $keyFile = Join-Path $Dir 'tower-key.dpapi'
 $legacy = @((Join-Path $env:USERPROFILE '.tinh-nlh\thap\tower-key.dpapi'), (Join-Path $plugins 'data\tinh-nlh-nlh-governance\tower-key.dpapi')) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not (Test-Path -LiteralPath $keyFile) -and $legacy) { Copy-Item -LiteralPath $legacy -Destination $keyFile }
 if (-not (Test-Path -LiteralPath $keyFile)) {
+  $pair = Join-Path $Dir 'pair.mjs'
+  if (-not (Test-Path -LiteralPath $pair)) { Stop-Loa 'Chưa thấy phần xin khoá của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
   Write-Host ''
-  Write-Host 'Lấy khoá ở web Nếp: Kết nối, Khoá cho Loa trên máy, Tạo khoá mới. Chép khoá rồi dán vào đây.'
-  Write-Host 'Chữ không hiện ra khi dán, đó là bình thường. Dán xong bấm Enter.'
-  $saved = $false
-  for ($try = 0; $try -lt 3 -and -not $saved; $try++) {
-    $secure = Read-Host -AsSecureString 'Khoá cho Loa'
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try {
-      $ok = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim() -match '^nlh_tower_[0-9a-f]{64}$'
-    } finally {
-      [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-    }
-    if ($ok) {
-      $secure | ConvertFrom-SecureString | Set-Content -LiteralPath $keyFile -Encoding ascii
-      Write-Host 'Đã lưu khoá Loa trên máy này.'
-      $saved = $true
-    } else {
-      Write-Host 'Chuỗi vừa dán không phải khoá Loa (bắt đầu bằng nlh_tower_). Dán lại.'
-    }
-  }
-  if (-not $saved) { Stop-Loa 'Chưa lưu khoá. Bấm đúp Loa lại khi đã có khoá.' }
+  Write-Host 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
+  & $node $pair --dir $Dir | Out-Host
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $keyFile)) { Stop-Loa 'Chưa có khoá cho Loa.' }
 }
 
 # 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine
