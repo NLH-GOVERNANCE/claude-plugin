@@ -33,11 +33,11 @@ test('đọc stream: lấy chữ của trợ lý theo thứ tự, thời gian t�
     { t: 100, text: JSON.stringify({ type: 'system', subtype: 'init' }) },
     { t: 4000, text: assistant({ type: 'tool_use', name: 'my_context', input: {} }) },
     { t: 4100, text: 'không phải json' },
-    { t: 9500, text: assistant(say('  '), say('Chào chị.')) },
-    { t: 12000, text: assistant(say('Chị có một việc cần ký.')) },
+    { t: 9500, text: assistant(say('  '), say('Chào bạn.')) },
+    { t: 12000, text: assistant(say('Bạn có một việc cần ký.')) },
   ];
   const parsed = parseStream(lines);
-  assert.equal(parsed.answer, 'Chào chị.\nChị có một việc cần ký.');
+  assert.equal(parsed.answer, 'Chào bạn.\nBạn có một việc cần ký.');
   assert.equal(parsed.firstTextMs, 9500);
   assert.equal(parsed.startupMs, 100);
   assert.deepEqual(parseStream([{ t: 5, text: assistant({ type: 'tool_use', name: 'x' }) }]).answer, '');
@@ -50,7 +50,7 @@ test('dấu vết công cụ: tên bỏ tiền tố máy chủ, giờ gọi và 
     { t: 2100, text: assistant({ type: 'tool_use', id: 'a', name: 'mcp__plugin_nlh_nep__my_context', input: {} }) },
     { t: 5000, text: user('a') },
     { t: 5200, text: assistant({ type: 'tool_use', id: 'b', name: 'mcp__claude_ai_nhile-governance__show_ticket', input: {} }) },
-    { t: 9000, text: assistant(say('Chào chị.')) },
+    { t: 9000, text: assistant(say('Chào bạn.')) },
   ];
   const parsed = parseStream(lines);
   assert.deepEqual(parsed.tools, [
@@ -63,12 +63,12 @@ test('dấu vết công cụ: tên bỏ tiền tố máy chủ, giờ gọi và 
 });
 
 test('đồng hồ tính từ lúc phiên mở: khởi động không tính vào 15 giây, nhưng vẫn có cột riêng', () => {
-  const late = { answer: 'Chào chị.', firstTextMs: 21000, startupMs: 8000 };
+  const late = { answer: 'Chào bạn.', firstTextMs: 21000, startupMs: 8000 };
   const graded = gradeCase(late, byId('viec-truoc-nhat'), config);
   assert.deepEqual([graded.time.pass, graded.time.seconds, graded.time.startup], [true, 13, 8]);
   assert.equal(gradeCase({ ...late, firstTextMs: 23100 }, byId('viec-truoc-nhat'), config).time.pass, false);
   // Không thấy lúc phiên mở: tính từ lúc chạy, cột khởi động trống.
-  const none = gradeCase({ answer: 'Chào chị.', firstTextMs: 12000 }, byId('viec-truoc-nhat'), config);
+  const none = gradeCase({ answer: 'Chào bạn.', firstTextMs: 12000 }, byId('viec-truoc-nhat'), config);
   assert.deepEqual([none.time.seconds, none.time.startup], [12, null]);
   const table = renderTable([graded, none], config).split('\n');
   assert.match(table[1], /^viec-truoc-nhat\s+13\s+-\s+8\s/);
@@ -76,7 +76,7 @@ test('đồng hồ tính từ lúc phiên mở: khởi động không tính vào
 });
 
 test('chạy ba lần: thời gian đạt khi trung vị ≤15 giây; chữ cấm, dòng, câu tiếng Anh phải đạt cả ba lần', () => {
-  const run = (seconds, answer = 'Chào chị.') => ({ answer, firstTextMs: seconds * 1000, startupMs: 0 });
+  const run = (seconds, answer = 'Chào bạn.') => ({ answer, firstTextMs: seconds * 1000, startupMs: 0 });
   const grade = (runs, id = 'viec-truoc-nhat') => gradeRuns(runs, byId(id), config);
   assert.equal(median([14, 20, 9]), 14);
   assert.equal(median([null, 5, 6]), 6);
@@ -93,7 +93,7 @@ test('chạy ba lần: thời gian đạt khi trung vị ≤15 giây; chữ cấ
   const dirty = grade([run(5), run(5, 'Em gộp PR vào repo rồi.'), run(5)]);
   assert.deepEqual([dirty.time.pass, dirty.words.pass, dirty.words.hits, dirty.pass], [true, false, ['PR', 'repo'], false]);
   // Quá số dòng ở một lần cũng trượt.
-  const long = 'Chào chị.\nMột.\nHai.\nBa.\nBốn.';
+  const long = 'Chào bạn.\nMột.\nHai.\nBa.\nBốn.';
   const over = grade([run(5), run(5, long), run(5)], 'chao-em');
   assert.deepEqual([over.rows.pass, over.rows.lines, over.pass], [false, 5, false]);
   const table = renderTable([ok], config).split('\n');
@@ -125,7 +125,7 @@ test('số phiên khác đang chạy: đếm file chat vừa ghi trong 2 phút, 
 });
 
 test('chữ đầu tiên: đúng 15 giây còn đạt, 15,1 giây trượt, không có chữ nào là trượt', () => {
-  const ok = { answer: 'Chào chị.', firstTextMs: 15000 };
+  const ok = { answer: 'Chào bạn.', firstTextMs: 15000 };
   assert.equal(gradeCase(ok, byId('viec-truoc-nhat'), config).time.pass, true);
   const slow = gradeCase({ ...ok, firstTextMs: 15100 }, byId('viec-truoc-nhat'), config);
   assert.equal(slow.time.pass, false);
@@ -135,7 +135,7 @@ test('chữ đầu tiên: đúng 15 giây còn đạt, 15,1 giây trượt, khô
 });
 
 test('đếm dòng: chỉ ca có maxLines bị chấm; dòng trống không tính; 4 dòng đạt, 5 dòng trượt', () => {
-  const four = 'Chào chị.\n\nChị có một việc cần ký.\nViệc hai.\nViệc ba.';
+  const four = 'Chào bạn.\n\nBạn có một việc cần ký.\nViệc hai.\nViệc ba.';
   assert.equal(gradeCase({ answer: four, firstTextMs: 1000 }, byId('chao-em'), config).rows.lines, 4);
   assert.equal(gradeCase({ answer: four, firstTextMs: 1000 }, byId('chao-em'), config).pass, true);
   const five = `${four}\nViệc bốn.`;
@@ -152,29 +152,40 @@ test('chữ cấm: bắt từng chữ của ticket, không bắt chữ trùng m�
   assert.deepEqual(hit('Mã việc cf0183a7 đang chờ.'), ['mã việc']);
   assert.deepEqual(hit('Gõ /mcp rồi /reload-plugins, bấm Connect, đăng nhập bằng email công ty.'), ['/mcp', '/reload-plugins', 'Connect', 'email công ty']);
   assert.deepEqual(hit('Mở PowerShell, gõ claude plugin update.'), ['PowerShell', 'lệnh claude']);
-  assert.deepEqual(hit('Claude Code chạy lệnh giúp chị, mở Claude Code là xong.'), []);
+  assert.deepEqual(hit('Claude Code chạy lệnh giúp bạn, mở Claude Code là xong.'), []);
   // Không bắt: chữ trùng một phần, ngày tháng toàn số, tên người.
   assert.deepEqual(hit('Em soạn xong rồi. Hôm nay 20251028 chị có một việc. Thùy duyệt giúp.'), []);
   assert.deepEqual(hit('Chị Nhi nhờ em prompt lại.'), []);
   assert.deepEqual(forbiddenHits('PowerShell là phần mềm gõ lệnh.', config.forbidden, ['PowerShell']), []);
+  // Chữ bên trong mà người dùng không cần biết (28/10): giờ UTC, mã máy, phiên cũ; câu thường có "phiên mới" thì không bắt.
+  assert.deepEqual(hit('Lần báo gần nhất là 13:15 UTC.'), ['UTC']);
+  assert.deepEqual(hit('Mỗi phiên tự sinh một mã máy, nên danh sách dài.'), ['mã máy', 'phiên (chữ bên trong)']);
+  assert.deepEqual(hit('Đang có phiên khác giữ nên cứ để phiên đó làm.'), ['phiên (chữ bên trong)']);
+  assert.deepEqual(hit('Đăng nhập rồi mở phiên mới. Máy này báo lúc 8 giờ tối.'), []);
+  // Xưng hô: ca người dùng nói "chị" mà trả lời gọi "anh" thì trượt; ca chưa nói gì thì "anh" hay "chị" đều là đoán.
+  const addressed = (id, answer) => gradeCase({ answer, firstTextMs: 1000 }, byId(id), config);
+  assert.deepEqual(addressed('viec-truoc-nhat', 'Chào anh Sơn, việc đầu là gộp bản sửa.').words.hits, ['gọi anh ở ca chị']);
+  assert.equal(addressed('viec-truoc-nhat', 'Việc đầu của chị là gộp bản sửa.').pass, true);
+  assert.deepEqual(addressed('chao-em', 'Chào chị Nhi.').words.hits, ['đoán xưng hô']);
+  assert.equal(addressed('chao-em', 'Chào Sơn, bạn cần em làm gì ạ?').pass, true);
   const asked = gradeCase({ answer: 'PowerShell là cửa sổ gõ lệnh của Windows.', firstTextMs: 3000 }, byId('powershell-la-gi'), config);
   assert.equal(asked.pass, true);
-  const notAsked = gradeCase({ answer: 'Chị mở PowerShell giúp em.', firstTextMs: 3000 }, byId('chao-em'), config);
+  const notAsked = gradeCase({ answer: 'Bạn mở PowerShell giúp em.', firstTextMs: 3000 }, byId('chao-em'), config);
   assert.deepEqual([notAsked.words.hits, notAsked.pass], [['PowerShell'], false]);
 });
 
 test('câu tiếng Anh: dòng có từ ba chữ Anh khác nhau trở lên; câu Việt có vài chữ lẫn không trượt', () => {
   const english = (text) => englishLines(text, config.english);
-  assert.deepEqual(english('Chào chị.\nPlease open the page and click this button.'), ['Please open the page and click this button.']);
+  assert.deepEqual(english('Chào bạn.\nPlease open the page and click this button.'), ['Please open the page and click this button.']);
   assert.deepEqual(english('Chị bấm nút Add rồi mở phiên mới. Nếp is ready.'), []);
   assert.deepEqual(english('Reloaded: 2 plugins · 29 skills · 6 agents · 59 hooks'), []);
-  const graded = gradeCase({ answer: 'Chào chị.\nThe plugin is ready and you can start.', firstTextMs: 2000 }, byId('co-gi-moi'), config);
+  const graded = gradeCase({ answer: 'Chào bạn.\nThe plugin is ready and you can start.', firstTextMs: 2000 }, byId('co-gi-moi'), config);
   assert.deepEqual([graded.words.pass, graded.words.english.length, graded.pass], [false, 1, false]);
 });
 
 test('bảng kết quả: một dòng mỗi ca, ca trượt kèm lý do, ca đạt thì không', () => {
   const answers = [
-    ['chao-em', { answer: 'Chào chị.', firstTextMs: 8200 }],
+    ['chao-em', { answer: 'Chào bạn.', firstTextMs: 8200 }],
     ['co-gi-moi', { answer: 'Em gộp PR vào repo rồi.', firstTextMs: 20000 }],
   ];
   const results = answers.map(([id, parsed]) => gradeCase(parsed, byId(id), config));
@@ -223,5 +234,5 @@ test('ca "chưa có kết nối Nếp": câu trả lời phải có link thêm N
   assert.deepEqual([ok.words.pass, ok.words.missing, ok.pass], [true, [], true]);
   const bare = gradeCase({ answer: 'Chị cần nối Nếp trước.', firstTextMs: 5000 }, testCase, config);
   assert.deepEqual([bare.words.pass, bare.words.missing, bare.pass], [false, ['link thêm Nếp'], false]);
-  assert.deepEqual(gradeRuns([{ answer: 'Chào chị.', firstTextMs: 1000 }], testCase, config).words.missing, ['link thêm Nếp']);
+  assert.deepEqual(gradeRuns([{ answer: 'Chào bạn.', firstTextMs: 1000 }], testCase, config).words.missing, ['link thêm Nếp']);
 });

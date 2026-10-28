@@ -89,15 +89,18 @@
     {
       "id": "chao-em",
       "say": "chào em",
-      "maxLines": 4
+      "maxLines": 4,
+      "mustNot": [{ "label": "đoán xưng hô", "re": "(?<!\\p{L})(anh|chị)(?!\\p{L})", "flags": "iu" }]
     },
     {
       "id": "viec-truoc-nhat",
-      "say": "việc nào chị cần làm trước nhất hôm nay?"
+      "say": "việc nào chị cần làm trước nhất hôm nay?",
+      "mustNot": [{ "label": "gọi anh ở ca chị", "re": "\\banh\\b", "flags": "i" }]
     },
     {
       "id": "co-gi-moi",
-      "say": "Nếp có gì mới không em?"
+      "say": "Nếp có gì mới không em?",
+      "mustNot": [{ "label": "đoán xưng hô", "re": "(?<!\\p{L})(anh|chị)(?!\\p{L})", "flags": "iu" }]
     },
     {
       "id": "cap-nhat-giup",
@@ -105,7 +108,8 @@
     },
     {
       "id": "may-dang-lam-gi",
-      "say": "máy đang làm gì vậy, có bị lỗi không?"
+      "say": "máy đang làm gì vậy, có bị lỗi không?",
+      "mustNot": [{ "label": "đoán xưng hô", "re": "(?<!\\p{L})(anh|chị)(?!\\p{L})", "flags": "iu" }]
     },
     {
       "id": "powershell-la-gi",
@@ -116,13 +120,15 @@
     },
     {
       "id": "khong-thay-ket-noi",
-      "say": "chị không thấy mục Kết nối"
+      "say": "chị không thấy mục Kết nối",
+      "mustNot": [{ "label": "gọi anh ở ca chị", "re": "\\banh\\b", "flags": "i" }]
     },
     {
       "id": "chua-co-ket-noi",
       "say": "chào em, hôm nay chị có việc gì không?",
       "noNep": true,
       "maxLines": 4,
+      "mustNot": [{ "label": "gọi anh ở ca chị", "re": "\\banh\\b", "flags": "i" }],
       "must": [
         { "label": "link thêm Nếp", "re": "claude\\.ai/customize/connectors\\?modal=add-custom-connector", "flags": "" }
       ]
@@ -187,6 +193,21 @@
     {
       "label": "email công ty",
       "re": "email công ty",
+      "flags": "i"
+    },
+    {
+      "label": "UTC",
+      "re": "\\b(UTC|GMT)\\b",
+      "flags": ""
+    },
+    {
+      "label": "mã máy",
+      "re": "mã máy|tự sinh",
+      "flags": "i"
+    },
+    {
+      "label": "phiên (chữ bên trong)",
+      "re": "mỗi phiên|phiên (cũ|khác|đó|đang)",
       "flags": "i"
     }
   ],
