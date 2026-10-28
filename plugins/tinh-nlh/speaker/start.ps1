@@ -399,10 +399,12 @@ try {
 Remove-Item -LiteralPath (Join-Path $Dir 'last-error.json') -Force -ErrorAction SilentlyContinue
 $started = Get-Date
 & $claude @arguments
-# Claude quit within a minute (channel refused): run again the 10-minute way.
-if ($LASTEXITCODE -and ((Get-Date) - $started).TotalSeconds -lt 60 -and $mode -like 'channel *') {
+# Claude quit within a minute (channel refused or its question not answered): run again the 10-minute way.
+if ($LASTEXITCODE -and ((Get-Date) - $started).TotalSeconds -lt 60) {
   Write-Host ''
   Write-Host 'Kênh báo nhanh chưa mở được. Loa vẫn chạy, mỗi 10 phút xem việc một lần.'
   & $claude @loop
 }
 if ($LASTEXITCODE) { Stop-Loa 'Loa dừng vì lỗi ở trên. Bấm đúp Loa để mở lại.' }
+# Hidden Loa ends without an error (28/10 laptop: it vanished and nothing said so): leave the line for the next Claude session.
+if ($Auto) { Stop-Loa 'Loa đã dừng. Bấm đúp Loa để mở lại.' }
