@@ -1,4 +1,4 @@
-﻿# Loa tỉnh NhiLe on Windows. The "Loa tỉnh NhiLe" desktop shortcut and the login task (made by the "bật Loa" command,
+﻿# Loa tỉnh NhiLe on Windows. The "Loa tỉnh NhiLe" desktop shortcut and the login start (made by the "bật Loa" command,
 # setup.ps1) open loa.vbs, which opens this file from the copy in ~\.tinh-nlh\speaker with no window, so a plugin installed
 # from claude.ai or from GitHub both work, no repo.
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
@@ -9,8 +9,8 @@
 # which asked a Windows admin box that a person without an admin PIN cannot pass). So the channel is the development channel,
 # whose one English question ("Loading development channels") a hidden helper answers (-Answer): it reads the screen of
 # the hidden console, and sends Enter only when it sees exactly that question.
-# The login task is made here, when the person double-clicks Loa (Register-Login), not by the Claude session that installed
-# Loa: a session in Auto mode can be refused the right to schedule a task, which left the user with a dead end.
+# The login start is made here, when the person double-clicks Loa (Register-Login), not by the Claude session that installed
+# Loa: a session in Auto mode can be refused the right to register it, which left the user with a dead end.
 # loa.vbs always starts this file hidden with -Auto. One Loa per machine (a mutex). A machine whose permission list already
 # allows the plugin's channel (policy.mjs mode) opens it by the plugin's name, with no question at all.
 # File saved as UTF-8 with BOM so PowerShell 5.1 reads Vietnamese text.
@@ -27,9 +27,9 @@ param(
   [switch]$Quiet,
   # The hidden helper: answers the one English question of Claude Code in the hidden console of this process id.
   [int]$Answer = 0,
-  # Make or refresh the login task, then end (what a double-click does on the way; also for tests).
+  # Make or refresh the login start, then end (what a double-click does on the way; also for tests).
   [switch]$RegisterOnly,
-  [string]$TaskName = 'Loa tỉnh NhiLe'
+  [string]$RunName = 'Loa tỉnh NhiLe'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -143,24 +143,22 @@ public static class LoaConsole {
   exit 0
 }
 
-# Open Loa at every login of this Windows account: a scheduled task of the user's own, no admin rights, no window (loa.vbs
-# runs this file hidden). Made once, left alone when it already points at this Loa; a failure only goes to loa.log.
+# Open Loa at every login of this Windows account: one value of the user's own Run key (HKCU, no admin rights, no window:
+# loa.vbs runs this file hidden). A scheduled task needed admin rights on a laptop ("Access is denied", 28/10), this does not.
+# Made once, left alone when it already points at this Loa; the task an older Loa made is removed; a failure only goes to loa.log.
+$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 function Register-Login {
   try {
     $launcher = Join-Path $Dir 'loa.vbs'
     $wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
-    $argument = "`"$launcher`" login"
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($task -and $task.Actions[0].Execute -eq $wscript -and $task.Actions[0].Arguments -eq $argument) { return }
-    $user = "$env:USERDOMAIN\$env:USERNAME"
-    $action = New-ScheduledTaskAction -Execute $wscript -Argument $argument -WorkingDirectory $Dir
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
-    $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+    $command = "`"$wscript`" `"$launcher`" login"
+    $current = (Get-ItemProperty -LiteralPath $RunKey -Name $RunName -ErrorAction SilentlyContinue).$RunName
+    if ($current -ne $command) { Set-ItemProperty -LiteralPath $RunKey -Name $RunName -Value $command -ErrorAction Stop }
   } catch {
-    Add-Log "login task: $($_.Exception.Message)"
+    Add-Log "login start: $($_.Exception.Message)"
+    return
   }
+  try { Unregister-ScheduledTask -TaskName $RunName -Confirm:$false -ErrorAction Stop } catch { }
 }
 if ($RegisterOnly) { Register-Login; exit 0 }
 if (-not $Quiet -and -not $DryRun) { Register-Login }

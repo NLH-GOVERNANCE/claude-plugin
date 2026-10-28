@@ -88,6 +88,7 @@ describe('plugin nlh', () => {
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/sign-in-check.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs'] },
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/self-update.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/local-schedules-hook.mjs'] },
     ]);
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
