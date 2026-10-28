@@ -95,6 +95,32 @@ const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024
 // ~/.tinh-nlh/machine-id, the plugin's folder on the machine, shared by every Claude session (hooks/machine.mjs) and by
 // Loa. Not ${CLAUDE_PLUGIN_DATA}: that folder differs between the plugin installed from claude.ai and from GitHub, which
 // would give one machine two ids, and Loa runs from its own copy without it. null when the folder cannot be written.
+// Loa could not run (the launcher stopped): start.ps1 -Auto leaves one line here, since nobody sees its window. The next
+// Claude session on this machine says it and opens a ticket for the CTO cell (hooks/machine.mjs), once: the file is removed
+// when read, and the same reason within a day is not reported again. null when there is nothing to report. A launch that
+// gets as far as opening Claude removes the file too.
+export const LOA_ERROR_FILE = 'last-error.json';
+export function takeLoaError(dir = join(homedir(), '.tinh-nlh', 'speaker'), now = Date.now()) {
+  const file = join(dir, LOA_ERROR_FILE);
+  let error;
+  try {
+    const { at, reason } = JSON.parse(readFileSync(file, 'utf8').replace(/^﻿/, ''));
+    error = { at: String(at ?? '').slice(0, 40), reason: String(reason ?? '').slice(0, 300) };
+  } catch {
+    return null;
+  }
+  rmSync(file, { force: true });
+  const seenFile = join(dir, 'last-error-seen.json');
+  try {
+    const seen = JSON.parse(readFileSync(seenFile, 'utf8'));
+    if (seen.reason === error.reason && now - Date.parse(seen.at) < 24 * 3600 * 1000) return null;
+  } catch {}
+  try {
+    writeFileSync(seenFile, JSON.stringify({ reason: error.reason, at: new Date(now).toISOString() }));
+  } catch {}
+  return error;
+}
+
 export const MACHINE_ID = /^[A-Za-z0-9_-]{16,64}$/;
 export function machineId(dir = join(homedir(), '.tinh-nlh'), random = () => randomBytes(16).toString('hex')) {
   const file = join(dir, 'machine-id');

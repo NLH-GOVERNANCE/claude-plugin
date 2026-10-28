@@ -7,6 +7,7 @@
 //
 //   node policy.mjs ensure   kiểm; thiếu thì ghi (xin quyền nếu cần); in một dòng tiếng Việt; thoát 0 khi kênh dùng được
 //   node policy.mjs check    thoát 0 khi danh sách đã đủ, không in gì
+//   node policy.mjs mode     in cách mở Loa: "channel plugin:nlh@<kho>", "loop" hoặc "loop-config" (xem loaMode)
 //   node policy.mjs write   ghi gộp, không xin quyền (dùng khi người chạy đã có quyền); thoát 0 đã đủ, 3 không ghi được
 //
 // Cờ: --file (managed-settings.json, để thử), --marketplace (mặc định đọc từ plugin đã cài), --home, --status (nơi ghi
@@ -29,6 +30,8 @@ export const validMarketplace = (name) => typeof name === 'string' && /^[A-Za-z0
 
 // Nơi Claude Code đọc chính sách của máy. Windows đọc đúng C:\Program Files\ClaudeCode (thư mục ProgramData cũ không đọc).
 export function managedPath(platform = process.platform, env = process.env) {
+  // Tests only: Claude Code ignores this variable, so pointing it elsewhere only moves where this file looks.
+  if (env.LOA_MANAGED_SETTINGS_FILE) return env.LOA_MANAGED_SETTINGS_FILE;
   if (platform === 'win32') return join(env.ProgramFiles || 'C:\\Program Files', 'ClaudeCode', 'managed-settings.json');
   if (platform === 'darwin') return '/Library/Application Support/ClaudeCode/managed-settings.json';
   return '/etc/claude-code/managed-settings.json';
@@ -142,6 +145,14 @@ function elevate(platform, file, text) {
   return 9;
 }
 
+// Loa mở Claude kiểu nào. 'channel plugin:nlh@<kho>': kênh theo tên gói, tin tới ngay. 'loop': chưa được phép (bấm Không,
+// người quản trị tắt kênh), 10 phút xem việc một lần, máy chủ Loa lấy từ gói đã cài. 'loop-config': máy không có gói cài
+// từ kho (chỉ bản đồng bộ từ claude.ai), 10 phút một lần, máy chủ Loa nạp bằng --mcp-config như trước.
+export function loaMode(file = managedPath(), marketplace = findMarketplace()) {
+  if (!marketplace) return 'loop-config';
+  return isAllowed(file, marketplace) ? `channel plugin:${PLUGIN}@${marketplace}` : 'loop';
+}
+
 // Câu đứng ngay trước hộp xin quyền. Windows có nút Có; macOS hỏi mật khẩu máy nên không nhắc nút nào.
 export function ask(platform = process.platform) {
   return platform === 'win32'
@@ -188,6 +199,10 @@ function main(argv) {
   const file = flag('--file') || managedPath();
   const marketplace = flag('--marketplace') || findMarketplace(flag('--home') || homedir());
   if (command === 'check') return isAllowed(file, marketplace) ? 0 : 1;
+  if (command === 'mode') {
+    console.log(loaMode(file, marketplace));
+    return 0;
+  }
   if (command === 'write') return write(file, marketplace) === 'ok' ? 0 : 3;
   if (command === 'ensure') {
     const noElevate = rest.includes('--no-elevate');
