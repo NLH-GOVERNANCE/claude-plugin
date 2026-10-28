@@ -261,15 +261,16 @@ describe('dòng lệnh', () => {
 });
 
 describe('lối mở gọi policy.mjs', () => {
-  test('start.ps1 và start.sh hỏi quyền một lần, không hỏi lại khi đã bấm Không, không chạy ở chế độ thử; setup chép policy.mjs', () => {
-    for (const name of ['start.ps1', 'start.sh']) {
-      const text = read(`speaker/${name}`);
-      assert.match(text, /policy\.mjs/, name);
-      assert.match(text, /policy-status\.json/, name);
-      assert.match(text, /declined/, name);
-    }
-    assert.match(read('speaker/start.ps1'), /-not \$DryRun -and \(Test-Path -LiteralPath \$policy\) -and -not \$declined/);
-    assert.match(read('speaker/start.sh'), /\[ -z "\$\{SPEAKER_DRY_RUN:-\}" \] && \[ -f "\$DIR\/policy\.mjs" \]/);
+  test('start.sh hỏi quyền một lần, không hỏi lại khi đã bấm Không, không chạy ở chế độ thử; start.ps1 chỉ đọc chế độ, không bao giờ xin quyền quản trị (28/10); setup chép policy.mjs', () => {
+    const sh = read('speaker/start.sh');
+    assert.match(sh, /policy\.mjs/);
+    assert.match(sh, /policy-status\.json/);
+    assert.match(sh, /declined/);
+    assert.match(sh, /\[ -z "\$\{SPEAKER_DRY_RUN:-\}" \] && \[ -f "\$DIR\/policy\.mjs" \]/);
+    // Windows: người không có mã PIN quản trị bị hộp của Windows chặn, nên lối mở chỉ hỏi policy.mjs mode (đọc), không ensure.
+    const ps = read('speaker/start.ps1');
+    assert.match(ps, /& \$node \$policy mode/);
+    assert.doesNotMatch(ps, /policy-status|declined|\$policy ensure|RunAs|-Verb/);
     assert.match(read('speaker/setup.ps1'), /'policy\.mjs'/);
     assert.match(read('speaker/setup.sh'), /policy\.mjs/);
   });
