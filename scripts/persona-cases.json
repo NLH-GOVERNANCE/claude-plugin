@@ -1,0 +1,125 @@
+{
+  "_ghi_chu": "Bộ ca chấm người không rành kỹ thuật. Dân làng Trải nghiệm thêm ca bằng cách thêm một dòng vào cases (id không dấu, say là câu người thật gõ), không sửa code. Sửa danh sách chữ cấm ở forbidden. maxLines: điều (2), chỉ ca nào ghi mới chấm. allow: chữ cấm mà chính người dùng đã nói ra trong câu hỏi nên được nhắc lại.",
+  "maxFirstTextSeconds": 15,
+  "cases": [
+    {
+      "id": "chao-em",
+      "say": "chào em",
+      "maxLines": 4
+    },
+    {
+      "id": "viec-truoc-nhat",
+      "say": "việc nào chị cần làm trước nhất hôm nay?"
+    },
+    {
+      "id": "co-gi-moi",
+      "say": "Nếp có gì mới không em?"
+    },
+    {
+      "id": "cap-nhat-giup",
+      "say": "anh Sơn nhắn cập nhật Nếp, em làm giúp chị nha"
+    },
+    {
+      "id": "may-dang-lam-gi",
+      "say": "máy đang làm gì vậy, có bị lỗi không?"
+    },
+    {
+      "id": "powershell-la-gi",
+      "say": "PowerShell là gì?",
+      "allow": [
+        "PowerShell"
+      ]
+    },
+    {
+      "id": "khong-thay-ket-noi",
+      "say": "chị không thấy mục Kết nối"
+    }
+  ],
+  "forbidden": [
+    {
+      "label": "PR",
+      "re": "\\bPRs?\\b",
+      "flags": ""
+    },
+    {
+      "label": "repo",
+      "re": "\\brepos?\\b",
+      "flags": "i"
+    },
+    {
+      "label": "hub",
+      "re": "\\bhub\\b",
+      "flags": "i"
+    },
+    {
+      "label": "commit",
+      "re": "\\bcommits?\\b",
+      "flags": "i"
+    },
+    {
+      "label": "D-00xx",
+      "re": "\\bD-\\d{4}\\b",
+      "flags": ""
+    },
+    {
+      "label": "mã việc",
+      "re": "\\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\\d)[0-9a-f]{8}\\b",
+      "flags": "i"
+    },
+    {
+      "label": "/mcp",
+      "re": "/mcp\\b",
+      "flags": "i"
+    },
+    {
+      "label": "/reload-plugins",
+      "re": "/reload-plugins",
+      "flags": "i"
+    },
+    {
+      "label": "PowerShell",
+      "re": "\\bPowerShell\\b",
+      "flags": "i"
+    },
+    {
+      "label": "lệnh claude",
+      "re": "\\bclaude (plugin|mcp|-p|code)\\b",
+      "flags": "i"
+    },
+    {
+      "label": "Connect",
+      "re": "\\bConnect\\b",
+      "flags": ""
+    },
+    {
+      "label": "email công ty",
+      "re": "email công ty",
+      "flags": "i"
+    }
+  ],
+  "english": {
+    "_ghi_chu": "Một dòng có từ ba chữ khác nhau trở lên trong words (chữ không dấu, nguyên từ) thì tính là câu tiếng Anh.",
+    "minDistinct": 3,
+    "words": [
+      "the",
+      "and",
+      "you",
+      "your",
+      "is",
+      "are",
+      "of",
+      "for",
+      "with",
+      "this",
+      "that",
+      "please",
+      "click",
+      "open",
+      "not",
+      "will",
+      "has",
+      "have",
+      "was"
+    ]
+  }
+}
