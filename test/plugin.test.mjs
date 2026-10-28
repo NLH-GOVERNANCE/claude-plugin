@@ -533,3 +533,11 @@ describe('plugin nlh', () => {
   });
 });
 
+
+test('"chị không thấy mục Kết nối": dòng mở đầu phiên và skill nep đều đưa link thêm Nếp, dặn không gõ /mcp', () => {
+  const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
+  const hooks = readFileSync(join(pluginDir, 'hooks/hooks.json'), 'utf8');
+  const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+  assert.ok(hooks.includes(`the question chị không thấy mục Kết nối gets this link and one line, never /mcp: ${link}`));
+  assert.ok(skill.includes(`one line with this link, never \`/mcp\`: ${link}`));
+});
