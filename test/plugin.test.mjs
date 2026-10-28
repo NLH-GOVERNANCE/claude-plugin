@@ -439,6 +439,29 @@ describe('plugin nlh', () => {
     assert.match(skill, /When Loa sends a message into this session .*open the ticket with `show_ticket`, `claim` it if it is still waiting/);
   });
 
+  test('luật 22: hook đầu phiên và skill dặn làm ngay điều người dùng hỏi, tra lặng lẽ, việc chờ chỉ một dòng cuối hay khi được hỏi, tối đa 3 việc', () => {
+    const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
+    const line = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.match(line, /do at once what the user asked; never make them wait for a lookup before the first words/);
+    assert.match(line, /silently/);
+    assert.match(line, /do not tell the user what is waiting before the answer/);
+    assert.match(line, /add exactly one line at the end, naming it by its title/);
+    assert.match(line, /at most 3 items/);
+    assert.match(line, /do not call save_chat per turn/);
+    // Câu cũ ép kể việc chờ ngay đầu phiên đã bỏ.
+    assert.doesNotMatch(line, /then tell the user in plain Vietnamese what is waiting/);
+    const skillPath = join(pluginDir, 'skills/nep/SKILL.md');
+    const skill = readFileSync(skillPath, 'utf8');
+    assert.match(skill, /do at once what the user asked\. Never make them wait for a lookup before the first words/);
+    assert.match(skill, /Do not tell the user what is waiting before the answer/);
+    assert.match(skill, /add exactly one line at the end, naming it by its title/);
+    assert.match(skill, /at most 3 items, the ones that need them first/);
+    assert.doesNotMatch(skill, /Hôm nay chưa có việc chờ bạn/);
+    // "Nếp có gì mới": bản trong skill khớp bản gói, để câu trả lời không nói bản cũ.
+    const { version } = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
+    assert.ok(skill.includes(`Current: version ${version}.`), 'phần What is new nói sai bản gói');
+  });
+
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {
     // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /work (phiếu bdec651d).
     const promise = /(mở|mở claude|mở chat)[^.\n"]{0,20}là thấy việc/i;
