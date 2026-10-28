@@ -90,7 +90,7 @@ export function renderTable(results, config) {
 }
 
 // Chạy `claude -p` một ca, câu hỏi đưa qua stdin (không dính quy tắc trích dẫn của shell), từ một thư mục trống để phiên
-// không nạp CLAUDE.md hay gói nào khác của dự án. Trả về các dòng kèm thời gian nhận.
+// không nạp CLAUDE.md hay gói nào khác của dự án. Lỗi hook lúc đóng phiên (máy chủ chưa nối) bỏ đi, không in. Trả về các dòng kèm thời gian nhận.
 function runClaude(say, pluginDir, cwd, bin = process.env.CLAUDE_BIN || 'claude') {
   return new Promise((resolve, reject) => {
     const args = [
@@ -103,7 +103,7 @@ function runClaude(say, pluginDir, cwd, bin = process.env.CLAUDE_BIN || 'claude'
     const started = Date.now();
     // claude.cmd (cài bằng npm) trên Windows chỉ chạy qua shell, nên bọc dấu ngoặc kép quanh đường dẫn có khoảng trắng.
     const viaShell = process.platform === 'win32' && !bin.endsWith('.exe');
-    const child = spawn(bin, viaShell ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args, { cwd, stdio: ['pipe', 'pipe', 'inherit'], shell: viaShell });
+    const child = spawn(bin, viaShell ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args, { cwd, stdio: ['pipe', 'pipe', 'ignore'], shell: viaShell });
     const lines = [];
     let rest = '';
     child.stdout.on('data', (chunk) => {
