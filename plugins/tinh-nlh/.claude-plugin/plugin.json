@@ -33,7 +33,7 @@
         "tower_key": {
           "type": "string",
           "title": "Khoá cho Loa",
-          "description": "Khoá tạo ở web Nếp: Kết nối, thẻ \"Khoá cho Loa trên máy\". Chỉ đọc việc của chính bạn. Để trống: biểu tượng Loa tỉnh NhiLe hỏi khoá trong ô nhập ẩn chữ.",
+          "description": "Để trống: biểu tượng Loa tỉnh NhiLe tự xin khoá, người dùng chỉ bấm Cho phép ở trang Nếp. Khoá chỉ đọc việc của chính bạn.",
           "sensitive": true
         },
         "hub_origin": {

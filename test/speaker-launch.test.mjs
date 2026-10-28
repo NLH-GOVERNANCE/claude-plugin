@@ -1,6 +1,6 @@
 // Phép thử lối mở Loa trong plugin (plugins/tinh-nlh/speaker): lệnh "bật Loa" chép Loa sang ~/.tinh-nlh/speaker và tạo
 // biểu tượng trên Desktop; bấm đúp thì lối mở lấy bản mới nhất từ plugin đã cài, tự cài Claude Code và Node khi thiếu,
-// hỏi khoá trong ô nhập ẩn chữ, rồi mở Claude Code với kênh tower qua --mcp-config. Không cần repo, không cần GitHub.
+// xin khoá bằng nút "Cho phép" (pair.mjs), rồi mở Claude Code với kênh tower qua --mcp-config. Không cần repo, không cần GitHub.
 // start.sh chạy thật bằng bash ở chế độ thử (SPEAKER_DRY_RUN), với security giả; start.ps1 và setup.ps1 chạy thật trên
 // Windows với thư mục người dùng giả. Không mở Claude, không gọi mạng.
 import assert from 'node:assert/strict';
@@ -32,7 +32,7 @@ after(() => {
 function fakeHome(name = 'user') {
   const home = join(temp('thap-home'), name);
   const installed = join(home, '.claude/plugins/cache/nlh-governance/nlh', version);
-  for (const path of ['.claude-plugin/plugin.json', 'speaker/speaker.mjs', 'speaker/start.ps1', 'speaker/start.sh']) {
+  for (const path of ['.claude-plugin/plugin.json', 'speaker/speaker.mjs', 'speaker/pair.mjs', 'speaker/start.ps1', 'speaker/start.sh']) {
     mkdirSync(dirname(join(installed, path)), { recursive: true });
     cpSync(join(plugin, path), join(installed, path));
   }
@@ -61,7 +61,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(command, /Never ask for the key, never accept it in chat/);
   });
 
-  test('start.ps1 (Windows): UTF-8 có BOM; NLH_TOWER chỉ trong cấu hình kênh; khoá ô ẩn chữ, DPAPI; Claude Code và Node bản chính thức, kiểm mã băm', () => {
+  test('start.ps1 (Windows): UTF-8 có BOM; NLH_TOWER chỉ trong cấu hình kênh; khoá xin bằng nút Cho phép (pair.mjs), không ô dán; Claude Code và Node bản chính thức, kiểm mã băm', () => {
     const raw = readFileSync(join(plugin, 'speaker/start.ps1'));
     assert.deepEqual([...raw.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 có BOM cho PowerShell 5.1');
     const ps = raw.toString('utf8');
@@ -70,10 +70,9 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; CLAUDE_BIN = \$claude \}/);
     assert.doesNotMatch(ps, /Tháp/);
     assert.doesNotMatch(ps, /\$env:NLH_TOWER\s*=|skip-permissions|bypassPermissions|AsPlainText|ConvertFrom-SecureString -Key|Write-Host \$secure/);
-    assert.match(ps, /Read-Host -AsSecureString/);
-    assert.match(ps, /\$secure \| ConvertFrom-SecureString \| Set-Content -LiteralPath \$keyFile/);
-    assert.match(ps, /ZeroFreeBSTR/);
-    assert.ok(ps.includes("'^nlh_tower_[0-9a-f]{64}$'"));
+    assert.doesNotMatch(ps, /Read-Host -AsSecureString|ConvertTo-SecureString/, 'không còn ô dán khoá');
+    assert.ok(ps.includes('& $node $pair --dir $Dir | Out-Host'));
+    assert.ok(ps.includes("Join-Path $best.Root 'speaker\\pair.mjs'"), 'chép pair.mjs từ gói');
     assert.ok(ps.includes(`'${KEY_FILE}'`));
     assert.match(ps, /'https:\/\/claude\.ai\/install\.ps1'/);
     assert.match(ps, /\$base = 'https:\/\/nodejs\.org\/dist\/latest-v22\.x'/);
@@ -89,15 +88,14 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /Kênh báo nhanh chưa mở được\. Loa vẫn chạy, mỗi 10 phút xem việc một lần\./);
   });
 
-  test('start.sh (macOS): khoá ô ẩn chữ vào Keychain qua stdin của security, đúng mục kênh đọc; cùng cách mở Claude như Windows', () => {
+  test('start.sh (macOS): khoá xin bằng nút Cho phép (pair.mjs), đúng mục Keychain kênh đọc; cùng cách mở Claude như Windows', () => {
     const sh = read('speaker/start.sh');
     assert.match(sh, /^#!\/bin\/bash\n/);
     assert.ok(sh.includes(`SERVICE=${KEYCHAIN.service}\n`) && sh.includes(`ACCOUNT=${KEYCHAIN.account}\n`));
-    assert.match(sh, /IFS= read -r -s -p/);
-    // Khoá chỉ đi qua printf (lệnh có sẵn của bash) vào stdin của security -i, không nằm trong dòng lệnh.
-    const adds = sh.split('\n').filter((line) => line.includes('add-generic-password'));
-    assert.equal(adds.length, 1);
-    assert.match(adds[0], /^\s*printf 'add-generic-password -U -s %s -a %s -w %s\\n' "\$SERVICE" "\$ACCOUNT" "\$key" \| "\$SECURITY" -i/);
+    assert.doesNotMatch(sh, /read -r -s|add-generic-password/, 'không còn ô dán khoá; khoá do pair.mjs cất');
+    assert.ok(sh.includes('"$NODE" "$DIR/pair.mjs" --dir "$DIR" || stop_loa'));
+    // pair.mjs cất khoá vào Keychain qua stdin của security -i, không nằm trong dòng lệnh.
+    assert.match(read('speaker/pair.mjs'), /execFileSync\('\/usr\/bin\/security', \['-i'\], \{\s+input: `add-generic-password -U -s \$\{KEYCHAIN\.service\} -a \$\{KEYCHAIN\.account\} -w \$\{key\}\\n`/);
     assert.ok(sh.includes(`set -- ${CLAUDE_ARGS.map((arg) => (arg === '<config>' ? '"$CONFIG"' : arg === '<settings>' ? '"$SETTINGS"' : arg.includes(' ') ? `'${arg}'` : arg)).join(' ')}`));
     assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude \}/);
     assert.doesNotMatch(sh, /Tháp(?! tỉnh NhiLe\.command)/);
@@ -139,7 +137,7 @@ const posix = (path) => (process.platform === 'win32' ? path.replace(/^([A-Za-z]
 const same = (path) => path.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:/`);
 
 describe('start.sh chạy thật (chế độ thử, security giả)', { skip: bash ? false : 'không có bash' }, () => {
-  test('lần đầu: chép Loa từ plugin, hỏi khoá rồi lưu vào Keychain qua stdin, viết cấu hình kênh; lần sau không hỏi lại', () => {
+  test('lần đầu: chép Loa từ plugin, gọi pair.mjs xin khoá bằng nút Cho phép, viết cấu hình kênh; lần sau không xin lại', () => {
     const home = fakeHome();
     const bin = temp('thap-bin');
     // claude giả ở chỗ trình cài chính thức đặt; security giả giữ Keychain trong một file và ghi lại dòng lệnh đã gọi.
@@ -161,6 +159,16 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
       ].join('\n'),
     );
     chmodSync(security, 0o755);
+    // pair.mjs giả trong plugin đã cài (bản thật gọi mạng): ghi lại đối số và đặt khoá vào Keychain giả như bản thật sau khi người bấm Cho phép.
+    const pairArgv = join(bin, 'pair-argv.json');
+    writeFileSync(
+      join(home, '.claude/plugins/cache/nlh-governance/nlh', version, 'speaker/pair.mjs'),
+      `import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(pairArgv)}, JSON.stringify(process.argv.slice(2)));
+writeFileSync(${JSON.stringify(join(bin, 'keychain.txt'))}, 'da-co-khoa\\n');
+console.log('Đã lưu khoá Loa trên máy này.');
+`,
+    );
     const run = (input) =>
       spawnSync(bash, [posix(join(plugin, 'speaker/start.sh'))], {
         input,
@@ -168,9 +176,10 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
         env: { ...process.env, HOME: posix(home), SPEAKER_SECURITY: posix(security), SPEAKER_DRY_RUN: '1', TOWER_ORIGIN: '' },
       });
 
-    const first = run(`không phải khoá\n${KEY}\n`);
+    const first = run('');
     assert.equal(first.status, 0, first.stdout + first.stderr);
-    assert.match(first.stdout, /Chuỗi vừa dán không phải khoá Loa/);
+    assert.match(first.stdout, /Loa cần được bạn cho phép một lần\. Trang Nếp sắp mở: bấm Cho phép\./);
+    assert.doesNotMatch(first.stdout, /Dán khoá|dán khoá/);
     assert.match(first.stdout, /Đã lưu khoá Loa trên máy này\./);
     assert.match(first.stdout, /Loa đang nghe Nếp\. Đừng đóng cửa sổ này\./);
     assert.match(first.stdout, /Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn./);
@@ -181,11 +190,8 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
     assert.deepEqual(dry.split(' | ').slice(1), CLAUDE_ARGS.map(placed(posix(dir))));
     assert.equal(readFileSync(join(dir, 'speaker.mjs'), 'utf8'), read('speaker/speaker.mjs'));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
-    assert.equal(
-      readFileSync(join(bin, 'keychain.txt'), 'utf8'),
-      `add-generic-password -U -s ${KEYCHAIN.service} -a ${KEYCHAIN.account} -w ${KEY}\n`,
-    );
-    assert.ok(!readFileSync(join(bin, 'argv.txt'), 'utf8').includes(KEY), 'khoá không nằm trong dòng lệnh');
+    assert.equal(readFileSync(join(dir, 'pair.mjs'), 'utf8').includes('da-co-khoa'), true, 'chép pair.mjs từ plugin sang thư mục Loa');
+    assert.deepEqual(JSON.parse(readFileSync(pairArgv, 'utf8')).map(same), ['--dir', same(posix(dir))]);
     const config = JSON.parse(readFileSync(join(dir, 'speaker-mcp.json'), 'utf8'));
     assert.deepEqual(Object.keys(config.mcpServers), ['speaker']);
     assert.deepEqual(config.mcpServers.speaker.args.map(same), [same(`${posix(dir)}/speaker.mjs`)]);
@@ -194,7 +200,7 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
       { ...towerEnv, NLH_TOWER_DIR: same(towerEnv.NLH_TOWER_DIR), NLH_TOWER_WORK: same(towerEnv.NLH_TOWER_WORK), CLAUDE_BIN: same(towerEnv.CLAUDE_BIN) },
       { NLH_TOWER: '1', NLH_TOWER_DIR: same(posix(dir)), NLH_TOWER_WORK: same(`${posix(home)}/TinhNhiLe`), CLAUDE_BIN: same(`${posix(home)}/.local/bin/claude`) },
     );
-    assert.ok(!JSON.stringify(config).includes(KEY), 'khoá không vào cấu hình');
+    assert.ok(!JSON.stringify(config).includes('nlh_tower_'), 'khoá không vào cấu hình');
     assert.deepEqual(JSON.parse(readFileSync(join(dir, 'speaker-settings.json'), 'utf8')), { disableAllHooks: true }, 'phiên Loa tắt mọi hook');
 
     // Bản lối mở cũ trong thư mục Loa (chép từ lần trước, trước khi gói cập nhật): chép bản mới rồi chạy ngay bản mới một lần.
@@ -213,7 +219,7 @@ describe('start.sh chạy thật (chế độ thử, security giả)', { skip: b
 
     const again = run('');
     assert.equal(again.status, 0, again.stdout + again.stderr);
-    assert.doesNotMatch(again.stdout, /Khoá cho Loa|Đã lưu khoá/);
+    assert.doesNotMatch(again.stdout, /cho phép một lần|Đã lưu khoá/);
   });
 
   test('setup.sh: tạo "Loa tỉnh NhiLe.command" trỏ tới start.sh; bỏ "Tháp tỉnh NhiLe.command" cũ của mình; lối tắt cùng tên của người khác thì giữ nguyên', () => {
