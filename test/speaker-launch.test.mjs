@@ -103,7 +103,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /'https:\/\/claude\.ai\/install\.ps1'/);
     assert.match(ps, /\$base = 'https:\/\/nodejs\.org\/dist\/latest-v22\.x'/);
     assert.match(ps, /Get-FileHash -LiteralPath \$part -Algorithm SHA256/);
-    assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks|Register-ScheduledTask/i, 'tự mở đặt ở setup, không ở lối mở');
+    assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks/i, 'tự mở là tác vụ của người dùng, không thư mục Startup hay Run');
     // Giữ máy thức khi Loa mở; kênh hỏng thì mở lại không cờ, chỉ nhịp 10 phút, in một dòng (phiếu 98bd8b93).
     assert.match(ps, /SetThreadExecutionState\(\[uint32\]'0x80000001'\)/);
     assert.match(ps, /& \$claude @loop/);
@@ -147,11 +147,14 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     const sh = read('speaker/setup.sh');
     assert.match(sh, /name='Loa tỉnh NhiLe'/);
     // Tự mở khi đăng nhập máy: tác vụ của chính người dùng, không cần quyền quản trị (phiếu 98bd8b93, dòng 4b62d007).
+    // 28/10: setup (chạy trong phiên Claude, có thể bị chặn đặt lịch ở chế độ Auto) không đăng ký gì; lối mở làm khi người dùng bấm đúp.
     const setupPs = ps.toString('utf8');
-    assert.match(setupPs, /New-ScheduledTaskTrigger -AtLogOn -User \$user/);
-    assert.match(setupPs, /-LogonType Interactive -RunLevel Limited/);
-    assert.match(setupPs, /Register-ScheduledTask -TaskName \$name /);
-    assert.match(setupPs, /if \(-not \$NoAutostart\)/);
+    assert.doesNotMatch(setupPs, /Register-ScheduledTask|NoAutostart|New-ScheduledTask/);
+    const startPs = read('speaker/start.ps1');
+    assert.match(startPs, /New-ScheduledTaskTrigger -AtLogOn -User \$user/);
+    assert.match(startPs, /-LogonType Interactive -RunLevel Limited/);
+    assert.match(startPs, /Register-ScheduledTask -TaskName \$TaskName /);
+    assert.match(startPs, /if \(-not \$Quiet -and -not \$DryRun -and -not \$CheckReady -and \$Handoff -eq 0\) \{ Register-Login \}/);
     assert.match(sh, /vn\.nlh\.tinh-nlh\.speaker\.plist/);
     assert.match(sh, /link="\$DESKTOP\/\$name\.command"/);
     assert.match(sh, /giữ nguyên lối tắt đó/);
@@ -361,13 +364,37 @@ const ps = (file, args, env = {}) =>
   });
 
 describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục người dùng giả)', { skip: process.platform === 'win32' ? false : 'chỉ Windows' }, () => {
+  test('start.ps1 -RegisterOnly: đăng ký tác vụ đăng nhập của người dùng trỏ tới loa.vbs; chạy lại không đổi; setup.ps1 không đăng ký', () => {
+    const home = join(temp('loa-login'), 'Thùy ỉ');
+    const dir = join(home, '.tinh-nlh', 'speaker');
+    mkdirSync(dir, { recursive: true });
+    const name = `Loa thử ${Date.now()}`;
+    const run = () => ps(join(plugin, 'speaker/start.ps1'), ['-RegisterOnly', '-Dir', dir, '-TaskName', name], { USERPROFILE: home });
+    const show = () =>
+      spawnSync(powershell, ['-NoProfile', '-Command', `[Console]::OutputEncoding = [Text.Encoding]::UTF8; $t = Get-ScheduledTask -TaskName '${name}'; $t.Actions[0].Execute; $t.Actions[0].Arguments; $t.Triggers[0].CimClass.CimClassName; $t.Principal.RunLevel`], { encoding: 'utf8', cwd: tmpdir() }).stdout.trim().split(/\r?\n/);
+    try {
+      const first = run();
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      const [execute, args, trigger, level] = show();
+      assert.match(execute, /wscript\.exe$/i);
+      assert.equal(args, `"${join(dir, 'loa.vbs')}" login`);
+      assert.match(trigger, /LogonTrigger/);
+      assert.equal(level, 'Limited');
+      assert.deepEqual(show(), [execute, args, trigger, level]);
+      assert.equal(run().status, 0, 'chạy lại không lỗi');
+      assert.equal(existsSync(join(dir, 'loa.log')), false, 'không ghi lỗi nào');
+    } finally {
+      spawnSync(powershell, ['-NoProfile', '-Command', `Unregister-ScheduledTask -TaskName '${name}' -Confirm:$false -ErrorAction SilentlyContinue`], { cwd: tmpdir() });
+    }
+  });
+
   test('setup.ps1: chép Loa, tạo lối tắt trỏ tới start.ps1 (tên người dùng có dấu vẫn đúng); bỏ lối tắt "Tháp tỉnh NhiLe" cũ của mình; lối tắt cùng tên trỏ chỗ khác thì giữ nguyên', () => {
     const home = join(temp('thap-setup'), 'Thùy ỉ');
     mkdirSync(home);
     const desktop = join(home, 'Desktop');
     mkdirSync(desktop);
     const dir = join(home, '.tinh-nlh', 'speaker');
-    const done = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
+    const done = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
     assert.equal(done.status, 0, done.stdout + done.stderr);
     assert.match(done.stdout, /Đã có biểu tượng Loa tỉnh NhiLe trên màn hình chính\./);
     const link = join(desktop, 'Loa tỉnh NhiLe.lnk');
@@ -386,24 +413,24 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     for (const name of ['start.ps1', 'loa.vbs', 'policy.mjs']) assert.ok(readFileSync(join(dir, name)).equals(readFileSync(join(plugin, 'speaker', name))), `chép ${name}`);
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
     // Lối tắt cùng tên trỏ tới bản Loa cũ của mình (~\.tinh-nlh) thì thay; không đọc được (của người khác) thì giữ.
-    const older = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', join(home, '.tinh-nlh', 'cu'), '-Desktop', desktop, '-NoAutostart']);
+    const older = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', join(home, '.tinh-nlh', 'cu'), '-Desktop', desktop]);
     assert.match(older.stdout, /Đã có biểu tượng Loa tỉnh NhiLe/);
     assert.match(target(), /\\\.tinh-nlh\\cu\\loa\.vbs/, 'thay lối tắt Loa cũ của mình');
-    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
+    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
     assert.match(target(), /\\\.tinh-nlh\\speaker\\loa\.vbs/);
 
     // Lối tắt cũ "Tháp tỉnh NhiLe" trỏ tới ~.tinh-nlh (bản trước khi đổi tên Loa): setup tự bỏ. Lối tắt cũ không đọc được
     // (không phải của mình) thì giữ.
     const old = join(desktop, 'Tháp tỉnh NhiLe.lnk');
     cpSync(link, old);
-    const replaced = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
+    const replaced = ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
     assert.match(replaced.stdout, /Đã bỏ biểu tượng cũ Tháp tỉnh NhiLe\./);
     assert.ok(!existsSync(old));
     writeFileSync(old, 'không phải lối tắt');
-    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']);
+    ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]);
     assert.ok(existsSync(old), 'không bỏ lối tắt không phải của mình');
     writeFileSync(link, 'không phải lối tắt');
-    assert.match(ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop, '-NoAutostart']).stdout, /giữ nguyên lối tắt đó/);
+    assert.match(ps(join(plugin, 'speaker/setup.ps1'), ['-Dir', dir, '-Desktop', desktop]).stdout, /giữ nguyên lối tắt đó/);
   });
 
   // Loa chạy ẩn mà trục trặc: không ai thấy cửa sổ, nên để lại một dòng cho phiên Claude kế tiếp nói và báo cho ô CTO (hooks/machine.mjs).
