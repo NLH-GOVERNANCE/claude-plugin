@@ -34,7 +34,7 @@ after(() => {
 function fakeHome(name = 'user', layout = 'cache') {
   const home = join(temp('thap-home'), name);
   const installed = layout === 'synced' ? join(home, '.claude/plugins/synced/org-id/plugin-id') : join(home, '.claude/plugins/cache/nlh-governance/nlh', version);
-  for (const path of ['.claude-plugin/plugin.json', 'speaker/speaker.mjs', 'speaker/pair.mjs', 'speaker/policy.mjs', 'speaker/loa.vbs', 'speaker/start.ps1', 'speaker/start.sh']) {
+  for (const path of ['.claude-plugin/plugin.json', 'speaker/speaker.mjs', 'speaker/pair.mjs', 'speaker/policy.mjs', 'speaker/prepare.mjs', 'speaker/loa.vbs', 'speaker/toast.ps1', 'speaker/start.ps1', 'speaker/start.sh']) {
     mkdirSync(dirname(join(installed, path)), { recursive: true });
     cpSync(join(plugin, path), join(installed, path));
   }
@@ -46,9 +46,11 @@ function fakeHome(name = 'user', layout = 'cache') {
 const COMMON = ['-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--settings', '<settings>'];
 // Máy cho phép kênh của gói (policy.mjs): kênh theo tên gói, câu mở đầu chạy skill một lần, không đặt vòng 10 phút (17e647c1 phần 4).
 const CHANNEL_ARGS = ['/nlh:speaker-loop', ...COMMON, '--channels', 'plugin:nlh@nlh-governance'];
-// Chưa được phép (bấm Không, người quản trị tắt): vòng 10 phút qua công cụ pending của máy chủ trong gói; cũng là lối dự phòng.
+// Vòng 10 phút qua công cụ pending của máy chủ trong gói: lối dự phòng khi kênh theo tên gói không mở được.
 const LOOP_ARGS = ['/loop 10m /nlh:speaker-loop', ...COMMON];
-// Không có gói cài từ chợ (chỉ bản đồng bộ từ claude.ai): vòng 10 phút, máy chủ Loa nạp bằng --mcp-config như trước.
+// Máy chưa cho phép kênh của gói (không ai cần quyền quản trị, 28/10): kênh phát triển, máy chủ Loa nạp bằng --mcp-config; hộp hỏi tiếng Anh
+// duy nhất do trợ giúp ẩn (-Answer) bấm Enter. Lối dự phòng: vòng 10 phút cùng cấu hình.
+const DEV_ARGS = ['/nlh:speaker-loop', ...COMMON, '--mcp-config', '<config>', '--dangerously-load-development-channels', 'server:speaker'];
 const CONFIG_ARGS = [...LOOP_ARGS, '--mcp-config', '<config>'];
 
 // Máy "đã cho phép": một chính sách giả có đúng hai khoá, ở thư mục tạm; LOA_MANAGED_SETTINGS_FILE chỉ chỗ đọc cho policy.mjs.
@@ -78,27 +80,41 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     const raw = readFileSync(join(plugin, 'speaker/start.ps1'));
     assert.deepEqual([...raw.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 có BOM cho PowerShell 5.1');
     const ps = raw.toString('utf8');
-    // Cách mở Claude theo máy (policy.mjs mode): kênh theo tên gói, không cờ dangerously, không hộp và dòng tiếng Anh.
+    // Cách mở Claude theo máy: đã cho phép kênh của gói (policy.mjs mode) thì kênh theo tên gói; chưa thì kênh phát triển, không ai cần quyền quản trị.
     assert.ok(ps.includes("$common = @('-n', 'Loa tỉnh NhiLe', '--model', 'sonnet', '--settings', $settings)"));
     assert.ok(ps.includes("$arguments = @('/nlh:speaker-loop') + $common + @('--channels', ($mode -replace '^channel ', ''))"));
     assert.ok(ps.includes("$loop = @('/loop 10m /nlh:speaker-loop') + $common"));
-    assert.ok(ps.includes("$arguments = $loop + @('--mcp-config', $config)"));
-    assert.doesNotMatch(ps, /dangerously|local development|Loading development|no MCP server|Authorize/);
-    // Chạy ngầm: loa.vbs mở start.ps1 -Auto; chưa sẵn sàng thì mở bản nhìn thấy, bản đó tự giao lại cho bản ngầm; một Loa mỗi máy.
+    assert.ok(ps.includes("$arguments = @('/nlh:speaker-loop') + $common + @('--mcp-config', $config, '--dangerously-load-development-channels', 'server:speaker')"));
+    assert.ok(ps.includes("$loop = $loop + @('--mcp-config', $config)"));
+    // Không cửa sổ, không hộp xin quyền quản trị, không bản nhìn thấy: loa.vbs mở start.ps1 -Auto; một Loa mỗi máy.
     assert.match(ps, /\[switch\]\$Auto/);
-    assert.match(ps, /\[int\]\$Handoff = 0/);
+    assert.doesNotMatch(ps, /Handoff|CheckReady|Test-Ready|Test-Listening|policy\.mjs'? ensure|RunAs|-Verb/);
     assert.match(ps, /New-Object Threading\.Mutex\(\$false, 'Local\\LoaTinhNhiLe'\)/);
-    assert.match(ps, /if \(\$Auto -and -not \$DryRun -and -not \(Test-Ready\)\)/);
     assert.match(ps, /if \(-not \$Auto\) \{ Read-Host 'Bấm Enter để đóng'/);
     assert.match(ps, /last-error\.json/, 'chạy ẩn mà trục trặc: để lại một dòng cho phiên Claude kế tiếp');
-    assert.match(ps, /-not \$DryRun -and \(Test-Path -LiteralPath \$policy\) -and -not \$declined -and -not \$Auto/, 'hộp xin quyền không bao giờ hiện khi chạy ngầm');
+    // Trợ giúp ẩn: chỉ gửi Enter khi màn hình đúng là câu hỏi kênh phát triển và có dòng chọn "1. I am using this for local development".
+    assert.match(ps, /\[int\]\$Answer = 0/);
+    assert.ok(ps.includes("$question = 'Loading development channels'"));
+    assert.ok(ps.includes("$choice = '1\\. I am using this for local development'"));
+    assert.match(ps, /if \(\$screen -match \$question -and \$screen -match \$choice\)/);
+    assert.ok(ps.includes('-Answer $PID'));
+    // Đăng nhập Claude trước khi mở: chưa có thì một hộp thoại tiếng Việt và một lần bấm ở trình duyệt, rồi đánh dấu các câu hỏi đầu của Claude Code là đã trả lời.
+    assert.match(ps, /Loa cần bạn đăng nhập Claude một lần\./);
+    assert.match(ps, /-ArgumentList 'auth', 'login' -WindowStyle Hidden/);
+    assert.match(ps, /prepare\.mjs/);
+    // Chạy ẩn mà người dùng bấm đúp rồi dừng giữa chừng: một hộp thoại nói câu đó (tác vụ đăng nhập và chế độ thử thì không hiện hộp).
+    assert.match(ps, /if \(\$Auto -and -not \$Quiet -and -not \$DryRun\) \{\s+try \{ Add-Type -AssemblyName PresentationFramework; \[void\]\[Windows\.MessageBox\]::Show\(\$text, 'Loa tỉnh NhiLe'\)/);
+    // Loa ẩn thoát sớm (câu hỏi kênh không được trả lời) thì chạy kiểu 10 phút ở mọi chế độ; Loa ẩn dừng không lỗi thì để lại một dòng cho phiên sau (laptop 28/10).
+    assert.match(ps, /-lt 60\) \{\s+Write-Host ''\s+Write-Host 'Kênh báo nhanh chưa mở được/);
+    assert.doesNotMatch(ps, /-lt 60 -and \$mode -like/);
+    assert.match(ps, /if \(\$Auto\) \{ Stop-Loa 'Loa đã dừng\. Bấm đúp Loa để mở lại\.' \}/);
     // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
-    assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; CLAUDE_BIN = \$claude \}/);
+    assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; NLH_TOWER_TOAST = '1'; CLAUDE_BIN = \$claude \}/);
     assert.doesNotMatch(ps, /Tháp/);
     assert.doesNotMatch(ps, /\$env:NLH_TOWER\s*=|skip-permissions|bypassPermissions|AsPlainText|ConvertFrom-SecureString -Key|Write-Host \$secure/);
     assert.doesNotMatch(ps, /Read-Host -AsSecureString|ConvertTo-SecureString/, 'không còn ô dán khoá');
     assert.ok(ps.includes('& $node $pair --dir $Dir | Out-Host'));
-    assert.ok(ps.includes("foreach ($name in @('speaker.mjs', 'pair.mjs', 'policy.mjs', 'loa.vbs'))"), 'chép các file Loa từ gói');
+    assert.ok(ps.includes("foreach ($name in @('speaker.mjs', 'pair.mjs', 'policy.mjs', 'prepare.mjs', 'loa.vbs', 'toast.ps1'))"), 'chép các file Loa từ gói');
     assert.ok(ps.includes(`'${KEY_FILE}'`));
     assert.match(ps, /'https:\/\/claude\.ai\/install\.ps1'/);
     assert.match(ps, /\$base = 'https:\/\/nodejs\.org\/dist\/latest-v22\.x'/);
@@ -161,7 +177,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(startPs, /New-ScheduledTaskTrigger -AtLogOn -User \$user/);
     assert.match(startPs, /-LogonType Interactive -RunLevel Limited/);
     assert.match(startPs, /Register-ScheduledTask -TaskName \$TaskName /);
-    assert.match(startPs, /if \(-not \$Quiet -and -not \$DryRun -and -not \$CheckReady -and \$Handoff -eq 0\) \{ Register-Login \}/);
+    assert.match(startPs, /if \(-not \$Quiet -and -not \$DryRun\) \{ Register-Login \}/);
     assert.match(sh, /vn\.nlh\.tinh-nlh\.speaker\.plist/);
     assert.match(sh, /link="\$DESKTOP\/\$name\.command"/);
     assert.match(sh, /giữ nguyên lối tắt đó/);
@@ -553,24 +569,24 @@ process.exitCode = 2;
       const line = (tag) => out.stdout.split(/\r?\n/).find((text) => text.startsWith(`${tag} `));
       return { out, line };
     };
-    // Máy chưa cho phép kênh: vòng 10 phút, không --mcp-config, không speaker-mcp.json.
+    // Máy chưa cho phép kênh: kênh phát triển qua --mcp-config (28/10, không cần quyền quản trị); lối dự phòng vòng 10 phút cùng cấu hình.
     const run = launch(home, noPolicy());
     assert.doesNotMatch(run.out.stdout, /Khoá cho Loa|Đã lưu khoá/);
     assert.equal(readFileSync(join(dir, KEY_FILE), 'utf8'), sealed);
     assert.equal(readFileSync(join(dir, 'speaker.mjs'), 'utf8'), read('speaker/speaker.mjs'));
     assert.equal(readFileSync(join(dir, 'version.txt'), 'utf8').trim(), version);
-    assert.equal(run.line('DRYRUN'), `DRYRUN ${claude} ${LOOP_ARGS.map(placed(dir, sep)).join(' | ')}`);
-    assert.equal(run.line('DRYRUN-FALLBACK'), `DRYRUN-FALLBACK ${claude} ${LOOP_ARGS.map(placed(dir, sep)).join(' | ')}`);
-    assert.ok(!existsSync(join(dir, 'speaker-mcp.json')));
-    assert.doesNotMatch(run.out.stdout, /[Dd]angerously|development channel|Authorize/, 'không chữ tiếng Anh cho người dùng');
+    assert.equal(run.line('DRYRUN'), `DRYRUN ${claude} ${DEV_ARGS.map(placed(dir, sep)).join(' | ')}`);
+    assert.equal(run.line('DRYRUN-FALLBACK'), `DRYRUN-FALLBACK ${claude} ${CONFIG_ARGS.map(placed(dir, sep)).join(' | ')}`);
+    assert.ok(existsSync(join(dir, 'speaker-mcp.json')));
+    assert.doesNotMatch(run.out.stdout.split(/\r?\n/).filter((text) => !text.startsWith('DRYRUN')).join('\n'), /[Dd]angerously|development channel|Authorize/, 'không chữ tiếng Anh cho người dùng');
 
     // Đã cho phép: kênh theo tên gói; lối dự phòng vẫn là vòng 10 phút.
     const allowed = launch(home, allowedPolicy());
     assert.equal(allowed.line('DRYRUN'), `DRYRUN ${claude} ${CHANNEL_ARGS.map(placed(dir, sep)).join(' | ')}`);
     assert.equal(allowed.line('DRYRUN-FALLBACK'), `DRYRUN-FALLBACK ${claude} ${LOOP_ARGS.map(placed(dir, sep)).join(' | ')}`);
-    assert.ok(!existsSync(join(dir, 'speaker-mcp.json')));
+    assert.ok(!existsSync(join(dir, 'speaker-mcp.json')), 'kênh theo tên gói không cần --mcp-config');
 
-    // Gói chỉ có bản đồng bộ từ claude.ai: vòng 10 phút, máy chủ Loa nạp bằng --mcp-config.
+    // Gói chỉ có bản đồng bộ từ claude.ai: kênh phát triển, máy chủ Loa nạp bằng --mcp-config.
     const synced = fakeHome('Thùy ỉ', 'synced');
     mkdirSync(join(synced, '.local', 'bin'), { recursive: true });
     writeFileSync(join(synced, '.local', 'bin', 'claude.exe'), '');
@@ -578,12 +594,12 @@ process.exitCode = 2;
     cpSync(join(dir, KEY_FILE), join(synced, '.tinh-nlh', 'speaker', KEY_FILE));
     const syncedDir = join(synced, '.tinh-nlh', 'speaker');
     const onlySynced = launch(synced, allowedPolicy());
-    assert.equal(onlySynced.line('DRYRUN'), `DRYRUN ${join(synced, '.local', 'bin', 'claude.exe')} ${CONFIG_ARGS.map(placed(syncedDir, sep)).join(' | ')}`);
+    assert.equal(onlySynced.line('DRYRUN'), `DRYRUN ${join(synced, '.local', 'bin', 'claude.exe')} ${DEV_ARGS.map(placed(syncedDir, sep)).join(' | ')}`);
     const raw = readFileSync(join(syncedDir, 'speaker-mcp.json'));
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { speaker: tower } = JSON.parse(raw.toString('utf8')).mcpServers;
     assert.deepEqual(tower.args, [join(syncedDir, 'speaker.mjs')]);
-    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
+    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), NLH_TOWER_TOAST: '1', CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
     assert.match(tower.command, /node(\.exe)?$/i);
     assert.ok(existsSync(join(home, 'TinhNhiLe')), 'thư mục làm việc của Loa');
 

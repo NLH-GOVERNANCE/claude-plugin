@@ -20,7 +20,9 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'start.ps1') -Destination (Join-
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'pair.mjs') -Destination (Join-Path $Dir 'pair.mjs') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'policy.mjs') -Destination (Join-Path $Dir 'policy.mjs') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'prepare.mjs') -Destination (Join-Path $Dir 'prepare.mjs') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'loa.vbs') -Destination (Join-Path $Dir 'loa.vbs') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'toast.ps1') -Destination (Join-Path $Dir 'toast.ps1') -Force
 Set-Content -LiteralPath (Join-Path $Dir 'version.txt') -Value $version -Encoding ascii
 
 $name = 'Loa tỉnh NhiLe'
