@@ -25,18 +25,18 @@ export function needsSignIn(cache, now = Date.now()) {
   }) ?? null;
 }
 
-// One line for every door. Claude never tells the user to type /mcp, to sign in with "email công ty" or to press a button the
+// One line for every door. Claude never tells the user to type /mcp, to sign in with a "company email" or to press a button the
 // screen does not have: it may only ask to open the add link, follow the screen, and open a new session (the same for a first connect and a reconnect:
 // one way, no button named that the screen may not have).
 export function connectorLine(waiting) {
   const line =
     `Nếp connector: Nếp comes from the Nếp connector of the user's Claude account; this plugin has no Nếp server of its own. ` +
     `If you have no Nếp tool at all (no my_context from any server), say once in your first reply, in Vietnamese: ` +
-    `"Nếp chưa nối vào Claude của bạn: mở ${ADD_LINK} , làm theo màn hình, rồi mở phiên mới." ` +
+    `"Nếp chưa nối vào Claude của bạn: mở ${ADD_LINK} , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới." ` +
     `Never tell the user to type /mcp. Until then, nothing of this chat reaches the ledger.`;
   if (!waiting) return `${line}\n`;
   return `${line} Claude Code lists ${waiting} as needing sign-in: if Nếp tools fail, say once: ` +
-    `"Nếp cần nối lại: mở ${ADD_LINK} , làm theo màn hình, rồi mở phiên mới."\n`;
+    `"Nếp cần nối lại: mở ${ADD_LINK} , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới."\n`;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
