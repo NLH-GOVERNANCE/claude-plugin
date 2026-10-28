@@ -126,7 +126,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(sh, /^#!\/bin\/bash\n/);
     assert.ok(sh.includes(`SERVICE=${KEYCHAIN.service}\n`) && sh.includes(`ACCOUNT=${KEYCHAIN.account}\n`));
     assert.doesNotMatch(sh, /read -r -s|add-generic-password/, 'không còn ô dán khoá; khoá do pair.mjs cất');
-    assert.ok(sh.includes('"$NODE" "$DIR/pair.mjs" --dir "$DIR" || stop_loa'));
+    assert.ok(sh.includes('"$NODE" "$DIR/pair.mjs" --dir "$DIR"\n  paired=$?'));
     // pair.mjs cất khoá vào Keychain qua stdin của security -i, không nằm trong dòng lệnh.
     assert.match(read('speaker/pair.mjs'), /execFileSync\('\/usr\/bin\/security', \['-i'\], \{\s+input: `add-generic-password -U -s \$\{KEYCHAIN\.service\} -a \$\{KEYCHAIN\.account\} -w \$\{key\}\\n`/);
     assert.ok(sh.includes(`set -- /nlh:speaker-loop -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --channels "\${MODE#channel }"`));
@@ -255,6 +255,38 @@ console.log('Đã lưu khoá Loa trên máy này.');
     const again = run('');
     assert.equal(again.status, 0, again.stdout + again.stderr);
     assert.doesNotMatch(again.stdout, /cho phép một lần|Đã lưu khoá/);
+  });
+
+  // Nếp chưa nhận lời xin (pair.mjs thoát 2): macOS in đúng một câu như Windows, để lại dòng kỹ thuật cho phiên Claude kế tiếp báo người lo.
+  test('Nếp chưa nhận lời xin (pair.mjs thoát 2) → một câu, dòng kỹ thuật vào last-error.json, không lưu khoá', () => {
+    const home = fakeHome();
+    const bin = temp('thap-bin');
+    mkdirSync(join(home, '.local/bin'), { recursive: true });
+    writeFileSync(join(home, '.local/bin/claude'), '#!/bin/bash\nexit 0\n');
+    chmodSync(join(home, '.local/bin/claude'), 0o755);
+    const security = join(bin, 'security');
+    writeFileSync(security, ['#!/bin/bash', 'case "$1" in', '  find-generic-password) exit 44 ;;', 'esac', ''].join('\n'));
+    chmodSync(security, 0o755);
+    const sentence = 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Lần tới bạn mở Claude, máy sẽ tự báo người lo kỹ thuật.';
+    writeFileSync(
+      join(home, '.claude/plugins/cache/nlh-governance/nlh', version, 'speaker/pair.mjs'),
+      `import { writeFileSync } from 'node:fs';
+const at = process.argv.indexOf('--dir');
+writeFileSync(process.argv[at + 1] + '/pair-detail.txt', 'POST /tower/pair 404\\n');
+console.log(${JSON.stringify(sentence)});
+process.exitCode = 2;
+`,
+    );
+    const run = spawnSync(bash, [posix(join(plugin, 'speaker/start.sh'))], {
+      input: '\n',
+      encoding: 'utf8',
+      env: { ...process.env, HOME: posix(home), USERPROFILE: home, SPEAKER_SECURITY: posix(security), SPEAKER_DRY_RUN: '1', TOWER_ORIGIN: '', LOA_MANAGED_SETTINGS_FILE: noPolicy() },
+    });
+    assert.equal(run.status, 1, run.stdout + run.stderr);
+    assert.equal(run.stdout.split(sentence).length - 1, 1, 'câu hiện đúng một lần');
+    assert.doesNotMatch(run.stdout, /khoá|Thử lại sau ít phút|Loa chưa được phép/);
+    const left = JSON.parse(readFileSync(join(home, '.tinh-nlh/speaker/last-error.json'), 'utf8'));
+    assert.equal(left.reason, `${sentence} (POST /tower/pair 404)`);
   });
 
   // Hai máy khác nhau về quyền kênh (việc 26f86f3d): đã cho phép thì kênh theo tên gói; chỉ có gói đồng bộ từ claude.ai thì
@@ -400,7 +432,7 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     const home = fakeHome('Thùy ỉ');
     mkdirSync(join(home, '.local', 'bin'), { recursive: true });
     writeFileSync(join(home, '.local', 'bin', 'claude.exe'), '');
-    const sentence = 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Người lo kỹ thuật sẽ được báo; lần mở máy sau Loa tự hỏi lại.';
+    const sentence = 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Lần tới bạn mở Claude, máy sẽ tự báo người lo kỹ thuật.';
     // pair.mjs giả như bản thật khi hub trả 404: in một câu, ghi dòng kỹ thuật, thoát 2.
     writeFileSync(
       join(home, '.claude/plugins/cache/nlh-governance/nlh', version, 'speaker/pair.mjs'),
