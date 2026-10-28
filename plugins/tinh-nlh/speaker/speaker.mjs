@@ -95,6 +95,8 @@ const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024
 // ~/.tinh-nlh/machine-id, the plugin's folder on the machine, shared by every Claude session (hooks/machine.mjs) and by
 // Loa. Not ${CLAUDE_PLUGIN_DATA}: that folder differs between the plugin installed from claude.ai and from GitHub, which
 // would give one machine two ids, and Loa runs from its own copy without it. null when the folder cannot be written.
+// Also null in a Claude Code session on the web (CLAUDE_CODE_REMOTE): its home folder is made new for every session, so each
+// one would register another "machine" (28/10: ~17 ids chained since 22/10 filled the 20-machine cap of the account).
 // Loa could not run (the launcher stopped): start.ps1 -Auto leaves one line here, since nobody sees its window. The next
 // Claude session on this machine says it and opens a ticket for the CTO cell (hooks/machine.mjs), once: the file is removed
 // when read, and the same reason within a day is not reported again. null when there is nothing to report. A launch that
@@ -122,7 +124,8 @@ export function takeLoaError(dir = join(homedir(), '.tinh-nlh', 'speaker'), now 
 }
 
 export const MACHINE_ID = /^[A-Za-z0-9_-]{16,64}$/;
-export function machineId(dir = join(homedir(), '.tinh-nlh'), random = () => randomBytes(16).toString('hex')) {
+export function machineId(dir = join(homedir(), '.tinh-nlh'), random = () => randomBytes(16).toString('hex'), env = process.env) {
+  if (env.CLAUDE_CODE_REMOTE === 'true') return null;
   const file = join(dir, 'machine-id');
   const saved = () => {
     try {
