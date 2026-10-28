@@ -83,7 +83,7 @@ node scripts/plugin-zip.mjs nep.zip
 node scripts/persona-suite.mjs
 ```
 
-Chạy bảy câu người thật đã gõ ("chào em", "Nếp có gì mới không em?"…) qua Claude Code không giao diện với gói ở thư mục này (`--plugin <thư mục>` để thử gói khác, `--only id,id` chạy vài ca, `--out file.json` ghi kết quả). Tự chấm: chữ đầu ≤15 giây, "chào em" ≤4 dòng, không chữ cấm và không câu tiếng Anh; mã thoát 1 nếu có ca trượt. Điều còn lại, không chỉ tới nút hay trang không có thật, do dân làng Trải nghiệm đọc câu trả lời script in ra. Thêm ca hay sửa chữ cấm: sửa `scripts/persona-cases.json`, không đụng code. Cần Claude thật và hạn mức nên không chạy trong CI; Tech Lead không gộp bản gói lên `main` khi chưa có kết quả đạt ghi trên việc 26f86f3d.
+Chạy bảy câu người thật đã gõ ("chào em", "Nếp có gì mới không em?"…) qua Claude Code không giao diện với gói ở thư mục này (`--plugin <thư mục>` để thử gói khác, `--only id,id` chạy vài ca, `--out file.json` ghi kết quả). Tự chấm: chữ đầu ≤15 giây, "chào em" ≤4 dòng, không chữ cấm và không câu tiếng Anh; mã thoát 1 nếu có ca trượt. Điều còn lại, không chỉ tới nút hay trang không có thật, do dân làng Trải nghiệm đọc câu trả lời script in ra. Thêm ca hay sửa chữ cấm: sửa `scripts/persona-cases.json`, không đụng code. Cần Claude thật và hạn mức nên không chạy trong CI; Người duyệt golive (Tech Lead) chỉ duyệt bản gói lên `main` khi có kết quả đạt ghi trên việc 26f86f3d. Ca chạy bằng tài khoản thật trên giếng thật, nên chỉ công cụ đọc của Nếp được gọi (`readTools` trong file ca); công cụ ghi bị chặn, ca nào cần ghi thì chấm ở câu trả lời Claude định làm.
 
 ### Kiểm
 
