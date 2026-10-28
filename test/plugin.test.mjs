@@ -224,7 +224,7 @@ describe('plugin nlh', () => {
     const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
     const machine = await run();
     assert.match(machine, /^Nếp connector: Nếp comes from the Nếp connector of the user's Claude account; this plugin has no Nếp server of its own\./);
-    assert.ok(machine.includes(`"Nếp chưa nối vào Claude của bạn: mở ${link} , làm theo màn hình, rồi mở phiên mới."`));
+    assert.ok(machine.includes(`"Nếp chưa nối vào Claude của bạn: mở ${link} , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới."`));
     assert.equal(machine.split('\n').filter(Boolean).length, 1);
     // Không chữ nào bắt người dùng gõ /mcp, đăng nhập bằng email công ty, hay bấm nút màn hình không có.
     const spoken = machine.match(/"[^"]+"/g).join(' ');
@@ -238,7 +238,7 @@ describe('plugin nlh', () => {
     cache({ Nếp: { timestamp: Date.now() - 60_000 } });
     const waiting = await run();
     assert.ok(waiting.includes('Claude Code lists Nếp as needing sign-in'));
-    assert.ok(waiting.includes(`"Nếp cần nối lại: mở ${link} , làm theo màn hình, rồi mở phiên mới."`));
+    assert.ok(waiting.includes(`"Nếp cần nối lại: mở ${link} , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới."`));
     assert.equal(waiting.split('\n').filter(Boolean).length, 1);
     // Mục cũ của máy chủ riêng trong gói (bản 0.22) còn trong tệp thì không tính: máy chủ đó không còn.
     cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 60_000 } });
@@ -252,6 +252,21 @@ describe('plugin nlh', () => {
     // Lan can: chỉ đọc một tệp, không gọi mạng, không ghi, không chạy lệnh.
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/sign-in-check.mjs'), 'utf8'), /fetch\(|node:(http|net|https|child_process)|writeFile|appendFile|mkdir/);
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('hướng dẫn cài (SETUP.md, README): người dùng không thấy "email công ty", "tỉnh NhiLe", /mcp hay trang Khoá cho Loa không có thật; câu xong đúng chữ đã chốt', () => {
+    const setup = readFileSync(join(root, 'SETUP.md'), 'utf8').replace(/\r/g, '');
+    const readme = readFileSync(join(root, 'README.md'), 'utf8').replace(/\r/g, '');
+    // Phần cho người (trước "## For Claude") và mọi câu Claude được dặn nói thành lời (trong ngoặc kép sau "say").
+    const forUser = setup.split('## For Claude')[0];
+    const said = [...setup.matchAll(/say "([^"]+)"/g)].map((m) => m[1]).join('\n');
+    for (const text of [forUser, said]) assert.doesNotMatch(text, /email công ty|tỉnh NhiLe|\/mcp|\/reload-plugins|PowerShell|Khoá cho Loa/);
+    assert.doesNotMatch(readme.split('## Cho người bảo trì')[0].replace(/\*\*Loa tỉnh NhiLe\*\*/g, ''), /email công ty|tỉnh NhiLe/);
+    assert.match(said, /đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team/);
+    assert.ok(setup.includes('"Xong rồi chị. Từ giờ việc mới sẽ tự hiện trong Claude, chị không cần hỏi."'));
+    // Loa chưa có đường bật không cần khoá: SETUP.md không gọi setup Loa và dặn không nói về Loa với người dùng.
+    assert.match(setup, /### 4\. Loa \(not wired yet\)/);
+    assert.match(setup, /do not run `speaker\/setup\.ps1` or `speaker\/setup\.sh`/);
   });
 
   test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {
