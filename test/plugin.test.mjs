@@ -13,8 +13,8 @@ import { pluginVersion } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
-// Gói mang Nếp (máy chủ nep, tên plugin:nlh:nep; 0.22.0, anh Sơn 26/10). Hook gọi nó trước, rồi connector Nếp trong tài
-// khoản theo các tên nó có ("claude.ai <tên>" trên máy, tên trần ở phiên mây, nơi máy chủ của gói không đăng nhập được).
+// Từ 0.23.1 gói không mang máy chủ Nếp riêng: Nếp là connector gắn vào tài khoản Claude (không đăng nhập lần hai). Hook vẫn gọi
+// plugin:nlh:nep trước cho máy còn bản cũ (tên không nối thì hook bỏ qua), rồi connector tài khoản theo các tên nó có.
 const DOORS = ['plugin:nlh:nep', 'claude.ai Nếp', 'Nếp', 'claude.ai nhile-governance', 'nhile-governance', 'claude.ai NhiLe Governance', 'NhiLe Governance', '3398cc99-b4dc-41bd-8007-bd4b6792d5cb'];
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -67,12 +67,12 @@ describe('plugin nlh', () => {
     assert.doesNotThrow(() => new URL(manifest.homepage));
   });
 
-  test('connector: gói mang Nếp (http, bản chính mcp.nlh.vn, không khoá) và Loa chạy trên máy; không có .mcp.json riêng', () => {
+  test('connector: gói chỉ mang Loa (stdio, trên máy), không có máy chủ Nếp riêng (tránh đăng nhập lần hai); không có .mcp.json riêng', () => {
     assert.equal(existsSync(join(pluginDir, '.mcp.json')), false);
     const { mcpServers } = readJson('plugins/tinh-nlh/.claude-plugin/plugin.json');
-    assert.deepEqual(Object.keys(mcpServers), ['nep', 'speaker']);
-    // Đúng địa chỉ connector của tài khoản: trên máy hai cái trùng địa chỉ thì Claude Code chỉ nối một (của gói).
-    assert.deepEqual(mcpServers.nep, { type: 'http', url: 'https://mcp.nlh.vn/mcp' });
+    assert.deepEqual(Object.keys(mcpServers), ['speaker']);
+    // Máy chủ của gói trùng địa chỉ với connector tài khoản sẽ che nó và đòi đăng nhập riêng (đo 28/10): không mang.
+    assert.doesNotMatch(JSON.stringify(mcpServers), /mcp\.nlh\.vn/);
   });
 
   test('hook đầu phiên in câu dặn gọi my_context và mã phiên, không gọi mạng; sau /clear hay gọn ngữ cảnh gọi my_context (phiếu 1409ab1f); Stop và SessionEnd chỉ báo mã phiên và trạng thái', () => {
@@ -208,7 +208,7 @@ describe('plugin nlh', () => {
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/memory-to-nep.mjs'), 'utf8'), /fetch|https?:|node:(fs|http|net|https|child_process)/);
   });
 
-  test('hook dòng connector Nếp: trên máy dặn đăng nhập máy chủ Nếp của gói qua /mcp; trên mây Nếp đến từ connector tài khoản, không bao giờ xin đăng nhập máy chủ của gói', async () => {
+  test('hook dòng connector Nếp: một dòng cho mọi cửa; Nếp là connector tài khoản, không bao giờ dặn gõ /mcp hay "email công ty"; cần nối lại thì chỉ dặn mở link rồi mở phiên mới', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nlh-signin-'));
     const run = (cloud = false) =>
       new Promise((resolve) => {
@@ -222,34 +222,30 @@ describe('plugin nlh', () => {
         child.stdin.end('{}');
       });
     const cache = (value) => writeFileSync(join(dir, 'mcp-needs-auth-cache.json'), typeof value === 'string' ? value : JSON.stringify(value));
-    const signIn = '"Nếp chưa đăng nhập trên máy này: gõ /mcp, chọn plugin:nlh:nep, bấm Enter, đăng nhập bằng email công ty trong trình duyệt mở ra."';
-    const machine = await run();
-    assert.match(machine, /^Nếp connector: the plugin brings Nếp \(server plugin:nlh:nep\)/);
-    assert.ok(machine.includes(signIn));
-    assert.equal(machine.split('\n').filter(Boolean).length, 1);
-    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 60_000 } });
-    const waiting = await run();
-    assert.ok(waiting.includes('lists plugin:nlh:nep as needing sign-in'));
-    assert.equal(waiting.split('\n').filter(Boolean).length, 1);
-    // Trên mây: máy chủ của gói luôn cần đăng nhập mà không bao giờ đăng nhập được; chỉ connector tài khoản tính.
-    const cloud = await run(true);
-    assert.match(cloud, /^Nếp connector: this is a cloud session\./);
-    assert.match(cloud, /never ask the user to sign in to it/);
-    assert.doesNotMatch(cloud, /gõ \/mcp|needs sign-in/);
     const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
-    assert.ok(cloud.includes(`"Phiên trên mây này chưa có Nếp: trên máy tính mở ${link} , bấm Add, đăng nhập bằng email công ty, rồi mở phiên mới."`));
+    const machine = await run();
+    assert.match(machine, /^Nếp connector: Nếp comes from the Nếp connector of the user's Claude account; this plugin has no Nếp server of its own\./);
+    assert.ok(machine.includes(`"Nếp chưa nối vào Claude của bạn: mở ${link} , làm theo màn hình, rồi mở phiên mới."`));
+    assert.equal(machine.split('\n').filter(Boolean).length, 1);
+    // Không chữ nào bắt người dùng gõ /mcp, đăng nhập bằng email công ty, hay bấm nút màn hình không có.
+    const spoken = machine.match(/"[^"]+"/g).join(' ');
+    assert.doesNotMatch(spoken, /\/mcp|email công ty|Connect|Add|Customize|plugin:nlh:nep/);
+    assert.equal(await run(true), machine, 'mây và máy cùng một dòng');
     // Link mở đúng hộp Add custom connector, điền sẵn tên Nếp và cửa mcp.nlh.vn.
     const url = new URL(link);
     assert.equal(url.searchParams.get('modal'), 'add-custom-connector');
     assert.equal(url.searchParams.get('connectorName'), 'Nếp');
     assert.equal(url.searchParams.get('connectorUrl'), 'https://mcp.nlh.vn/mcp');
     cache({ Nếp: { timestamp: Date.now() - 60_000 } });
-    const cloudWaiting = await run(true);
-    assert.ok(cloudWaiting.includes('The account connector (Nếp) needs sign-in'));
-    assert.match(cloudWaiting, /"Nếp cần đăng nhập lại: mở claude\.ai, Customize, Connectors, bấm Connect ở Nếp, rồi mở phiên mới\."/);
-    assert.equal(cloudWaiting.split('\n').filter(Boolean).length, 1);
-    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
-    assert.equal(await run(), machine, 'cũ hơn 7 ngày thì chỉ còn dòng đăng nhập');
+    const waiting = await run();
+    assert.ok(waiting.includes('Claude Code lists Nếp as needing sign-in'));
+    assert.ok(waiting.includes(`"Nếp cần nối lại: mở ${link} , làm theo màn hình, rồi mở phiên mới."`));
+    assert.equal(waiting.split('\n').filter(Boolean).length, 1);
+    // Mục cũ của máy chủ riêng trong gói (bản 0.22) còn trong tệp thì không tính: máy chủ đó không còn.
+    cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 60_000 } });
+    assert.equal(await run(), machine);
+    cache({ Nếp: { timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 } });
+    assert.equal(await run(), machine, 'cũ hơn 7 ngày thì chỉ còn dòng nối');
     cache({ 'claude.ai Gmail': { timestamp: Date.now() } });
     assert.equal(await run(), machine, 'connector khác cần đăng nhập không phải việc của Nếp');
     cache('không phải json');
