@@ -106,10 +106,10 @@ fi
 # it) once the person pressed Cho phép. The key reaches the hub only over https, at the status poll; never the web, a URL, chat or the screen; the hub's ledger keeps only the hash. A key the hub
 # rejects is removed by the channel and asked again next launch.
 if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>&1; then
-  [ -f "$DIR/pair.mjs" ] || stop_loa 'Chưa thấy phần xin khoá của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
+  [ -f "$DIR/pair.mjs" ] || stop_loa 'Chưa thấy phần xin phép của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.'
   echo ''
   echo 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
-  "$NODE" "$DIR/pair.mjs" --dir "$DIR" || stop_loa 'Chưa có khoá cho Loa.'
+  "$NODE" "$DIR/pair.mjs" --dir "$DIR" || stop_loa 'Loa chưa được phép chạy trên máy này.'
 fi
 
 # 4b. Channel permission (policy.mjs, ticket 26f86f3d): Claude Code only takes the plugin's channel when the machine's list
