@@ -39,26 +39,24 @@ The plugin carries no Nếp server of its own: Nếp is the Nếp connector of t
 2. Otherwise **User:** say "Nếp chưa nối vào Claude của bạn: mở https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới. Xong nói tiếp." Wait. Never ask the user to type `/mcp`. The sentences say "bạn"; if the user has called themselves another form (chị, anh), use that form instead.
 3. Call `my_context`. Still failing: say so in one sentence and stop.
 
-### 4. Loa (not wired yet)
+### 4. Loa (Windows and macOS)
 
-Windows and macOS. The way to turn Loa on without a key page is ticket D of 26f86f3d: not built, waits for Danh's signature. Until it merges, do nothing about Loa here:
+Item D of 26f86f3d: no key to copy or paste; the machine asks for its own key and the user presses one "Cho phép" button. Skip to step 5 on any other system, and in web chat, on the phone or in Cowork (no machine to set up).
 
-- say nothing about Loa to the user, never ask for a key, never give a PowerShell command;
-- never send the user to "Kết nối › Khoá cho Loa" (that page does not exist);
-- do not run `speaker/setup.ps1` or `speaker/setup.sh`.
-
-When D lands, call its step here. The user must still see no word "Loa", "khoá" or "PowerShell"; the only thing they may be asked is the one "Cho phép" button.
+1. Run the plugin command `speaker` (`/nlh:speaker`, file `commands/speaker.md`) exactly as it says: it runs `speaker/setup.ps1` or `speaker/setup.sh` and puts the icon on the desktop.
+2. **User:** say "Có một biểu tượng mới trên màn hình chính của bạn. Bấm đúp vào nó, rồi bấm Cho phép ở trang Nếp vừa mở. Xong nói tiếp." Wait.
+3. The user sees no word "khoá" or "PowerShell", no command; never ask for or accept a key in chat. The only thing they are asked is the one "Cho phép" button.
 
 ### 5. Check
 
 1. `my_context` answers (that is "done": Nếp can call the user by name).
-2. After step 4 exists: the Loa checks of D.
+2. Loa: the key file exists, nothing more (never read it): Windows, `~\.tinh-nlh\speaker\tower-key.dpapi`; macOS, `security find-generic-password -s tinh-nlh-tower -a tinh-nlh` answers without `-w`.
 
 ### 6. Report
 
 One line, nothing after it: no "còn lại", no waiting work, no list of what you did.
 
-- Loa is on (after D): "Xong rồi. Từ giờ việc mới sẽ tự hiện trong Claude, bạn không cần hỏi."
-- Until D lands: "Xong rồi. Bạn cứ mở Claude và hỏi việc của bạn."
+- Loa is on: "Xong rồi. Từ giờ việc mới sẽ tự hiện trong Claude, bạn không cần hỏi."
+- Loa is not on (other system, no machine, or not pressed yet): "Xong rồi. Bạn cứ mở Claude và hỏi việc của bạn."
 
 Use the user's own form of address for chị (chị, anh, bạn), "bạn" if unknown. Never use the old name of the system in what the user reads: it is called Nếp.

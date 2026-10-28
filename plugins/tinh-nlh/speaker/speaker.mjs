@@ -766,7 +766,7 @@ export function startServer({
   async function tick() {
     const { key, configured } = currentKey();
     const origin = hubOrigin(env.TOWER_ORIGIN);
-    if (!key) return said.has('rejected') ? undefined : notice('no_key', 'Loa chưa có khoá. Đóng cửa sổ Loa rồi mở lại bằng biểu tượng Loa tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ. Không dán khoá vào chat.');
+    if (!key) return said.has('rejected') ? undefined : notice('no_key', 'Loa chưa có khoá. Đóng cửa sổ Loa rồi mở lại bằng biểu tượng Loa tỉnh NhiLe: trang Nếp sẽ mở, bấm Cho phép. Không dán khoá vào chat.');
     if (!origin) return notice('bad_origin', 'Địa chỉ hub trong cấu hình của Loa không phải https của nlh.vn. Loa không gửi khoá tới đó.');
     let response;
     try {
@@ -778,7 +778,7 @@ export function startServer({
     if (response.status === 401) {
       if (!configured) keyStore.forget(dir);
       fileKey = null;
-      return notice('rejected', 'Khoá của Loa hết hạn hoặc đã thu hồi. Mở lại Loa để dán khoá mới.');
+      return notice('rejected', 'Khoá của Loa hết hạn hoặc đã thu hồi. Mở lại Loa: trang Nếp sẽ mở, bấm Cho phép.');
     }
     if (response.status === 403) return notice('not_allowed', 'Người dùng không còn trong danh sách được dùng hệ. Loa dừng đọc.');
     if (!response.ok) {

@@ -271,9 +271,11 @@ describe('plugin nlh', () => {
     assert.ok(setup.includes('"Xong rồi. Từ giờ việc mới sẽ tự hiện trong Claude, bạn không cần hỏi."'));
     assert.ok(setup.includes('"Xong rồi. Bạn cứ mở Claude và hỏi việc của bạn."'));
     assert.doesNotMatch(setup.split('### 6. Report')[1], /Xong rồi chị|chị không cần/);
-    // Loa chưa có đường bật không cần khoá: SETUP.md không gọi setup Loa và dặn không nói về Loa với người dùng.
-    assert.match(setup, /### 4\. Loa \(not wired yet\)/);
-    assert.match(setup, /do not run `speaker\/setup\.ps1` or `speaker\/setup\.sh`/);
+    // Loa bật bằng nút Cho phép (mục D): SETUP.md gọi lệnh speaker, người dùng chỉ được hỏi đúng một nút, không khoá, không lệnh.
+    assert.match(setup, /### 4\. Loa \(Windows and macOS\)/);
+    assert.match(setup, /Run the plugin command `speaker`/);
+    assert.match(setup, /never ask for or accept a key in chat/);
+    assert.match(said, /bấm Cho phép ở trang Nếp vừa mở/);
   });
 
   test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {

@@ -829,7 +829,7 @@ describe('server Loa chạy thật qua stdio', () => {
     await settle();
     assert.equal(rejected.pushed().length, 1);
     assert.equal(rejected.pushed()[0].meta.kind, 'system');
-    assert.match(rejected.pushed()[0].content, /Khoá của Loa hết hạn hoặc đã thu hồi\. Mở lại Loa để dán khoá mới\./);
+    assert.match(rejected.pushed()[0].content, /Khoá của Loa hết hạn hoặc đã thu hồi\. Mở lại Loa: trang Nếp sẽ mở, bấm Cho phép\./);
     await rejected.close();
 
     status = 200;
@@ -837,7 +837,7 @@ describe('server Loa chạy thật qua stdio', () => {
     const noKey = open(temp('loa-state'), { TOWER_KEY: '' });
     await until(() => noKey.pushed().length >= 1);
     assert.match(noKey.pushed()[0].content, /^Loa chưa có khoá\./);
-    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: cửa sổ hỏi khoá trong ô nhập ẩn chữ/);
+    assert.match(noKey.pushed()[0].content, /mở lại bằng biểu tượng Loa tỉnh NhiLe: trang Nếp sẽ mở, bấm Cho phép/);
     assert.equal(requests.length, 0);
     await noKey.close();
 

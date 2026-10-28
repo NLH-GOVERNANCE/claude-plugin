@@ -113,7 +113,8 @@ export function gradeCase({ answer, firstTextMs, startupMs = null }, testCase, c
   const rows = { pass: testCase.maxLines === undefined || (lines > 0 && lines <= testCase.maxLines), lines, max: testCase.maxLines ?? null };
   const hits = forbiddenHits(answer, config.forbidden, testCase.allow);
   const english = englishLines(answer, config.english);
-  const words = { pass: answer !== '' && hits.length === 0 && english.length === 0, hits, english };
+  const missing = (testCase.must ?? []).filter((item) => !new RegExp(item.re, item.flags ?? '').test(answer)).map((item) => item.label);
+  const words = { pass: answer !== '' && hits.length === 0 && english.length === 0 && missing.length === 0, hits, english, missing };
   return { id: testCase.id, pass: time.pass && rows.pass && words.pass, time, rows, words };
 }
 
@@ -140,6 +141,7 @@ export function gradeRuns(parsedList, testCase, config) {
     pass: runs.every((run) => run.words.pass),
     hits: [...new Set(runs.flatMap((run) => run.words.hits))],
     english: runs.flatMap((run) => run.words.english),
+    missing: [...new Set(runs.flatMap((run) => run.words.missing))],
   };
   return { id: testCase.id, pass: time.pass && rows.pass && words.pass, time, rows, words, runs };
 }
@@ -179,15 +181,22 @@ export function renderTable(results, config) {
     if (!r.time.pass) why.push(r.time.seconds === null ? 'không có chữ nào' : `chữ đầu sau ${r.time.seconds}s${r.time.all ? ` (${r.time.all.join(' · ')})` : ''}`);
     if (!r.rows.pass) why.push(`${r.rows.lines} dòng, tối đa ${r.rows.max}`);
     if (r.words.hits.length) why.push(`chữ cấm: ${r.words.hits.join(', ')}`);
+    if (r.words.missing?.length) why.push(`thiếu: ${r.words.missing.join(', ')}`);
     if (r.words.english.length) why.push(`câu tiếng Anh: ${r.words.english.map((line) => `"${line.trim().slice(0, 60)}"`).join('; ')}`);
     out.push(`  ${r.id}: ${why.join(' · ')}`);
   }
   return out.join('\n');
 }
 
+function writeEmptyMcp(dir) {
+  const file = join(dir, 'no-mcp.json');
+  writeFileSync(file, '{ "mcpServers": {} }');
+  return file;
+}
+
 // Chạy `claude -p` một ca, câu hỏi đưa qua stdin (không dính quy tắc trích dẫn của shell), từ một thư mục trống để phiên
 // không nạp CLAUDE.md hay gói nào khác của dự án. Lỗi hook lúc đóng phiên (máy chủ chưa nối) bỏ đi, không in. Trả về các dòng kèm thời gian nhận.
-function runClaude(say, pluginDir, cwd, tools, blocked, bin = process.env.CLAUDE_BIN || 'claude') {
+function runClaude(say, pluginDir, cwd, tools, blocked, noNep = false, bin = process.env.CLAUDE_BIN || 'claude') {
   return new Promise((resolve, reject) => {
     const args = [
       '-p',
@@ -197,6 +206,8 @@ function runClaude(say, pluginDir, cwd, tools, blocked, bin = process.env.CLAUDE
       '--allowedTools', ...tools,
       '--disallowedTools', ...blocked,
     ];
+    // Ca "chưa có kết nối Nếp": bỏ mọi kết nối của tài khoản, để phiên chạy như máy chưa gắn Nếp.
+    if (noNep) args.push('--strict-mcp-config', '--mcp-config', writeEmptyMcp(cwd));
     const started = Date.now();
     // claude.cmd (cài bằng npm) trên Windows chỉ chạy qua shell, nên bọc dấu ngoặc kép quanh đường dẫn có khoảng trắng.
     const viaShell = process.platform === 'win32' && !bin.endsWith('.exe');
@@ -258,7 +269,7 @@ async function main() {
       for (let run = 1; run <= opts.runs; run += 1) {
         process.stderr.write(`chạy ${testCase.id} (lần ${run}/${opts.runs})…\n`);
         sessions.push(activeSessions());
-        const lines = await runClaude(testCase.say, opts.plugin, cwd, allowedTools(config, { update: opts.update }), blockedTools(config));
+        const lines = await runClaude(testCase.say, opts.plugin, cwd, allowedTools(config, { update: opts.update }), blockedTools(config), testCase.noNep === true);
         const parsed = parseStream(lines);
         if (!parsed.answer) {
           const tail = lines.slice(-3).map((line) => line.text.slice(0, 300)).join(' | ');
