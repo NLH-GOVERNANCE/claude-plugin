@@ -276,6 +276,14 @@ describe('plugin nlh', () => {
     assert.match(setup, /Run the plugin command `speaker`/);
     assert.match(setup, /never ask for or accept a key in chat/);
     assert.match(said, /bấm Cho phép ở trang Nếp vừa mở/);
+    // Máy chỉ có app Claude (ca thường gặp nhất, 28/10): claude không nằm trong PATH thì không dừng, dùng chính chương trình đang chạy phiên
+    // hay bản đi kèm app; người dùng không nghe "PATH", "lệnh claude", "Claude Code", "bước N".
+    const find = setup.slice(setup.indexOf('### 1. Find the OS'), setup.indexOf('### 2.'));
+    assert.match(find, /CLAUDE_CODE_EXECPATH/);
+    assert.match(find, /Claude-Data.*claude-code.*claude\.exe/);
+    assert.match(find, /by its full path/);
+    assert.doesNotMatch(find, /stop and say Claude Code is not on the PATH/);
+    assert.doesNotMatch(said, /PATH|lệnh claude|Claude Code|step \d|bước \d/i);
   });
 
   test('hook mã máy (D-0065 · 5/5): sinh một lần, giữ nguyên lần sau, dặn báo machine_id và ghi bàn giao trước khi dừng', async () => {
