@@ -6,6 +6,9 @@ import { machineId, pluginVersion, takeLoaError } from '../speaker/speaker.mjs';
 
 const id = machineId(process.env.NLH_MACHINE_DIR || undefined);
 const version = pluginVersion();
+// The time zone of this computer, so Claude says the UTC times of Nếp's tools as the user says them.
+const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const offset = -new Date().getTimezoneOffset() / 60;
 // Loa stopped on this machine and nobody saw it (it runs with no window): say one sentence, and report it to the CTO cell.
 const failed = takeLoaError(process.env.NLH_TOWER_DIR || undefined);
 if (failed) {
@@ -26,5 +29,10 @@ if (id) {
       `or the machine is about to turn off): write a handoff on that ticket first, the /nlh:handoff way. If the reason is the usage limit or the ` +
       `machine turning off, then also call report_session with machine_id ${id} and machine_stop quota or shutdown, so another machine sitting in ` +
       `the same villager carries on at once.\n`,
+  );
+}
+if (zone) {
+  process.stdout.write(
+    `Time zone of this machine: ${zone} (UTC${offset >= 0 ? '+' : '-'}${Math.abs(offset)}). Nếp's tools give times in UTC: tell the user a time in this zone, as a person says it ("lúc 8 giờ tối"), never the word UTC.\n`,
   );
 }

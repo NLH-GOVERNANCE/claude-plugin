@@ -306,6 +306,12 @@ describe('plugin nlh', () => {
     assert.match(version, /^\d+\.\d+\.\d+$/);
     assert.ok(first.includes(`Also pass plugin_version ${version} (this plugin's version) in the same call, nothing else about the plugin.`));
     assert.equal(pluginVersion(), version);
+    // Múi giờ của máy: Claude nói giờ của công cụ (UTC) theo giờ người dùng, không nói UTC.
+    assert.match(first, /Time zone of this machine: \S+ \(UTC[+-]\d+(\.\d+)?\)\. .*never the word UTC\.\n$/);
+    const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+    assert.match(skill, /Never pick anh or chị from a name\./);
+    assert.match(skill, /Never the word UTC or a zone name\./);
+    assert.match(skill, /never an id, "mã máy", "phiên"/);
     // Tệp lạ hay không đọc được thì không dặn gì (không bịa bản).
     const bad = join(dir, 'plugin.json');
     assert.equal(pluginVersion(bad), null, 'không có tệp');
