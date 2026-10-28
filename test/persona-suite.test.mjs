@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { DEFAULT_CASES, allowedTools, englishLines, forbiddenHits, gradeCase, parseStream, renderTable } from '../scripts/persona-suite.mjs';
+import { DEFAULT_CASES, blockedTools, allowedTools, englishLines, forbiddenHits, gradeCase, parseStream, renderTable } from '../scripts/persona-suite.mjs';
 
 const config = JSON.parse(readFileSync(DEFAULT_CASES, 'utf8'));
 const byId = (id) => config.cases.find((c) => c.id === id);
@@ -109,4 +109,10 @@ test('công cụ được gọi thật khi chạy bộ ca: chỉ công cụ đ�
   for (const name of config.readTools) assert.match(name, /^(my_|show_|find_|get_|list_|read_)|^(how_to_use|whoami|library)$/, name);
   const writes = ['save_chat', 'open_ticket', 'add_follow_up', 'report_session', 'run_action', 'continue_work', 'propose_change', 'request_signature', 'record_run', 'save_cell', 'post_message', 'invite_person', 'remove_person', 'set_machine_seats', 'connect_channel'];
   for (const name of writes) assert.ok(!config.readTools.includes(name), name);
+  // Công cụ ghi bị chặn hẳn (--disallowedTools): có đủ danh sách cũ, không trùng công cụ đọc, tên đầy đủ hai máy chủ.
+  const blocked = blockedTools(config);
+  assert.equal(blocked.length, config.writeTools.length * 2);
+  for (const name of writes) assert.ok(config.writeTools.includes(name), name);
+  assert.ok(blocked.includes('mcp__plugin_nlh_nep__report_session') && blocked.includes('mcp__claude_ai_nhile-governance__save_chat'));
+  for (const tool of blocked) assert.ok(!tools.includes(tool), tool);
 });
