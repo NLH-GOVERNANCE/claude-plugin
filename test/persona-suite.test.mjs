@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { DEFAULT_CASES, englishLines, forbiddenHits, gradeCase, parseStream, renderTable } from '../scripts/persona-suite.mjs';
+import { DEFAULT_CASES, blockedTools, allowedTools, englishLines, forbiddenHits, gradeCase, parseStream, renderTable } from '../scripts/persona-suite.mjs';
 
 const config = JSON.parse(readFileSync(DEFAULT_CASES, 'utf8'));
 const byId = (id) => config.cases.find((c) => c.id === id);
@@ -97,4 +97,22 @@ test('bảng kết quả: một dòng mỗi ca, ca trượt kèm lý do, ca đ�
   assert.equal(rows.length, 4);
   assert.match(rows[3], /^ {2}co-gi-moi: chữ đầu sau 20s · chữ cấm: PR, repo$/);
   assert.doesNotMatch(table, /chao-em:/);
+});
+
+test('công cụ được gọi thật khi chạy bộ ca: chỉ công cụ đọc của Nếp, tên đầy đủ, đủ hai máy chủ; không có công cụ ghi và không có dấu *', () => {
+  const tools = allowedTools(config);
+  assert.equal(tools.length, config.readTools.length * 2);
+  assert.ok(tools.includes('mcp__plugin_nlh_nep__my_context'));
+  assert.ok(tools.includes('mcp__claude_ai_nhile-governance__my_context'));
+  for (const tool of tools) assert.match(tool, /^mcp__(plugin_nlh_nep|claude_ai_nhile-governance)__[a-z_]+$/);
+  // Mọi công cụ đọc bắt đầu bằng một động từ đọc; công cụ ghi không lọt vào.
+  for (const name of config.readTools) assert.match(name, /^(my_|show_|find_|get_|list_|read_)|^(how_to_use|whoami|library)$/, name);
+  const writes = ['save_chat', 'open_ticket', 'add_follow_up', 'report_session', 'run_action', 'continue_work', 'propose_change', 'request_signature', 'record_run', 'save_cell', 'post_message', 'invite_person', 'remove_person', 'set_machine_seats', 'connect_channel'];
+  for (const name of writes) assert.ok(!config.readTools.includes(name), name);
+  // Công cụ ghi bị chặn hẳn (--disallowedTools): có đủ danh sách cũ, không trùng công cụ đọc, tên đầy đủ hai máy chủ.
+  const blocked = blockedTools(config);
+  assert.equal(blocked.length, config.writeTools.length * 2);
+  for (const name of writes) assert.ok(config.writeTools.includes(name), name);
+  assert.ok(blocked.includes('mcp__plugin_nlh_nep__report_session') && blocked.includes('mcp__claude_ai_nhile-governance__save_chat'));
+  for (const tool of blocked) assert.ok(!tools.includes(tool), tool);
 });

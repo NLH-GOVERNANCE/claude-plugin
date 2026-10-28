@@ -3,6 +3,8 @@
 // chữ cấm và không có câu tiếng Anh. Điều (4), không chỉ tới nút hay trang không có thật, không tự chấm: script in câu trả lời
 // ra cho dân làng Trải nghiệm đọc. Ca và chữ cấm nằm ở scripts/persona-cases.json, sửa không cần đụng code này.
 // Cần Claude Code thật và hạn mức, nên không gắn vào CI; chạy trước mỗi lần tăng bản gói.
+// Chạy bằng tài khoản thật trên giếng thật: chỉ công cụ đọc của Nếp được tự duyệt (readTools trong file ca), công cụ ghi bị chặn hẳn
+// (writeTools, --disallowedTools). Hook của gói thì không chặn được và vẫn chạy: mỗi ca lưu một lượt chat và báo phiên lên giếng.
 // Chạy: node scripts/persona-suite.mjs [--plugin <thư mục gói>] [--only <id>,<id>] [--cases <file>] [--out <file json>]
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,6 +16,18 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 export const DEFAULT_PLUGIN = join(HERE, '../plugins/tinh-nlh');
 export const DEFAULT_CASES = join(HERE, 'persona-cases.json');
 const TIMEOUT_MS = 180_000;
+// Hai tên máy chủ Nếp mà phiên không giao diện thấy: của gói, và connector tài khoản.
+const NEP_SERVERS = ['mcp__plugin_nlh_nep__', 'mcp__claude_ai_nhile-governance__'];
+
+// Công cụ được phép gọi thật: chỉ công cụ đọc (readTools trong file ca), mỗi máy chủ một bản, tên đầy đủ.
+export function allowedTools(config) {
+  return NEP_SERVERS.flatMap((server) => config.readTools.map((tool) => server + tool));
+}
+
+// Công cụ ghi bị chặn hẳn: --disallowedTools thắng --allowedTools, nên một công cụ ghi lọt vào readTools cũng không chạy được.
+export function blockedTools(config) {
+  return NEP_SERVERS.flatMap((server) => config.writeTools.map((tool) => server + tool));
+}
 
 // Đọc các dòng stream-json của `claude -p`. lines: [{ t: mili giây từ lúc chạy, text: một dòng JSON }]. Trả về chữ người dùng
 // thấy (mọi khối chữ của trợ lý, theo thứ tự) và mili giây tới khối chữ đầu tiên; bỏ qua dòng không phải JSON.
@@ -91,14 +105,15 @@ export function renderTable(results, config) {
 
 // Chạy `claude -p` một ca, câu hỏi đưa qua stdin (không dính quy tắc trích dẫn của shell), từ một thư mục trống để phiên
 // không nạp CLAUDE.md hay gói nào khác của dự án. Lỗi hook lúc đóng phiên (máy chủ chưa nối) bỏ đi, không in. Trả về các dòng kèm thời gian nhận.
-function runClaude(say, pluginDir, cwd, bin = process.env.CLAUDE_BIN || 'claude') {
+function runClaude(say, pluginDir, cwd, tools, blocked, bin = process.env.CLAUDE_BIN || 'claude') {
   return new Promise((resolve, reject) => {
     const args = [
       '-p',
       '--plugin-dir', pluginDir,
       '--output-format', 'stream-json',
       '--verbose',
-      '--allowedTools', 'mcp__plugin_nlh_nep__*', 'mcp__claude_ai_nhile-governance__*',
+      '--allowedTools', ...tools,
+      '--disallowedTools', ...blocked,
     ];
     const started = Date.now();
     // claude.cmd (cài bằng npm) trên Windows chỉ chạy qua shell, nên bọc dấu ngoặc kép quanh đường dẫn có khoảng trắng.
@@ -112,7 +127,9 @@ function runClaude(say, pluginDir, cwd, bin = process.env.CLAUDE_BIN || 'claude'
       rest = parts.pop();
       for (const text of parts) lines.push({ t: Date.now() - started, text });
     });
-    const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
+    // Qua shell trên Windows, child.kill() chỉ giết cmd, claude vẫn chạy: giết cả cây tiến trình.
+    const stop = () => (viaShell ? spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }) : child.kill());
+    const timer = setTimeout(stop, TIMEOUT_MS);
     child.on('error', reject);
     child.on('close', () => {
       clearTimeout(timer);
@@ -148,7 +165,12 @@ async function main() {
   try {
     for (const testCase of cases) {
       process.stderr.write(`chạy ${testCase.id}…\n`);
-      const parsed = parseStream(await runClaude(testCase.say, opts.plugin, cwd));
+      const lines = await runClaude(testCase.say, opts.plugin, cwd, allowedTools(config), blockedTools(config));
+      const parsed = parseStream(lines);
+      if (!parsed.answer) {
+        const tail = lines.slice(-3).map((line) => line.text.slice(0, 300)).join(' | ');
+        process.stderr.write(`${testCase.id}: không có chữ nào trả về (${lines.length} dòng). Cuối luồng: ${tail || '(trống)'}\n`);
+      }
       results.push(gradeCase(parsed, testCase, config));
       answers.push({ id: testCase.id, say: testCase.say, answer: parsed.answer });
     }
