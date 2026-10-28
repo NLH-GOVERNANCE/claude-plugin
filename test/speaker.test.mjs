@@ -272,6 +272,11 @@ describe('hàm thuần của Loa', () => {
     writeFileSync(join(dir, 'machine-id'), 'tên-máy có dấu cách\n');
     assert.equal(machineId(dir, () => 'c'.repeat(32)), `m-${'c'.repeat(32)}`);
     assert.match(machineId(temp('machine')), /^m-[0-9a-f]{32}$/);
+    // Phiên Claude Code trên web: thư mục nhà mới cho mỗi phiên, nên không phải một máy; không sinh mã, không ghi gì (28/10).
+    const remote = temp('machine');
+    assert.equal(machineId(remote, () => 'd'.repeat(32), { CLAUDE_CODE_REMOTE: 'true' }), null);
+    assert.equal(existsSync(join(remote, 'machine-id')), false);
+    assert.equal(machineId(dir, () => 'e'.repeat(32), { CLAUDE_CODE_REMOTE: 'false' }), `m-${'c'.repeat(32)}`, 'máy thật vẫn giữ mã');
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, id), `https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z&machine_id=${id}`);
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, 'ngắn'), 'https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z');
   });
