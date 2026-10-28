@@ -4,7 +4,7 @@ Nếp là nơi cả công ty NhiLe giao việc, theo dõi việc và ký duyệt
 
 ## Cài (một lần)
 
-**Claude Code trên máy tính** (Windows, Mac, Linux): dán một câu này vào Claude Code. Claude tự làm hết, bạn không gõ lệnh nào. Nếp lấy từ tài khoản Claude của bạn nên không phải đăng nhập lần hai.
+**Claude Code trên máy tính** (Windows, Mac, Linux): dán một câu này vào Claude Code, Claude tự cài gói, bạn không gõ lệnh nào. Nếp lấy từ tài khoản Claude của bạn nên không phải đăng nhập lần hai; máy chưa có Nếp thì Claude đưa một link để bạn mở, làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team.
 
 ```
 Cài Nếp cho máy này theo https://raw.githubusercontent.com/NLH-GOVERNANCE/claude-plugin/main/SETUP.md
@@ -27,22 +27,15 @@ Nói với Claude bằng câu thường; lệnh có gạch chéo chỉ là lối
 - "Việc của tôi hôm nay?" (gồm việc chờ tôi ký) · `/work`
 - "Giao cho chị Thùy: …, xong khi …" · `/assign`
 - "Làm tiếp việc …", ở máy nào cũng được · `/nlh:resume`
-- "Tôi dừng đây": Claude tự ghi bàn giao lên phiếu · `/handoff`
+- "Tôi dừng đây": Claude tự ghi bàn giao lên việc · `/handoff`
 - "Góp ý: …" khi vướng hay khó dùng, Claude ghi lại cho Tech Lead
 - Xem tình hình trên Telegram hay governance.nlh.vn/app
 
 Nếp tự cập nhật (bấm **Check for updates**, hoặc bật **Sync automatically**). Telegram là tuỳ chọn, chỉ để ký ngay trong nhóm.
 
-### Bật Loa trên máy (Windows và Mac)
+### Loa trên máy (Windows và Mac)
 
-Loa ngồi trên máy của bạn: có việc mới cho một ô, Loa báo một câu tới đúng phiên Claude đang ngồi ô đó trong khoảng 15 giây; không có phiên nào đang ngồi ô đó thì Loa không mở phiên nào, chỉ in một dòng "Ô … có việc mới, chưa phiên nào mở; mở Claude gõ "làm tiếp"" (việc 3a65c3bd, anh Sơn 26/10: không mở phiên nền); việc vẫn nằm trong hộp việc. Máy tắt hay Loa đóng quá 2 giờ thì lúc bật lại Loa chỉ in một dòng "trong lúc vắng có N việc", không mở phiên nào; gõ **làm tiếp** trong Claude để xem. Việc đã có máy khác hay phiên trên mây giữ thì Loa ở máy này không đụng tới. Mỗi máy làm một lần, ba bước:
-
-1. Cài app Claude cho máy tính ở [claude.ai/download](https://claude.ai/download) và Nếp như mục trên; máy đã có thì bỏ qua.
-2. Cách bật Loa không cần người dùng làm tay đang được làm lại (việc D của 26f86f3d, chờ Danh ký). Trang **Kết nối › Khoá cho Loa trên máy** chưa có thật nên bước này tạm không dùng; SETUP.md bỏ qua Loa tới khi việc D vào.
-
-Khi dán, chữ không hiện ra: đó là bình thường. Lần đầu, cửa sổ Loa tự cài phần còn thiếu trong một hai phút, rồi mở trình duyệt để bạn đăng nhập Claude. Mỗi lần mở, cửa sổ hỏi một câu tiếng Anh: chọn dòng **I am using this for local development**, bấm Enter. Để cửa sổ mở là Loa làm việc, máy không ngủ khi Loa mở; đóng cửa sổ là tắt. Từ lần sau Loa tự mở khi bạn đăng nhập máy, chỉ cần chọn dòng tiếng Anh như trên. Khoá tự gia hạn khi Loa chạy, chỉ hết hạn sau 30 ngày không dùng. Không dán khoá vào chat.
-
-Máy đã bật Loa trước khi đổi tên Nếp: gõ **bật Loa** thêm một lần, không cần khoá mới.
+Loa báo việc mới tới đúng phiên Claude trên máy của bạn. Cách bật không cần làm tay đang được làm lại, nên Loa tạm chưa dùng; khi xong Claude sẽ tự lo.
 
 ## Cho người bảo trì
 
@@ -62,9 +55,23 @@ Máy đã bật Loa trước khi đổi tên Nếp: gõ **bật Loa** thêm mộ
 
 ### Nếp đến từ tài khoản (28/10/2026, 0.23.1)
 
-Ngày 26/10 (0.22.0) gói mang máy chủ `nep` (`https://mcp.nlh.vn/mcp`, tên `plugin:nlh:nep`) để cài gói là có Nếp. Thử 28/10 trên máy sạch: máy chủ đó trùng địa chỉ với connector Nếp của tài khoản nên che nó, đòi đăng nhập riêng (`/mcp`, Connect, "2 to reconnect"), còn đường đồng bộ theo tài khoản thì có Nếp ngay, không đăng nhập (việc d622294a). Từ 0.23.1 gói bỏ máy chủ đó; Nếp là connector gắn vào tài khoản. Máy chưa gắn thì dòng đầu phiên dặn mở link ở trên, làm theo màn hình, mở phiên mới.
+Ngày 26/10 anh Sơn dặn "cài gói là có luôn Nếp", nên 0.22.0 mang máy chủ `nep` (`https://mcp.nlh.vn/mcp`, tên `plugin:nlh:nep`) để cài gói là có Nếp. Thử 28/10 trên máy sạch: máy chủ đó trùng địa chỉ với connector Nếp của tài khoản nên che nó, đòi đăng nhập riêng (`/mcp`, Connect, "2 to reconnect"), còn đường đồng bộ theo tài khoản thì có Nếp ngay, không đăng nhập (việc d622294a). Từ 0.23.1 gói bỏ máy chủ đó (đảo ý ngày 28/10, việc F 74affec8); Nếp là connector gắn vào tài khoản. Máy chưa gắn thì dòng đầu phiên dặn mở link ở trên, làm theo màn hình, mở phiên mới.
 
 - Hook vẫn gọi `plugin:nlh:nep` trước cho máy còn bản gói cũ, rồi connector tài khoản theo mọi tên nó có (`claude.ai Nếp` trên máy, `Nếp` trên mây, hai tên cũ `nhile-governance` và `NhiLe Governance`, và mã `3398cc99-b4dc-41bd-8007-bd4b6792d5cb` mà phiên mây tạo bằng `create_session` và app Claude dùng làm tên connector của công ty, việc 7b4fbf29). Tên nào không nối thì hook đó bỏ qua; hai bản cùng lưu một lượt chat thì giếng bỏ bản trùng trong 2 phút.
+
+### Loa: cách bật hiện có (cho người bảo trì, chưa dùng với người dùng)
+
+Trang **Kết nối › Khoá cho Loa trên máy** chưa có thật; SETUP.md bỏ qua Loa tới khi mục D vào. Nội dung dưới là mô tả cũ.
+
+Loa ngồi trên máy của bạn: có việc mới cho một ô, Loa báo một câu tới đúng phiên Claude đang ngồi ô đó trong khoảng 15 giây; không có phiên nào đang ngồi ô đó thì Loa không mở phiên nào, chỉ in một dòng "Ô … có việc mới, chưa phiên nào mở; mở Claude gõ "làm tiếp"" (việc 3a65c3bd, anh Sơn 26/10: không mở phiên nền); việc vẫn nằm trong hộp việc. Máy tắt hay Loa đóng quá 2 giờ thì lúc bật lại Loa chỉ in một dòng "trong lúc vắng có N việc", không mở phiên nào; gõ **làm tiếp** trong Claude để xem. Việc đã có máy khác hay phiên trên mây giữ thì Loa ở máy này không đụng tới. Mỗi máy làm một lần, ba bước:
+
+1. Cài app Claude cho máy tính ở [claude.ai/download](https://claude.ai/download) và Nếp như mục trên; máy đã có thì bỏ qua.
+2. Trong app Claude, mở mục **Code**, gõ **bật Loa**, bấm cho phép khi được hỏi: biểu tượng **Loa tỉnh NhiLe** hiện trên màn hình chính.
+3. Ở web Nếp, mở **Kết nối**, thẻ **Khoá cho Loa trên máy**, bấm **Tạo khoá mới** và chép khoá, rồi bấm đúp biểu tượng Loa, dán khoá khi cửa sổ hỏi và bấm Enter.
+
+Khi dán, chữ không hiện ra: đó là bình thường. Lần đầu, cửa sổ Loa tự cài phần còn thiếu trong một hai phút, rồi mở trình duyệt để bạn đăng nhập Claude. Mỗi lần mở, cửa sổ hỏi một câu tiếng Anh: chọn dòng **I am using this for local development**, bấm Enter. Để cửa sổ mở là Loa làm việc, máy không ngủ khi Loa mở; đóng cửa sổ là tắt. Từ lần sau Loa tự mở khi bạn đăng nhập máy, chỉ cần chọn dòng tiếng Anh như trên. Khoá tự gia hạn khi Loa chạy, chỉ hết hạn sau 30 ngày không dùng. Không dán khoá vào chat.
+
+Máy đã bật Loa trước khi đổi tên Nếp: gõ **bật Loa** thêm một lần, không cần khoá mới.
 
 ### File .zip (để thử)
 
@@ -73,6 +80,14 @@ node scripts/plugin-zip.mjs nep.zip
 ```
 
 Ở [Customize > Plugins](https://claude.ai/customize/plugins): **Add**, **Upload plugin**, chọn `nep.zip`. File .zip không tự cập nhật, nên mọi người dùng đường cài ở trên.
+
+### Bộ ca "người không rành" (trước mỗi lần tăng bản gói)
+
+```
+node scripts/persona-suite.mjs
+```
+
+Chạy bảy câu người thật đã gõ ("chào em", "Nếp có gì mới không em?"…) qua Claude Code không giao diện với gói ở thư mục này (`--plugin <thư mục>` để thử gói khác, `--only id,id` chạy vài ca, `--out file.json` ghi kết quả). Tự chấm: chữ đầu ≤15 giây, "chào em" ≤4 dòng, không chữ cấm và không câu tiếng Anh; mã thoát 1 nếu có ca trượt. Điều còn lại, không chỉ tới nút hay trang không có thật, do dân làng Trải nghiệm đọc câu trả lời script in ra. Thêm ca hay sửa chữ cấm: sửa `scripts/persona-cases.json`, không đụng code. Cần Claude thật và hạn mức nên không chạy trong CI; Người duyệt golive (Tech Lead) chỉ duyệt bản gói lên `main` khi có kết quả đạt ghi trên việc 26f86f3d. Ca chạy bằng tài khoản thật trên giếng thật: Claude chỉ được tự gọi công cụ đọc của Nếp (`readTools` trong file ca), công cụ ghi (`writeTools`) bị chặn hẳn, ca nào cần ghi thì chấm ở câu trả lời Claude định làm. Hook của gói thì không chặn được: mỗi ca vẫn lưu một lượt chat (câu hỏi giả) và báo một phiên lên giếng, nên chạy bộ ca là có ghi thật, bảy ca thì bảy lượt.
 
 ### Kiểm
 

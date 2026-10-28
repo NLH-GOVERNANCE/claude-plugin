@@ -35,7 +35,7 @@ Do not ask the user to type `/reload-plugins`. Nếp's tools come from the user'
 The plugin carries no Nếp server of its own: Nếp is the Nếp connector of the user's Claude account, so there is nothing to sign in to here.
 
 1. If you have `my_context` from Nếp (any server), call it. It answers: go to step 4.
-2. Otherwise **User:** say "Nếp chưa nối vào Claude của bạn: mở https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới. Xong nói tiếp." Wait. Never ask the user to type `/mcp`. Use the user's own form of address for chị (chị, anh, bạn), "bạn" if unknown.
+2. Otherwise **User:** say "Nếp chưa nối vào Claude của bạn: mở https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp , làm theo màn hình, đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team, rồi mở phiên mới. Xong nói tiếp." Wait. Never ask the user to type `/mcp`. The sentences say "bạn"; if the user has called themselves another form (chị, anh), use that form instead.
 3. Call `my_context`. Still failing: say so in one sentence and stop.
 
 ### 4. Loa (not wired yet)
@@ -57,7 +57,7 @@ When D lands, call its step here. The user must still see no word "Loa", "khoá"
 
 One line, nothing after it: no "còn lại", no waiting work, no list of what you did.
 
-- Loa is on (after D): "Xong rồi chị. Từ giờ việc mới sẽ tự hiện trong Claude, chị không cần hỏi."
-- Until D lands: "Xong rồi chị. Chị cứ mở Claude và hỏi việc của chị."
+- Loa is on (after D): "Xong rồi. Từ giờ việc mới sẽ tự hiện trong Claude, bạn không cần hỏi."
+- Until D lands: "Xong rồi. Bạn cứ mở Claude và hỏi việc của bạn."
 
 Use the user's own form of address for chị (chị, anh, bạn), "bạn" if unknown. Never use the old name of the system in what the user reads: it is called Nếp.

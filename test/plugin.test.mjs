@@ -262,9 +262,15 @@ describe('plugin nlh', () => {
     const forUser = setup.split('## For Claude')[0];
     const said = [...setup.matchAll(/say "([^"]+)"/g)].map((m) => m[1]).join('\n');
     for (const text of [forUser, said]) assert.doesNotMatch(text, /email công ty|tỉnh NhiLe|\/mcp|\/reload-plugins|PowerShell|Khoá cho Loa/);
-    assert.doesNotMatch(readme.split('## Cho người bảo trì')[0].replace(/\*\*Loa tỉnh NhiLe\*\*/g, ''), /email công ty|tỉnh NhiLe/);
+    // Phần README cho người dùng (trước "## Cho người bảo trì"): không chữ cũ (ô, phiếu, Tháp), không mã việc, không việc chờ ký.
+    const readmeUser = readme.split('## Cho người bảo trì')[0].replace(/\*\*Loa tỉnh NhiLe\*\*/g, '');
+    for (const text of [readmeUser, forUser, said]) assert.doesNotMatch(text, /email công ty|tỉnh NhiLe|phiếu|(^|[\s(])ô([\s).,:;]|$)|Tháp|Danh ký|việc [0-9a-f]{8}|26f86f3d/m);
+    assert.doesNotMatch(readmeUser, /Khoá cho Loa|Tạo khoá mới|bật Loa/);
     assert.match(said, /đăng nhập bằng email bạn đang dùng trong NhiLe Holding hay NhiLe Team/);
-    assert.ok(setup.includes('"Xong rồi chị. Từ giờ việc mới sẽ tự hiện trong Claude, chị không cần hỏi."'));
+    // Hai câu xong dùng "bạn", không đoán giới; Claude đổi cách xưng hô theo người dùng.
+    assert.ok(setup.includes('"Xong rồi. Từ giờ việc mới sẽ tự hiện trong Claude, bạn không cần hỏi."'));
+    assert.ok(setup.includes('"Xong rồi. Bạn cứ mở Claude và hỏi việc của bạn."'));
+    assert.doesNotMatch(setup.split('### 6. Report')[1], /Xong rồi chị|chị không cần/);
     // Loa chưa có đường bật không cần khoá: SETUP.md không gọi setup Loa và dặn không nói về Loa với người dùng.
     assert.match(setup, /### 4\. Loa \(not wired yet\)/);
     assert.match(setup, /do not run `speaker\/setup\.ps1` or `speaker\/setup\.sh`/);
