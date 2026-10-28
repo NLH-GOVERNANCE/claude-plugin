@@ -9,6 +9,7 @@ import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 import { pluginFiles, pluginZip } from '../scripts/plugin-zip.mjs';
+import { pluginVersion } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pluginDir = join(root, 'plugins/tinh-nlh');
@@ -284,6 +285,20 @@ describe('plugin nlh', () => {
     assert.match(id, /^m-[0-9a-f]{32}$/);
     assert.match(first, new RegExp(`^This machine: id ${id} .*report_session.*status started.*/nlh:handoff.*machine_stop quota or shutdown`));
     assert.equal(await run(), first, 'lần sau cùng mã');
+    // Bản gói (plugin_version) đọc từ plugin.json, đi cùng machine_id trong cùng một lần báo; không dặn gì khác về gói.
+    const version = JSON.parse(readFileSync(join(pluginDir, '.claude-plugin/plugin.json'), 'utf8')).version;
+    assert.match(version, /^\d+\.\d+\.\d+$/);
+    assert.ok(first.includes(`Also pass plugin_version ${version} (this plugin's version) in the same call, nothing else about the plugin.`));
+    assert.equal(pluginVersion(), version);
+    // Tệp lạ hay không đọc được thì không dặn gì (không bịa bản).
+    const bad = join(dir, 'plugin.json');
+    assert.equal(pluginVersion(bad), null, 'không có tệp');
+    for (const content of ['không phải json', '{}', '{"version":"latest"}', '{"version":"1.2"}', '{"version":"1.2.3 && rm"}']) {
+      writeFileSync(bad, content);
+      assert.equal(pluginVersion(bad), null, content);
+    }
+    writeFileSync(bad, '{"version":"1.2.3-beta.1"}');
+    assert.equal(pluginVersion(bad), '1.2.3-beta.1');
     rmSync(dir, { recursive: true, force: true });
   });
 
