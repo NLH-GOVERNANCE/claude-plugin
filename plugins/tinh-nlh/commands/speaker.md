@@ -10,7 +10,7 @@ Only works in Claude Code on a computer (Claude app, Code tab; or a Claude Code 
    - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/speaker/setup.ps1"`
    - macOS: `/bin/bash "${CLAUDE_PLUGIN_ROOT}/speaker/setup.sh"`
 2. Repeat the line it printed, then give the two remaining steps in plain Vietnamese, no commands, no codes:
-   - Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính. Lần đầu cửa sổ tự cài phần còn thiếu, rồi mở trang Nếp.
+   - Bấm đúp biểu tượng **Loa tỉnh NhiLe** trên màn hình chính. Lần đầu cửa sổ tự cài phần còn thiếu, hỏi quyền một lần (hộp của máy: bấm **Có**; máy Mac thì gõ mật khẩu máy), rồi mở trang Nếp.
    - Ở trang Nếp vừa mở, bấm **Cho phép** (mã trên trang phải giống mã trong cửa sổ Loa). Khoá về thẳng máy này, không ai phải chép hay dán. Đừng đóng cửa sổ Loa.
 3. If it printed that Loa will open at login, add one sentence: từ lần sau Loa tự mở khi bạn đăng nhập máy, chỉ cần chọn dòng "I am using this for local development" khi cửa sổ hỏi.
 4. If it printed that another shortcut exists, say: máy này đã có Loa, bấm đúp lối tắt đó như mọi lần.

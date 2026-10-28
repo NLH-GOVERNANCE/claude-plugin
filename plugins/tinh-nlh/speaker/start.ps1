@@ -50,6 +50,7 @@ if ($best -and (-not $current -or $best.Version -ge $current)) {
   $stale = $PSCommandPath -and ((Get-FileHash -LiteralPath $PSCommandPath).Hash -ne (Get-FileHash -LiteralPath $newStart).Hash)
   Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
   Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\pair.mjs') -Destination (Join-Path $Dir 'pair.mjs') -Force
+  if (Test-Path -LiteralPath (Join-Path $best.Root 'speaker\policy.mjs')) { Copy-Item -LiteralPath (Join-Path $best.Root 'speaker\policy.mjs') -Destination (Join-Path $Dir 'policy.mjs') -Force }
   Copy-Item -LiteralPath $newStart -Destination (Join-Path $Dir 'start.ps1') -Force
   Set-Content -LiteralPath $versionFile -Value $best.Version.ToString() -Encoding ascii
   if ($stale -and -not $Relaunched) {
@@ -128,6 +129,16 @@ if (-not (Test-Path -LiteralPath $keyFile)) {
   Write-Host 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
   & $node $pair --dir $Dir | Out-Host
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $keyFile)) { Stop-Loa 'Chưa có khoá cho Loa.' }
+}
+
+# 4b. Channel permission (policy.mjs, ticket 26f86f3d): Claude Code only takes the plugin's channel when the machine's list
+# allows it. Written once, with the one permission box of Windows; "No" is kept in policy-status.json and never asked again,
+# Loa then runs the 10-minute way. Already allowed: nothing is shown.
+$policy = Join-Path $Dir 'policy.mjs'
+$policyStatus = Join-Path $Dir 'policy-status.json'
+$declined = (Test-Path -LiteralPath $policyStatus) -and ((Get-Content -LiteralPath $policyStatus -Raw) -match '"status":"declined"')
+if (-not $DryRun -and (Test-Path -LiteralPath $policy) -and -not $declined) {
+  & $node $policy ensure --status $policyStatus | Out-Host
 }
 
 # 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine
