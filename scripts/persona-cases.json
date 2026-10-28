@@ -1,5 +1,5 @@
 {
-  "_ghi_chu": "Bộ ca chấm người không rành kỹ thuật. Dân làng Trải nghiệm thêm ca bằng cách thêm một dòng vào cases (id không dấu, say là câu người thật gõ), không sửa code. Sửa danh sách chữ cấm ở forbidden. maxLines: điều (2), chỉ ca nào ghi mới chấm. allow: chữ cấm mà chính người dùng đã nói ra trong câu hỏi nên được nhắc lại.",
+  "_ghi_chu": "Bộ ca chấm người không rành kỹ thuật. Dân làng Trải nghiệm thêm ca bằng cách thêm một dòng vào cases (id không dấu, say là câu người thật gõ), không sửa code. Sửa danh sách chữ cấm ở forbidden. maxLines: điều (2), chỉ ca nào ghi mới chấm. allow: chữ cấm mà chính người dùng đã nói ra trong câu hỏi nên được nhắc lại. noNep: chạy không có kết nối Nếp nào (máy chưa gắn Nếp vào tài khoản Claude). must: những chuỗi câu trả lời phải có.",
   "maxFirstTextSeconds": 15,
   "_readTools": "Chỉ những công cụ đọc của Nếp này được tự duyệt khi chạy bộ ca (tên đầy đủ, không dấu *), vì ca chạy bằng tài khoản thật trên giếng thật; writeTools bị chặn hẳn (--disallowedTools), Claude định gọi thì bị từ chối và câu trả lời vẫn được chấm. Không chặn được: hook của gói (lưu câu hỏi, báo phiên) chạy riêng, nên mỗi ca vẫn ghi một lượt chat và báo phiên lên giếng.",
   "readTools": [
@@ -117,6 +117,15 @@
     {
       "id": "khong-thay-ket-noi",
       "say": "chị không thấy mục Kết nối"
+    },
+    {
+      "id": "chua-co-ket-noi",
+      "say": "chào em, hôm nay chị có việc gì không?",
+      "noNep": true,
+      "maxLines": 4,
+      "must": [
+        { "label": "link thêm Nếp", "re": "claude\\.ai/customize/connectors\\?modal=add-custom-connector", "flags": "" }
+      ]
     }
   ],
   "forbidden": [
