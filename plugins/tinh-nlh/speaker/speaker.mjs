@@ -574,6 +574,20 @@ export const defaultSpawn = (claude) => (args, cwd) =>
     execFile(claude, args, { cwd, env: childEnv(), encoding: 'utf8', timeout: 120_000, windowsHide: true }, (error) => done(!error));
   });
 
+// A Windows notification for the sentences a person must see although Loa's window is hidden ("no session is open", "work
+// waits for you"); clicking it opens Claude (toast.ps1, 28/10, 26f86f3d). Only when the launcher asked (NLH_TOWER_TOAST=1).
+export const defaultToast = (env = process.env, platform = process.platform) => (text) => {
+  if (env.NLH_TOWER_TOAST !== '1' || platform !== 'win32' || !env.NLH_TOWER_DIR) return false;
+  const script = join(env.NLH_TOWER_DIR, 'toast.ps1');
+  if (!existsSync(script)) return false;
+  try {
+    execFile(POWERSHELL, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', script, '-Title', 'Loa tỉnh NhiLe', '-Text', text], { windowsHide: true, timeout: 20_000 }, () => {});
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // Background sessions that copy a running interactive session seated at the same villager (ticket 5d66123d, 22/10:
 // Danh was asked to sign round 23 twice, 3 seconds apart, by the app session "Dân làng - techlead (son/lead)" and the
 // background "Ô Tech Lead (son/lead)" Loa had opened 14 seconds before it). Seated: the interactive session's name
@@ -603,6 +617,7 @@ export function startServer({
   keyStore = defaultStore(),
   run = defaultRun(env.CLAUDE_BIN || 'claude'),
   spawnClaude = defaultSpawn(env.CLAUDE_BIN || 'claude'),
+  toast = defaultToast(env),
   cwdOf = (id) => transcriptCwd(id),
   log = (line) => process.stderr.write(`speaker: ${line}\n`),
   onClose = () => process.exit(0),
@@ -677,11 +692,15 @@ export function startServer({
     const item = { entry_id: reminder ? `remind${reminder}:${base}` : base, base_id: base, kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '', ...(reminder ? { reminder } : {}) };
     if (HUB_CELLS.includes(item.cell)) {
       const ticket = item.ticket ? ` (phiếu ${item.ticket})` : '';
-      return push(`Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
+      const hubText = `Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`;
+      toast(hubText);
+      return push(hubText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     if (entry.kind === 'you') {
       const ticket = item.ticket ? `, phiếu ${item.ticket}` : '';
-      return push(`Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
+      const youText = `Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`;
+      toast(youText);
+      return push(youText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     // Fresh items only: a line the villager wrote itself is not told; an answer waits confirmMs (see recheck).
     if (!told) {
@@ -714,7 +733,9 @@ export function startServer({
     const last = noSession.get(item.cell);
     if (last !== undefined && clock() - last < NO_SESSION_GAP_MS) return log('no session: already told for this cell');
     noSession.set(item.cell, clock());
-    push(noSessionSentence(seat), { action: 'none', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
+    const noSessionText = noSessionSentence(seat);
+    toast(noSessionText);
+    push(noSessionText, { action: 'none', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
   }
 
   // One feed read from `since`, or null when it cannot be read (then nothing is decided this round).
