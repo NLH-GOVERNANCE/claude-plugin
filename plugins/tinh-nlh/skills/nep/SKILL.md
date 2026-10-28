@@ -21,7 +21,7 @@ At the start of a conversation, do at once what the user asked. Never make them 
 
 ## What is new
 
-User asks "Nếp có gì mới" (or similar): answer with the Nếp version on this machine and 1 to 3 changes the user can see, in plain Vietnamese. Never PR, repo or code news. Current: version 0.23.0. What changed for the user: (1) Mở Claude và hỏi gì thì Nếp làm ngay điều đó, không đọc danh sách việc trước; (2) chào thì Nếp chào lại một câu, chỉ nhắc tối đa 3 việc cần chính bạn.
+User asks "Nếp có gì mới" (or similar): answer with the Nếp version on this machine and 1 to 3 changes the user can see, in plain Vietnamese. Never PR, repo or code news. Current: version 0.23.3. What changed for the user: (1) Mở Claude và hỏi gì thì Nếp làm ngay điều đó, không đọc danh sách việc trước; (2) chào thì Nếp chào lại một câu, chỉ nhắc tối đa 3 việc cần chính bạn.
 
 The context only holds data of class 1–2 per the sensitivity table Danh signed. When Claude is signed in with a personal account, never open or copy class 3–4 data into the conversation (finance, contracts, HR, group messages, personal brains, student, customer or child names).
 

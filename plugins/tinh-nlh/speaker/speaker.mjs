@@ -120,6 +120,18 @@ export function machineId(dir = join(homedir(), '.tinh-nlh'), random = () => ran
   }
 }
 
+// Version of the plugin this file ships in (.claude-plugin/plugin.json), for report_session plugin_version, so Nếp can count
+// machines still on an old version. Only a plain version string (1.2.3, 1.2.3-beta.1) counts; null when unreadable.
+export const PLUGIN_VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.-]{1,20})?$/;
+export function pluginVersion(file = fileURLToPath(new URL('../.claude-plugin/plugin.json', import.meta.url))) {
+  try {
+    const version = JSON.parse(readFileSync(file, 'utf8')).version;
+    return PLUGIN_VERSION.test(version) ? version : null;
+  } catch {
+    return null;
+  }
+}
+
 // Only send the key to the tỉnh hub (https, nlh.vn). localhost may use http, for trials on the machine.
 export function hubOrigin(value) {
   let url;
