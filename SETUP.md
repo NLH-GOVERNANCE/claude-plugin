@@ -14,11 +14,18 @@ Phần dưới là cho Claude. Người dùng không gõ lệnh nào: Claude là
 
 You are setting up Nếp (NhiLe Holdings' work system) on this machine. Do every step yourself with the shell. Stop and ask the user only where a step says **User**. Talk to the user in short plain Vietnamese, no commands or codes unless the step gives the exact sentence. Never ask for, accept or repeat a key or password in chat.
 
-This only works in Claude Code on a computer. If you are in claude.ai web chat, Cowork or on a phone, say: "Mở Claude Code trên máy tính rồi dán lại câu này." and stop. If this is a Claude Code cloud session (`CLAUDE_CODE_REMOTE` is `true`), say: "Phiên trên mây lấy Nếp từ tài khoản Claude, không cần cài. Chưa có Nếp thì thêm ở https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp" and stop.
+This only works in Claude Code on a computer. If you are in claude.ai web chat, Cowork or on a phone, say: "Mở app Claude trên máy tính, vào mục Code, rồi dán lại câu này." and stop. If this is a Claude Code cloud session (`CLAUDE_CODE_REMOTE` is `true`), say: "Phiên trên mây lấy Nếp từ tài khoản Claude, không cần cài. Chưa có Nếp thì thêm ở https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp" and stop.
 
 ### 1. Find the OS
 
-Windows (PowerShell), macOS or Linux. Check `claude --version` works; if not, stop and say Claude Code is not on the PATH.
+Windows (PowerShell), macOS or Linux. Find the `claude` program once and use it, by its full path when it is not on the PATH, wherever the steps below say `claude`:
+
+1. `claude --version` works: use `claude`.
+2. Otherwise the program that runs this very session: the environment variable `CLAUDE_CODE_EXECPATH` holds its full path (a machine with only the Claude app is the usual case, and the program is inside the app).
+3. Otherwise look for the one bundled with the Claude app: Windows `%LOCALAPPDATA%\Claude-Data\*\claude-code\*\*\claude.exe` or `%APPDATA%\Claude\claude-code\*\claude.exe`; macOS `~/Library/Application Support/Claude/claude-code/*/claude` (not tried on macOS). Take the newest version.
+4. Found none: say "Máy này chưa sẵn sàng để cài Nếp: mở app Claude, vào mục Code một lần, rồi dán lại câu này." and stop.
+
+This is internal: the user never hears about the PATH, the claude command, Claude Code or a step number.
 
 ### 2. Install or update the plugin
 
