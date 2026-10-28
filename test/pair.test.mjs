@@ -102,7 +102,12 @@ test('lỗi ra một câu lời thường: xin quá nhiều lần, hub lỗi, kh
   let h = harness({ fetchImpl: async () => json(429, {}) });
   assert.match((await pair(h.args)).message, /vừa xin mã mấy lần/);
   h = harness({ fetchImpl: async () => json(502, {}) });
-  assert.match((await pair(h.args)).message, /chưa nhận lời xin/);
+  const notReady = await pair(h.args);
+  assert.match(notReady.message, /^Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được\./);
+  assert.deepEqual([notReady.hub, notReady.detail], [true, 'POST /tower/pair 502']);
+  assert.doesNotMatch(notReady.message, /Thử lại sau ít phút|khoá|PATH|Claude Code/, 'một câu đúng, không chữ cấm');
+  h = harness({ fetchImpl: async () => json(404, {}) });
+  assert.equal((await pair(h.args)).detail, 'POST /tower/pair 404');
   h = harness({
     fetchImpl: async () => {
       throw new Error('net');
@@ -110,7 +115,9 @@ test('lỗi ra một câu lời thường: xin quá nhiều lần, hub lỗi, kh
   });
   assert.match((await pair(h.args)).message, /Chưa nối được Nếp/);
   h = harness({ fetchImpl: async () => json(201, { code: 'javascript:alert(1)', expires_at: new Date(Date.now() + 60_000).toISOString() }) });
-  assert.match((await pair(h.args)).message, /mã lạ/);
+  const strange = await pair(h.args);
+  assert.match(strange.message, /^Nếp chưa sẵn sàng bước này/);
+  assert.equal(strange.hub, true);
   assert.deepEqual(h.opened, []);
   const hub = fakeHub({ asks: [{ code: 'ABCD-2345', expires_at: new Date(Date.now() + 60_000).toISOString() }], statuses: ['allowed'] });
   h = harness({
@@ -119,7 +126,7 @@ test('lỗi ra một câu lời thường: xin quá nhiều lần, hub lỗi, kh
       throw new Error('keychain');
     },
   });
-  assert.match((await pair(h.args)).message, /Chưa lưu được khoá/);
+  assert.match((await pair(h.args)).message, /Chưa lưu được phép của Loa/);
   assert.match((await pair(harness({ machine: null }).args)).message, /Chưa có mã máy/);
   assert.match((await pair(harness({ origin: null }).args)).message, /không phải https của nlh\.vn/);
 });

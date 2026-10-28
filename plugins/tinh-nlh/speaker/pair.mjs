@@ -63,7 +63,10 @@ function openInBrowser(url) {
 }
 
 const sleepFor = (ms) => new Promise((done) => setTimeout(done, ms));
-const failure = (message) => ({ ok: false, message });
+// The hub cannot take the ask (404 before its pairing route is live, 5xx, a strange answer): nothing a person can fix. One true
+// sentence, and a technical line for the launcher to leave for the next Claude session to report to the CTO cell (exit code 2).
+const NOT_READY = 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Người lo kỹ thuật sẽ được báo; lần mở máy sau Loa tự hỏi lại.';
+const failure = (message, detail) => ({ ok: false, message, ...(detail ? { detail, hub: true } : {}) });
 
 // One full pairing. Everything outside is injectable so the test runs it without a network or a key store.
 export async function pair({
@@ -80,7 +83,7 @@ export async function pair({
   pollMs = POLL_MS,
 }) {
   if (!origin) return failure('Địa chỉ Nếp trong cấu hình của Loa không phải https của nlh.vn, Loa không gửi gì tới đó.');
-  if (!machine) return failure('Chưa có mã máy. Mở Claude Code một lần trên máy này rồi bấm đúp Loa lại.');
+  if (!machine) return failure('Chưa có mã máy. Mở Claude một lần trên máy này rồi bấm đúp Loa lại.');
   for (let round = 0; round < ROUNDS; round += 1) {
     const key = makeKey();
     let asked;
@@ -91,13 +94,13 @@ export async function pair({
         body: JSON.stringify({ machine_id: machine, key_hash: keyHash(key) }),
       });
       if (response.status === 429) return failure('Máy này vừa xin mã mấy lần. Đợi mười phút rồi bấm đúp Loa lại.');
-      if (!response.ok) return failure('Nếp chưa nhận lời xin của máy này. Thử lại sau ít phút.');
+      if (!response.ok) return failure(NOT_READY, `POST /tower/pair ${response.status}`);
       asked = await response.json();
     } catch {
       return failure('Chưa nối được Nếp. Kiểm mạng rồi bấm đúp Loa lại.');
     }
     const url = pairPageUrl(webOrigin, asked?.code);
-    if (!url) return failure('Nếp trả mã lạ, Loa không mở trang. Thử lại sau ít phút.');
+    if (!url) return failure(NOT_READY, 'POST /tower/pair trả mã lạ');
     say(`Trình duyệt mở trang của Nếp: mã ${asked.code} phải đang hiện trên cả hai nơi. Bấm Cho phép.`);
     say(`Trang không tự mở thì chép link này: ${url}`);
     openUrl(url);
@@ -115,7 +118,7 @@ export async function pair({
         try {
           save(key);
         } catch {
-          return failure('Chưa lưu được khoá trên máy này. Bấm đúp Loa lại.');
+          return failure('Chưa lưu được phép của Loa trên máy này. Bấm đúp Loa lại.');
         }
         return { ok: true };
       }
@@ -145,6 +148,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main(process.argv.slice(2)).then((result) => {
     if (result.ok) console.log('Đã lưu khoá Loa trên máy này.');
     else console.log(result.message);
-    process.exitCode = result.ok ? 0 : 1;
+    if (result.hub) {
+      try {
+        const at = process.argv.indexOf('--dir');
+        writeFileSync(join(at >= 0 ? process.argv[at + 1] : join(homedir(), '.tinh-nlh', 'speaker'), 'pair-detail.txt'), `${result.detail}\n`);
+      } catch {}
+    }
+    process.exitCode = result.ok ? 0 : result.hub ? 2 : 1;
   });
 }

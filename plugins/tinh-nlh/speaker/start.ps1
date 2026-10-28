@@ -37,15 +37,17 @@ $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $Host.UI.RawUI.WindowTitle = 'Loa tỉnh NhiLe'
 
-function Stop-Loa([string]$text) {
+# $technical: a line for the people who keep Nếp, left like the hidden case for the next Claude session to report, also when a person saw the
+# window. $shown: the sentence was already printed by the program that failed.
+function Stop-Loa([string]$text, [string]$technical = '', [switch]$shown) {
   Write-Host ''
-  Write-Host $text
+  if (-not $shown) { Write-Host $text }
   # Hidden: nobody sees the window nor can press Enter. One line is left for the next Claude session to say and report to the CTO cell (hooks/machine.mjs).
-  if ($Auto) {
-    try { [IO.File]::WriteAllText((Join-Path $Dir 'last-error.json'), (ConvertTo-Json @{ at = (Get-Date -Format o); reason = $text } -Compress), (New-Object Text.UTF8Encoding $false)) } catch { }
-  } else {
-    Read-Host 'Bấm Enter để đóng' | Out-Null
+  if ($Auto -or $technical) {
+    $reason = if ($technical) { "$text ($technical)" } else { $text }
+    try { [IO.File]::WriteAllText((Join-Path $Dir 'last-error.json'), (ConvertTo-Json @{ at = (Get-Date -Format o); reason = $reason } -Compress), (New-Object Text.UTF8Encoding $false)) } catch { }
   }
+  if (-not $Auto) { Read-Host 'Bấm Enter để đóng' | Out-Null }
   exit 1
 }
 
@@ -268,11 +270,20 @@ $legacy = @((Join-Path $env:USERPROFILE '.tinh-nlh\thap\tower-key.dpapi'), (Join
 if (-not (Test-Path -LiteralPath $keyFile) -and $legacy) { Copy-Item -LiteralPath $legacy -Destination $keyFile }
 if (-not (Test-Path -LiteralPath $keyFile)) {
   $pair = Join-Path $Dir 'pair.mjs'
-  if (-not (Test-Path -LiteralPath $pair)) { Stop-Loa 'Chưa thấy phần xin khoá của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
+  if (-not (Test-Path -LiteralPath $pair)) { Stop-Loa 'Chưa thấy phần xin phép của Loa. Trong app Claude, mở mục Code, gõ "bật Loa", rồi bấm đúp Loa lại.' }
   Write-Host ''
   Write-Host 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
+  $detailFile = Join-Path $Dir 'pair-detail.txt'
+  Remove-Item -LiteralPath $detailFile -Force -ErrorAction SilentlyContinue
   & $node $pair --dir $Dir | Out-Host
-  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $keyFile)) { Stop-Loa 'Chưa có khoá cho Loa.' }
+  $paired = $LASTEXITCODE
+  # Exit 2: the hub is not ready for this step (nothing a person can fix). pair.mjs said so in one sentence; its technical line goes to the
+  # next Claude session, which opens a ticket for the CTO cell. No key is saved, so the next launch asks again by itself.
+  if ($paired -eq 2) {
+    $detail = if (Test-Path -LiteralPath $detailFile) { (Get-Content -LiteralPath $detailFile -Raw).Trim() } else { 'pair.mjs exit 2' }
+    Stop-Loa 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Người lo kỹ thuật sẽ được báo; lần mở máy sau Loa tự hỏi lại.' $detail -shown
+  }
+  if ($paired -ne 0 -or -not (Test-Path -LiteralPath $keyFile)) { Stop-Loa 'Loa chưa được phép chạy trên máy này. Bấm đúp Loa lại.' }
 }
 
 # 4b. Channel permission (policy.mjs, ticket 26f86f3d): Claude Code only takes the plugin's channel when the machine's list

@@ -89,7 +89,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /\[int\]\$Handoff = 0/);
     assert.match(ps, /New-Object Threading\.Mutex\(\$false, 'Local\\LoaTinhNhiLe'\)/);
     assert.match(ps, /if \(\$Auto -and -not \$DryRun -and -not \(Test-Ready\)\)/);
-    assert.match(ps, /\} else \{\s+Read-Host 'Bấm Enter để đóng'/);
+    assert.match(ps, /if \(-not \$Auto\) \{ Read-Host 'Bấm Enter để đóng'/);
     assert.match(ps, /last-error\.json/, 'chạy ẩn mà trục trặc: để lại một dòng cho phiên Claude kế tiếp');
     assert.match(ps, /-not \$DryRun -and \(Test-Path -LiteralPath \$policy\) -and -not \$declined -and -not \$Auto/, 'hộp xin quyền không bao giờ hiện khi chạy ngầm');
     // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
@@ -393,6 +393,42 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     } finally {
       spawnSync(powershell, ['-NoProfile', '-Command', `Unregister-ScheduledTask -TaskName '${name}' -Confirm:$false -ErrorAction SilentlyContinue`], { cwd: tmpdir() });
     }
+  });
+
+  // Hub chưa có đường xin phép (28/10: POST /tower/pair trả 404): trước đây "Thử lại sau ít phút" (sai) và "Chưa có khoá" (chữ cấm).
+  test('start.ps1: Nếp chưa nhận lời xin (pair.mjs thoát 2) → một câu đúng, không đứng chờ khi chạy ngầm, để lại dòng kỹ thuật cho phiên Claude kế tiếp báo người lo', () => {
+    const home = fakeHome('Thùy ỉ');
+    mkdirSync(join(home, '.local', 'bin'), { recursive: true });
+    writeFileSync(join(home, '.local', 'bin', 'claude.exe'), '');
+    const sentence = 'Nếp chưa sẵn sàng bước này nên Loa chưa báo việc mới được. Người lo kỹ thuật sẽ được báo; lần mở máy sau Loa tự hỏi lại.';
+    // pair.mjs giả như bản thật khi hub trả 404: in một câu, ghi dòng kỹ thuật, thoát 2.
+    writeFileSync(
+      join(home, '.claude/plugins/cache/nlh-governance/nlh', version, 'speaker/pair.mjs'),
+      `import { writeFileSync } from 'node:fs';
+const at = process.argv.indexOf('--dir');
+writeFileSync(process.argv[at + 1] + '/pair-detail.txt', 'POST /tower/pair 404\\n');
+console.log(${JSON.stringify(sentence)});
+process.exitCode = 2;
+`,
+    );
+    const dir = join(home, '.tinh-nlh', 'speaker');
+    const env = { ...process.env, HOME: home, USERPROFILE: home, TOWER_ORIGIN: '', LOA_MANAGED_SETTINGS_FILE: noPolicy() };
+    const start = join(plugin, 'speaker/start.ps1');
+    const base = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', start, '-DryRun'];
+    const check = (out) => {
+      assert.equal(out.status, 1, out.stdout + out.stderr);
+      assert.equal(out.stdout.split(sentence).length - 1, 1, 'câu hiện đúng một lần');
+      assert.doesNotMatch(out.stdout, /khoá|Thử lại sau ít phút|PATH|Claude Code/);
+      assert.ok(!existsSync(join(dir, KEY_FILE)), 'không lưu gì');
+      const left = JSON.parse(readFileSync(join(dir, 'last-error.json'), 'utf8'));
+      assert.equal(left.reason, `${sentence} (POST /tower/pair 404)`);
+      assert.notEqual(readFileSync(join(dir, 'last-error.json'))[0], 0xef, 'JSON không có BOM');
+      rmSync(join(dir, 'last-error.json'));
+    };
+    // Cửa sổ nhìn thấy: câu hiện, đợi bấm Enter (nhập sẵn), vẫn để lại dòng cho phiên Claude báo.
+    check(spawnSync(powershell, base.filter((arg) => arg !== '-NonInteractive'), { encoding: 'utf8', cwd: tmpdir(), input: '\n', env }));
+    // Chạy ngầm: không ai bấm Enter, thoát ngay.
+    check(spawnSync(powershell, [...base, '-Auto'], { encoding: 'utf8', cwd: tmpdir(), env }));
   });
 
   test('setup.ps1: chép Loa, tạo lối tắt trỏ tới start.ps1 (tên người dùng có dấu vẫn đúng); bỏ lối tắt "Tháp tỉnh NhiLe" cũ của mình; lối tắt cùng tên trỏ chỗ khác thì giữ nguyên', () => {
