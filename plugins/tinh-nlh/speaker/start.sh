@@ -50,6 +50,7 @@ if [ -n "$best_root" ] && { [ -z "$current" ] || [ "$best" = "$current" ] || new
   cmp -s "$0" "$best_root/speaker/start.sh" || stale=1
   cp "$best_root/speaker/speaker.mjs" "$DIR/speaker.mjs"
   cp "$best_root/speaker/pair.mjs" "$DIR/pair.mjs"
+  [ -f "$best_root/speaker/policy.mjs" ] && cp "$best_root/speaker/policy.mjs" "$DIR/policy.mjs"
   # A new file, not written over the one bash is reading now.
   cp "$best_root/speaker/start.sh" "$DIR/start.sh.new" && chmod +x "$DIR/start.sh.new" && mv -f "$DIR/start.sh.new" "$DIR/start.sh"
   printf '%s\n' "$best" > "$DIR/version.txt"
@@ -107,6 +108,13 @@ if ! "$SECURITY" find-generic-password -s "$SERVICE" -a "$ACCOUNT" >/dev/null 2>
   echo ''
   echo 'Loa cần được bạn cho phép một lần. Trang Nếp sắp mở: bấm Cho phép.'
   "$NODE" "$DIR/pair.mjs" --dir "$DIR" || stop_loa 'Chưa có khoá cho Loa.'
+fi
+
+# 4b. Channel permission (policy.mjs, ticket 26f86f3d): Claude Code only takes the plugin's channel when the machine's list
+# allows it. Written once, with the one permission box of macOS; "No" is kept in policy-status.json and never asked again,
+# Loa then runs the 10-minute way. Already allowed: nothing is shown.
+if [ -z "${SPEAKER_DRY_RUN:-}" ] && [ -f "$DIR/policy.mjs" ] && ! grep -q '"status":"declined"' "$DIR/policy-status.json" 2>/dev/null; then
+  "$NODE" "$DIR/policy.mjs" ensure --status "$DIR/policy-status.json"
 fi
 
 # 5. Channel config for this session only: NLH_TOWER=1 lives only here, so no other Claude Code session on the machine

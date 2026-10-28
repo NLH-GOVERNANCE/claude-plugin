@@ -21,6 +21,7 @@ New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'start.ps1') -Destination (Join-Path $Dir 'start.ps1') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'speaker.mjs') -Destination (Join-Path $Dir 'speaker.mjs') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'pair.mjs') -Destination (Join-Path $Dir 'pair.mjs') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'policy.mjs') -Destination (Join-Path $Dir 'policy.mjs') -Force
 Set-Content -LiteralPath (Join-Path $Dir 'version.txt') -Value $version -Encoding ascii
 
 $name = 'Loa tỉnh NhiLe'
