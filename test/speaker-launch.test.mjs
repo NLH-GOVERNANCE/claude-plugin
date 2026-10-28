@@ -104,6 +104,10 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /prepare\.mjs/);
     // Chạy ẩn mà người dùng bấm đúp rồi dừng giữa chừng: một hộp thoại nói câu đó (tác vụ đăng nhập và chế độ thử thì không hiện hộp).
     assert.match(ps, /if \(\$Auto -and -not \$Quiet -and -not \$DryRun\) \{\s+try \{ Add-Type -AssemblyName PresentationFramework; \[void\]\[Windows\.MessageBox\]::Show\(\$text, 'Loa tỉnh NhiLe'\)/);
+    // Loa ẩn thoát sớm (câu hỏi kênh không được trả lời) thì chạy kiểu 10 phút ở mọi chế độ; Loa ẩn dừng không lỗi thì để lại một dòng cho phiên sau (laptop 28/10).
+    assert.match(ps, /-lt 60\) \{\s+Write-Host ''\s+Write-Host 'Kênh báo nhanh chưa mở được/);
+    assert.doesNotMatch(ps, /-lt 60 -and \$mode -like/);
+    assert.match(ps, /if \(\$Auto\) \{ Stop-Loa 'Loa đã dừng\. Bấm đúp Loa để mở lại\.' \}/);
     // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
     assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; CLAUDE_BIN = \$claude \}/);
     assert.doesNotMatch(ps, /Tháp/);
