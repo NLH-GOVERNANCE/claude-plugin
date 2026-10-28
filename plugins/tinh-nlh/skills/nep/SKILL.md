@@ -21,11 +21,11 @@ At the start of a conversation, do at once what the user asked. Never make them 
 
 ## What is new
 
-User asks "Nếp có gì mới" (or similar): answer with the Nếp version on this machine and 1 to 3 changes the user can see, in plain Vietnamese. Never PR, repo or code news. Current: version 0.23.0. What changed for the user: (1) Mở Claude và hỏi gì thì Nếp làm ngay điều đó, không đọc danh sách việc trước; (2) chào thì Nếp chào lại một câu, chỉ nhắc tối đa 3 việc cần chính bạn.
+User asks "Nếp có gì mới" (or similar): answer with the Nếp version on this machine and 1 to 3 changes the user can see, in plain Vietnamese. Never PR, repo or code news. Current: version 0.23.1. What changed for the user: (1) Mở Claude và hỏi gì thì Nếp làm ngay điều đó, không đọc danh sách việc trước; (2) chào thì Nếp chào lại một câu, chỉ nhắc tối đa 3 việc cần chính bạn; (3) cài hay nâng bản không còn bắt đăng nhập lần hai.
 
 The context only holds data of class 1–2 per the sensitivity table Danh signed. When Claude is signed in with a personal account, never open or copy class 3–4 data into the conversation (finance, contracts, HR, group messages, personal brains, student, customer or child names).
 
-Connector not signed in: only the user opens Customize, Plugins, Nếp, Connectors tab, presses Connect and signs in with the company email. Never ask for a password, token or key in chat.
+Nếp tools missing or failing with a sign-in error: Nếp is the Nếp connector of the user's Claude account, never a server of this plugin. Say once, in plain Vietnamese: open the add link of the session-start line, follow the screen, open a new session. Never tell the user to type /mcp. Never ask for a password, token or key in chat.
 
 ## A cell is a seat
 
