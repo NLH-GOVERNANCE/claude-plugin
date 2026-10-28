@@ -6,10 +6,11 @@ Người dùng dán vào Claude Code một câu:
 Cài Nếp cho máy này theo https://raw.githubusercontent.com/NLH-GOVERNANCE/claude-plugin/main/SETUP.md
 ```
 
-Phần dưới là cho Claude. Claude làm hết, chỉ dừng hỏi bạn hai lần:
+Phần dưới là cho Claude. Claude làm hết, chỉ dừng hỏi bạn khi cần:
 
 1. **Gõ `/reload-plugins`** rồi Enter, khi Claude cài gói xong. Đúng là: Claude Code in một dòng báo đã nạp lại plugin, không có chữ đỏ.
-2. **Dán khoá Loa** vào cửa sổ Loa (Windows và Mac), khoá lấy ở web Nếp › Kết nối. Chữ không hiện khi dán là đúng.
+2. **Mở link thêm Nếp**, chỉ khi máy chưa có Nếp: làm theo màn hình rồi mở phiên mới.
+3. **Dán khoá Loa** vào cửa sổ Loa (Windows và Mac), khoá lấy ở web Nếp › Kết nối. Chữ không hiện khi dán là đúng.
 
 ---
 
@@ -38,7 +39,7 @@ Same commands on every OS:
 The plugin carries no Nếp server of its own: Nếp is the Nếp connector of the user's Claude account, so there is nothing to sign in to here.
 
 1. If you have `my_context` from Nếp (any server), call it. It answers: go to step 4.
-2. Otherwise **User:** say "Nếp chưa nối vào Claude của chị: mở https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp , làm theo màn hình, rồi mở phiên mới. Xong nói tiếp." Wait. Never ask the user to type `/mcp`.
+2. Otherwise **User:** say "Nếp chưa nối vào Claude của bạn: mở https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp , làm theo màn hình, rồi mở phiên mới. Xong nói tiếp." Wait. Never ask the user to type `/mcp`.
 3. Call `my_context`. Still failing: say so in one sentence and stop.
 
 ### 4. Turn on Loa and put its icon on the desktop

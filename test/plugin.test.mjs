@@ -224,7 +224,7 @@ describe('plugin nlh', () => {
     const link = 'https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=N%E1%BA%BFp&connectorUrl=https%3A%2F%2Fmcp.nlh.vn%2Fmcp';
     const machine = await run();
     assert.match(machine, /^Nếp connector: Nếp comes from the Nếp connector of the user's Claude account; this plugin has no Nếp server of its own\./);
-    assert.ok(machine.includes(`"Nếp chưa nối vào Claude của chị: mở ${link} , làm theo màn hình, rồi mở phiên mới."`));
+    assert.ok(machine.includes(`"Nếp chưa nối vào Claude của bạn: mở ${link} , làm theo màn hình, rồi mở phiên mới."`));
     assert.equal(machine.split('\n').filter(Boolean).length, 1);
     // Không chữ nào bắt người dùng gõ /mcp, đăng nhập bằng email công ty, hay bấm nút màn hình không có.
     const spoken = machine.match(/"[^"]+"/g).join(' ');
@@ -238,7 +238,7 @@ describe('plugin nlh', () => {
     cache({ Nếp: { timestamp: Date.now() - 60_000 } });
     const waiting = await run();
     assert.ok(waiting.includes('Claude Code lists Nếp as needing sign-in'));
-    assert.ok(waiting.includes(`"Nếp cần nối lại: mở ${link} , bấm nối lại cho Nếp, rồi mở phiên mới."`));
+    assert.ok(waiting.includes(`"Nếp cần nối lại: mở ${link} , làm theo màn hình, rồi mở phiên mới."`));
     assert.equal(waiting.split('\n').filter(Boolean).length, 1);
     // Mục cũ của máy chủ riêng trong gói (bản 0.22) còn trong tệp thì không tính: máy chủ đó không còn.
     cache({ 'plugin:nlh:nep': { timestamp: Date.now() - 60_000 } });
