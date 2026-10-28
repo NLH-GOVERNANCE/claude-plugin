@@ -4,6 +4,8 @@
 # Each launch: take the newest Loa from the installed plugin; install Claude Code or Node if missing (official builds,
 # hash checked); if no key is saved, ask for it with the "Cho phép" button (pair.mjs, DPAPI); ask once for the permission
 # of the plugin's channel (policy.mjs); then open Claude Code on Sonnet as Loa.
+# The login task is made here, when the person double-clicks Loa (Register-Login), not by the Claude session that installed
+# Loa: a session in Auto mode can be refused the right to schedule a task, which left the user with a dead end.
 # Hidden or not: loa.vbs always starts this file hidden with -Auto. When Loa cannot run unseen yet (no key, not signed in
 # to Claude, first questions not answered) it opens a visible copy instead, which answers those once, then hands over to a
 # hidden Loa by itself (-Handoff). One Loa per machine (a mutex). The channel loads by the plugin's name (--channels
@@ -23,7 +25,10 @@ param(
   # Exit 0 when Loa can run unseen (key saved, permission asked, signed in to Claude), 1 when not.
   [switch]$CheckReady,
   # A visible first run: wait until Loa can run unseen, then close the window of this process id and let a hidden Loa take over.
-  [int]$Handoff = 0
+  [int]$Handoff = 0,
+  # Make or refresh the login task, then end (what a double-click does on the way; also for tests).
+  [switch]$RegisterOnly,
+  [string]$TaskName = 'Loa tỉnh NhiLe'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,6 +50,28 @@ function Stop-Loa([string]$text) {
 }
 
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+
+# Open Loa at every login of this Windows account: a scheduled task of the user's own, no admin rights, no window (loa.vbs
+# runs this file hidden). Made once, left alone when it already points at this Loa; a failure only goes to loa.log.
+function Register-Login {
+  try {
+    $launcher = Join-Path $Dir 'loa.vbs'
+    $wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
+    $argument = "`"$launcher`" login"
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($task -and $task.Actions[0].Execute -eq $wscript -and $task.Actions[0].Arguments -eq $argument) { return }
+    $user = "$env:USERDOMAIN\$env:USERNAME"
+    $action = New-ScheduledTaskAction -Execute $wscript -Argument $argument -WorkingDirectory $Dir
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+    $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+  } catch {
+    try { Add-Content -LiteralPath (Join-Path $Dir 'loa.log') -Value "$(Get-Date -Format o) login task: $($_.Exception.Message)" -Encoding UTF8 } catch { }
+  }
+}
+if ($RegisterOnly) { Register-Login; exit 0 }
+if (-not $Quiet -and -not $DryRun -and -not $CheckReady -and $Handoff -eq 0) { Register-Login }
 
 # The official installer (claude.ai/install.ps1) puts claude.exe in ~\.local\bin without touching PATH; on machines with
 # HOME set (Git users) ~ is HOME.
