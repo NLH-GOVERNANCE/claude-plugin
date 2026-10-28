@@ -5,7 +5,7 @@
 // Windows với thư mục người dùng giả. Không mở Claude, không gọi mạng.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { after, describe, test } from 'node:test';
@@ -103,6 +103,13 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /'https:\/\/claude\.ai\/install\.ps1'/);
     assert.match(ps, /\$base = 'https:\/\/nodejs\.org\/dist\/latest-v22\.x'/);
     assert.match(ps, /Get-FileHash -LiteralPath \$part -Algorithm SHA256/);
+    // Cửa sổ lần đầu (28/10): chữ của bộ cài tiếng Anh và lời dặn PATH đi vào loa.log, màn hình chỉ có một câu tiếng Việt; không nói "Claude Code".
+    assert.match(ps, /-RedirectStandardOutput \$installOut/);
+    assert.ok(!ps.includes('-File $installer | Out-Host'), 'bộ cài không in ra màn hình');
+    assert.doesNotMatch(ps, /(Write-Host|Stop-Loa) '[^']*Claude Code/, 'người dùng không nghe "Claude Code"');
+    assert.match(ps, /Lần đầu: Loa đang chuẩn bị máy này, khoảng một phút\./);
+    // Máy chỉ có app Claude: tìm claude.exe trong thư mục dữ liệu của app, trước khi tìm trên PATH.
+    assert.ok(ps.includes("'Claude-Data") && ps.indexOf("'Claude-Data") < ps.indexOf('Get-Command claude.exe'));
     assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks/i, 'tự mở là tác vụ của người dùng, không thư mục Startup hay Run');
     // Giữ máy thức khi Loa mở; kênh hỏng thì mở lại không cờ, chỉ nhịp 10 phút, in một dòng (phiếu 98bd8b93).
     assert.match(ps, /SetThreadExecutionState\(\[uint32\]'0x80000001'\)/);
@@ -511,5 +518,25 @@ describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục ngư�
     assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
     assert.match(tower.command, /node(\.exe)?$/i);
     assert.ok(existsSync(join(home, 'TinhNhiLe')), 'thư mục làm việc của Loa');
+
+    // Máy chỉ có app Claude (không ~\.local\bin, claude không trên PATH): lấy claude.exe mới nhất trong thư mục dữ liệu của app, gọi bằng đường đầy đủ.
+    const appOnly = fakeHome('Thùy ỉ');
+    const appDir = join(appOnly, '.tinh-nlh', 'speaker');
+    mkdirSync(appDir, { recursive: true });
+    cpSync(join(dir, KEY_FILE), join(appDir, KEY_FILE));
+    const local = join(appOnly, 'AppData', 'Local');
+    const bundled = (name) => {
+      const file = join(local, 'Claude-Data', 'claude_x', 'claude-code', name, 'abc', 'claude.exe');
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, '');
+      return file;
+    };
+    const yesterday = new Date(Date.now() - 86400000);
+    utimesSync(bundled('2.1.100'), yesterday, yesterday);
+    const newer = bundled('2.1.308');
+    const app = ps(join(plugin, 'speaker/start.ps1'), ['-DryRun'], { USERPROFILE: appOnly, HOME: appOnly, LOCALAPPDATA: local, APPDATA: join(appOnly, 'AppData', 'Roaming'), TOWER_ORIGIN: '', LOA_MANAGED_SETTINGS_FILE: noPolicy() });
+    assert.equal(app.status, 0, app.stdout + app.stderr);
+    assert.ok(app.stdout.split(/\r?\n/).some((text) => text.startsWith(`DRYRUN ${newer} `)), 'claude.exe mới nhất trong app, không cần PATH');
+    assert.doesNotMatch(app.stdout, /PATH|Claude Code/);
   });
 });

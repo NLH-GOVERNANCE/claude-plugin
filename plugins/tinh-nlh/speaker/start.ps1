@@ -51,6 +51,11 @@ function Stop-Loa([string]$text) {
 
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 
+# Anything technical goes to loa.log, never to the screen: the person sees only short Vietnamese sentences.
+function Add-Log([string]$text) {
+  try { Add-Content -LiteralPath (Join-Path $Dir 'loa.log') -Value "$(Get-Date -Format o) $text" -Encoding UTF8 } catch { }
+}
+
 # Open Loa at every login of this Windows account: a scheduled task of the user's own, no admin rights, no window (loa.vbs
 # runs this file hidden). Made once, left alone when it already points at this Loa; a failure only goes to loa.log.
 function Register-Login {
@@ -67,17 +72,23 @@ function Register-Login {
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
   } catch {
-    try { Add-Content -LiteralPath (Join-Path $Dir 'loa.log') -Value "$(Get-Date -Format o) login task: $($_.Exception.Message)" -Encoding UTF8 } catch { }
+    Add-Log "login task: $($_.Exception.Message)"
   }
 }
 if ($RegisterOnly) { Register-Login; exit 0 }
 if (-not $Quiet -and -not $DryRun -and -not $CheckReady -and $Handoff -eq 0) { Register-Login }
 
 # The official installer (claude.ai/install.ps1) puts claude.exe in ~\.local\bin without touching PATH; on machines with
-# HOME set (Git users) ~ is HOME.
+# HOME set (Git users) ~ is HOME. A machine with only the Claude app (the common case) has the program inside the app, in
+# the app's data folder; it is called by its full path, no PATH needed (28/10).
 $homes = @($env:USERPROFILE) + @($env:HOME | Where-Object { $_ })
 function Find-Claude {
   foreach ($at in $homes) { $file = Join-Path $at '.local\bin\claude.exe'; if (Test-Path -LiteralPath $file) { return $file } }
+  $bundled = @()
+  foreach ($pattern in @((Join-Path $env:LOCALAPPDATA 'Claude-Data\*\claude-code\*\*\claude.exe'), (Join-Path $env:APPDATA 'Claude\claude-code\*\claude.exe'))) {
+    $bundled += @(Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue)
+  }
+  if ($bundled) { return ($bundled | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName }
   $found = Get-Command claude.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($found) { return $found.Source }
 }
@@ -206,16 +217,21 @@ if ($Auto -and -not $DryRun -and -not (Test-Ready)) {
 # 2. Claude Code. The official installer puts claude.exe in ~\.local\bin.
 $claude = Find-Claude
 if (-not $claude) {
-  Write-Host 'Lần đầu: đang cài Claude Code cho máy này, khoảng một phút.'
+  Write-Host 'Lần đầu: Loa đang chuẩn bị máy này, khoảng một phút.'
   $installer = Join-Path $Dir 'install-claude.ps1'
+  $installOut = Join-Path $Dir 'install-claude.out'
   try {
     Invoke-WebRequest -Uri 'https://claude.ai/install.ps1' -OutFile $installer -UseBasicParsing
-    # Separate process: the installer exits on error and must not close the Loa window.
-    & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $installer | Out-Host
-  } catch { }
-  Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
+    # Separate process: the installer exits on error and must not close the Loa window. Its English text (and its advice
+    # about PATH) goes to loa.log, not the screen.
+    Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$installer`"" -Wait -WindowStyle Hidden -RedirectStandardOutput $installOut -RedirectStandardError "$installOut.err"
+  } catch { Add-Log "install claude: $($_.Exception.Message)" }
+  foreach ($text in @($installOut, "$installOut.err")) {
+    if (Test-Path -LiteralPath $text) { Add-Log "install claude: $((Get-Content -LiteralPath $text -Raw -ErrorAction SilentlyContinue) -replace '\s+', ' ')" }
+  }
+  Remove-Item -LiteralPath $installer, $installOut, "$installOut.err" -Force -ErrorAction SilentlyContinue
   $claude = Find-Claude
-  if (-not $claude) { Stop-Loa 'Chưa cài được Claude Code. Kiểm mạng rồi bấm đúp Loa lại.' }
+  if (-not $claude) { Stop-Loa 'Loa chưa chuẩn bị xong máy này. Kiểm mạng rồi bấm đúp Loa lại.' }
 }
 
 # 3. Node (the speaker channel is one JavaScript file). Use Node 18+ if present; otherwise download node.exe from
@@ -318,7 +334,7 @@ if (-not $Auto) {
   Write-Host ''
   Write-Host 'Loa đang nghe Nếp.'
   if (-not (Test-Path -LiteralPath $opened)) {
-    Write-Host 'Lần đầu Claude Code hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm nút xanh để cho phép, rồi quay lại đây.'
+    Write-Host 'Lần đầu Claude hỏi vài câu: bấm Enter để chọn sẵn. Tới bước đăng nhập, trình duyệt mở ra: bấm nút xanh để cho phép, rồi quay lại đây.'
   }
   Write-Host 'Khi xong, cửa sổ này tự đóng và Loa chạy ngầm, không cần làm gì thêm.'
   Write-Host ''
