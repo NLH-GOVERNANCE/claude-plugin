@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { OFFICIAL, adminScript, ask, ensure, findMarketplace, isAllowed, managedPath, merge, plan, validMarketplace, write } from '../plugins/tinh-nlh/speaker/policy.mjs';
+import { OFFICIAL, adminScript, ask, ensure, findMarketplace, isAllowed, managedPath, merge, plan, validMarketplace, winDir, write } from '../plugins/tinh-nlh/speaker/policy.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const script = join(root, 'plugins/tinh-nlh/speaker/policy.mjs');
@@ -31,6 +31,16 @@ describe('chỗ đặt và kho của gói', () => {
     assert.equal(managedPath('win32', { ProgramFiles: 'C:\\Program Files' }).replace(/\\/g, '/'), 'C:/Program Files/ClaudeCode/managed-settings.json');
     assert.equal(managedPath('darwin'), '/Library/Application Support/ClaudeCode/managed-settings.json');
     assert.equal(managedPath('linux'), '/etc/claude-code/managed-settings.json');
+  });
+
+  test('winDir: đường dẫn hệ thống không tin thẳng biến môi trường (đi vào lệnh admin); chỉ nhận dạng chuẩn cùng ổ với SystemDrive', () => {
+    assert.equal(winDir('SystemRoot', { SystemRoot: 'C:\\Windows' }), 'C:\\Windows');
+    assert.equal(winDir('ProgramFiles', { ProgramFiles: 'D:\\Program Files', SystemDrive: 'D:' }), 'D:\\Program Files', 'hệ điều hành ở ổ D');
+    assert.equal(winDir('SystemRoot', { SystemRoot: 'C:\\Users\\x\\evil' }), 'C:\\Windows', 'thư mục người dùng bị bỏ');
+    assert.equal(winDir('SystemRoot', { SystemRoot: 'D:\\Windows' }), 'C:\\Windows', 'ổ khác SystemDrive bị bỏ');
+    assert.equal(winDir('ProgramFiles', { ProgramFiles: 'C:\\Program Files\\..\\..\\evil' }), 'C:\\Program Files');
+    assert.equal(winDir('ProgramFiles', {}), 'C:\\Program Files');
+    assert.equal(managedPath('win32', { ProgramFiles: 'E:\\evil' }).replace(/\\/g, '/'), 'C:/Program Files/ClaudeCode/managed-settings.json');
   });
 
   test('findMarketplace: lấy kho từ installed_plugins.json; gói đồng bộ và nạp tạm không tính; không có thì null', () => {
