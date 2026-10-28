@@ -30,18 +30,14 @@ export const OFFICIAL = ['telegram', 'discord', 'imessage', 'fakechat'].map((plu
 // Tên kho đi vào lệnh chạy bằng quyền admin: chỉ nhận chữ, số, chấm, gạch.
 export const validMarketplace = (name) => typeof name === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(name);
 
-// Đường dẫn thư mục hệ thống Windows. Biến môi trường do người dùng đặt được, mà đường dẫn này đi vào lệnh chạy bằng quyền
-// admin, nên không tin thẳng: chỉ nhận đúng dạng "<ổ>:\<tên chuẩn>" cùng ổ với SystemDrive; sai thì dùng ổ C.
-export function winDir(name, env = process.env) {
-  const standard = { ProgramFiles: 'Program Files', SystemRoot: 'Windows' }[name];
-  const drive = /^[A-Za-z]:$/.test(env.SystemDrive || '') ? env.SystemDrive.toUpperCase() : 'C:';
-  const value = env[name] || '';
-  return value.toUpperCase() === `${drive}\\${standard}`.toUpperCase() ? value : `C:\\${standard}`;
-}
+// Thư mục hệ thống Windows: cố định, không đọc biến môi trường nào (người dùng đặt được cả SystemRoot lẫn SystemDrive, mà
+// powershell.exe ở đây chạy bằng quyền admin). Windows cài ở ổ khác thì không có file, elevate trả 9, Loa chạy vòng 10 phút.
+export const WIN_PROGRAM_FILES = 'C:\\Program Files';
+export const WIN_ROOT = 'C:\\Windows';
 
 // Nơi Claude Code đọc chính sách của máy. Windows đọc đúng C:\Program Files\ClaudeCode (thư mục ProgramData cũ không đọc).
 export function managedPath(platform = process.platform, env = process.env) {
-  if (platform === 'win32') return join(winDir('ProgramFiles', env), 'ClaudeCode', 'managed-settings.json');
+  if (platform === 'win32') return join(WIN_PROGRAM_FILES, 'ClaudeCode', 'managed-settings.json');
   if (platform === 'darwin') return '/Library/Application Support/ClaudeCode/managed-settings.json';
   return '/etc/claude-code/managed-settings.json';
 }
@@ -139,7 +135,7 @@ export function adminScript(platform, file, text) {
 // Ghi bằng quyền cao: hộp xin quyền của Windows (UAC) hoặc của macOS (hỏi mật khẩu máy). Trả mã thoát (9: không chạy được).
 function elevate(platform, file, text) {
   if (platform === 'win32') {
-    const system = join(winDir('SystemRoot'), 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const system = join(WIN_ROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const inner = Buffer.from(adminScript(platform, file, text), 'utf16le').toString('base64');
     // Start-Process joins an argument array without quotes: one string. Command lines stop at 32k characters; a policy file that big is left alone.
     if (inner.length > 12000) return 9;
