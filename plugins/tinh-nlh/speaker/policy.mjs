@@ -23,14 +23,21 @@ export const DEFAULT_MARKETPLACE = 'nlh-governance';
 
 // allowedChannelPlugins THAY danh sách mặc định của Anthropic khi có mặt (tài liệu Claude Code, "Replaces the Anthropic-maintained
 // list when set"). Máy chưa có danh sách thì ghi kèm các kênh chính thức để telegram, discord, imessage, fakechat không mất.
+// Nguồn: code.claude.com/docs/en/channels ("The channel plugins in claude-plugins-official ... are the default approved set");
+// thư mục external_plugins của kho đó có đúng bốn kênh này ngày 28/10/2026. Anthropic thêm kênh thì kiểm lại danh sách.
 export const OFFICIAL = ['telegram', 'discord', 'imessage', 'fakechat'].map((plugin) => ({ marketplace: 'claude-plugins-official', plugin }));
 
 // Tên kho đi vào lệnh chạy bằng quyền admin: chỉ nhận chữ, số, chấm, gạch.
 export const validMarketplace = (name) => typeof name === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(name);
 
+// Thư mục hệ thống Windows: cố định, không đọc biến môi trường nào (người dùng đặt được cả SystemRoot lẫn SystemDrive, mà
+// powershell.exe ở đây chạy bằng quyền admin). Windows cài ở ổ khác thì không có file, elevate trả 9, Loa chạy vòng 10 phút.
+export const WIN_PROGRAM_FILES = 'C:\\Program Files';
+export const WIN_ROOT = 'C:\\Windows';
+
 // Nơi Claude Code đọc chính sách của máy. Windows đọc đúng C:\Program Files\ClaudeCode (thư mục ProgramData cũ không đọc).
 export function managedPath(platform = process.platform, env = process.env) {
-  if (platform === 'win32') return join(env.ProgramFiles || 'C:\\Program Files', 'ClaudeCode', 'managed-settings.json');
+  if (platform === 'win32') return join(WIN_PROGRAM_FILES, 'ClaudeCode', 'managed-settings.json');
   if (platform === 'darwin') return '/Library/Application Support/ClaudeCode/managed-settings.json';
   return '/etc/claude-code/managed-settings.json';
 }
@@ -128,7 +135,7 @@ export function adminScript(platform, file, text) {
 // Ghi bằng quyền cao: hộp xin quyền của Windows (UAC) hoặc của macOS (hỏi mật khẩu máy). Trả mã thoát (9: không chạy được).
 function elevate(platform, file, text) {
   if (platform === 'win32') {
-    const system = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const system = join(WIN_ROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const inner = Buffer.from(adminScript(platform, file, text), 'utf16le').toString('base64');
     // Start-Process joins an argument array without quotes: one string. Command lines stop at 32k characters; a policy file that big is left alone.
     if (inner.length > 12000) return 9;
