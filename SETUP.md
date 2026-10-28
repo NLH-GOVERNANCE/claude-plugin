@@ -27,6 +27,7 @@ Same commands on every OS:
 1. `claude plugin marketplace list`. If `nlh-governance` is listed: `claude plugin marketplace update nlh-governance`. Otherwise: `claude plugin marketplace add NLH-GOVERNANCE/claude-plugin`.
 2. `claude plugin list`. If `nlh@nlh-governance` is listed: `claude plugin update nlh@nlh-governance`. Otherwise: `claude plugin install nlh@nlh-governance`.
 3. If the old name `tinh-nlh@nlh-governance` is listed, leave it: the marketplace moves it to `nlh` by itself.
+4. Turn on auto-update so the user never has to ask for an update (Claude Code leaves it off for third-party marketplaces). In the user's `~/.claude/settings.json` (create it if missing, keep every other key) set `extraKnownMarketplaces.nlh-governance` to `{ "source": { "source": "github", "repo": "NLH-GOVERNANCE/claude-plugin" }, "autoUpdate": true }`. The user's normal approval tap for the file edit is enough. If it fails, go on: updates then happen when the user asks.
 
 Do not ask the user to type `/reload-plugins`. Nếp's tools come from the user's account, so they work in this session already; the plugin's commands and hooks start in the next session.
 

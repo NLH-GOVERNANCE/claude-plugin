@@ -4,7 +4,8 @@
 // ra cho dân làng Trải nghiệm đọc. Ca và chữ cấm nằm ở scripts/persona-cases.json, sửa không cần đụng code này.
 // Cần Claude Code thật và hạn mức, nên không gắn vào CI; chạy trước mỗi lần tăng bản gói.
 // Chạy bằng tài khoản thật trên giếng thật: chỉ công cụ đọc của Nếp được tự duyệt (readTools trong file ca), công cụ ghi bị chặn hẳn
-// (writeTools, --disallowedTools). Hook của gói thì không chặn được và vẫn chạy: mỗi ca lưu một lượt chat và báo phiên lên giếng.
+// (writeTools, --disallowedTools); lệnh duy nhất được chạy là cập nhật gói (commandTools), nên ca cập nhật thật sự cập nhật gói đã cài
+// trên máy chạy bộ ca. Hook của gói thì không chặn được và vẫn chạy: mỗi ca lưu một lượt chat và báo phiên lên giếng.
 // Chạy: node scripts/persona-suite.mjs [--plugin <thư mục gói>] [--only <id>,<id>] [--cases <file>] [--out <file json>]
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -19,9 +20,10 @@ const TIMEOUT_MS = 180_000;
 // Hai tên máy chủ Nếp mà phiên không giao diện thấy: của gói, và connector tài khoản.
 const NEP_SERVERS = ['mcp__plugin_nlh_nep__', 'mcp__claude_ai_nhile-governance__'];
 
-// Công cụ được phép gọi thật: chỉ công cụ đọc (readTools trong file ca), mỗi máy chủ một bản, tên đầy đủ.
+// Công cụ được phép gọi thật: công cụ đọc của Nếp (readTools trong file ca), mỗi máy chủ một bản, tên đầy đủ; và đúng các lệnh
+// cập nhật gói (commandTools), như người thật bấm Đồng ý trong phiên: ca "cập nhật giúp" đo đường thật, không đo việc bị từ chối quyền.
 export function allowedTools(config) {
-  return NEP_SERVERS.flatMap((server) => config.readTools.map((tool) => server + tool));
+  return [...NEP_SERVERS.flatMap((server) => config.readTools.map((tool) => server + tool)), ...(config.commandTools ?? [])];
 }
 
 // Công cụ ghi bị chặn hẳn: --disallowedTools thắng --allowedTools, nên một công cụ ghi lọt vào readTools cũng không chạy được.
@@ -30,9 +32,12 @@ export function blockedTools(config) {
 }
 
 // Đọc các dòng stream-json của `claude -p`. lines: [{ t: mili giây từ lúc chạy, text: một dòng JSON }]. Trả về chữ người dùng
-// thấy (mọi khối chữ của trợ lý, theo thứ tự) và mili giây tới khối chữ đầu tiên; bỏ qua dòng không phải JSON.
+// thấy (mọi khối chữ của trợ lý, theo thứ tự), mili giây tới khối chữ đầu tiên, và dấu vết công cụ: mỗi lần gọi một dòng
+// { name, startMs, endMs } (endMs null nếu không thấy kết quả), để biết thời gian đi vào đâu. Bỏ qua dòng không phải JSON.
 export function parseStream(lines) {
   const texts = [];
+  const tools = [];
+  const byId = new Map();
   let firstTextMs = null;
   for (const { t, text } of lines) {
     let event;
@@ -41,14 +46,33 @@ export function parseStream(lines) {
     } catch {
       continue;
     }
+    if (event?.type === 'user') {
+      for (const block of event.message?.content ?? []) {
+        const tool = block?.type === 'tool_result' ? byId.get(block.tool_use_id) : null;
+        if (tool) tool.endMs = t;
+      }
+      continue;
+    }
     if (event?.type !== 'assistant') continue;
     for (const block of event.message?.content ?? []) {
+      if (block?.type === 'tool_use') {
+        const tool = { name: String(block.name ?? '').replace(/^mcp__.*?__/, ''), startMs: t, endMs: null };
+        byId.set(block.id, tool);
+        tools.push(tool);
+      }
       if (block?.type !== 'text' || !String(block.text ?? '').trim()) continue;
       if (firstTextMs === null) firstTextMs = t;
       texts.push(block.text);
     }
   }
-  return { answer: texts.join('\n').trim(), firstTextMs };
+  return { answer: texts.join('\n').trim(), firstTextMs, tools };
+}
+
+// Dấu vết một ca, một dòng: công cụ nào, lúc nào, mất bao lâu, rồi chữ đầu. Ví dụ "my_context 2.1→5.0s · show_ticket 5.2→7.9s · chữ đầu 9.0s".
+export function renderTrace(parsed) {
+  const sec = (ms) => (ms === null ? '?' : (Math.round(ms / 100) / 10).toString());
+  const calls = parsed.tools.map((tool) => `${tool.name} ${sec(tool.startMs)}→${sec(tool.endMs)}s`);
+  return [...calls, `chữ đầu ${sec(parsed.firstTextMs)}s`].join(' · ');
 }
 
 const nonEmptyLines = (answer) => answer.split('\n').filter((line) => line.trim());
@@ -172,15 +196,17 @@ async function main() {
         process.stderr.write(`${testCase.id}: không có chữ nào trả về (${lines.length} dòng). Cuối luồng: ${tail || '(trống)'}\n`);
       }
       results.push(gradeCase(parsed, testCase, config));
-      answers.push({ id: testCase.id, say: testCase.say, answer: parsed.answer });
+      answers.push({ id: testCase.id, say: testCase.say, answer: parsed.answer, trace: renderTrace(parsed) });
     }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
   console.log(renderTable(results, config));
+  console.log('\nDấu vết (công cụ gọi trước chữ đầu, giây từ lúc chạy):');
+  for (const { id, trace } of answers) console.log(`  ${id}: ${trace}`);
   console.log('\nCâu trả lời, để dân làng Trải nghiệm đọc điều (4): có chỉ tới nút hay trang không có thật không?');
   for (const { id, say, answer } of answers) console.log(`\n--- ${id}: "${say}"\n${answer || '(không có chữ nào)'}`);
-  if (opts.out) writeFileSync(opts.out, JSON.stringify({ at: new Date().toISOString(), results }, null, 2));
+  if (opts.out) writeFileSync(opts.out, JSON.stringify({ at: new Date().toISOString(), results, traces: Object.fromEntries(answers.map((item) => [item.id, item.trace])) }, null, 2));
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\n${results.length - failed}/${results.length} ca đạt.`);
   process.exitCode = failed ? 1 : 0;

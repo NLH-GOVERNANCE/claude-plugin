@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { DEFAULT_CASES, blockedTools, allowedTools, englishLines, forbiddenHits, gradeCase, parseStream, renderTable } from '../scripts/persona-suite.mjs';
+import { DEFAULT_CASES, blockedTools, allowedTools, englishLines, forbiddenHits, gradeCase, parseStream, renderTable, renderTrace } from '../scripts/persona-suite.mjs';
 
 const config = JSON.parse(readFileSync(DEFAULT_CASES, 'utf8'));
 const byId = (id) => config.cases.find((c) => c.id === id);
@@ -33,8 +33,28 @@ test('đọc stream: lấy chữ của trợ lý theo thứ tự, thời gian t�
     { t: 9500, text: assistant(say('  '), say('Chào chị.')) },
     { t: 12000, text: assistant(say('Chị có một việc cần ký.')) },
   ];
-  assert.deepEqual(parseStream(lines), { answer: 'Chào chị.\nChị có một việc cần ký.', firstTextMs: 9500 });
-  assert.deepEqual(parseStream([{ t: 5, text: assistant({ type: 'tool_use', name: 'x' }) }]), { answer: '', firstTextMs: null });
+  const parsed = parseStream(lines);
+  assert.equal(parsed.answer, 'Chào chị.\nChị có một việc cần ký.');
+  assert.equal(parsed.firstTextMs, 9500);
+  assert.deepEqual(parseStream([{ t: 5, text: assistant({ type: 'tool_use', name: 'x' }) }]).answer, '');
+  assert.equal(parseStream([{ t: 5, text: assistant({ type: 'tool_use', name: 'x' }) }]).firstTextMs, null);
+});
+
+test('dấu vết công cụ: tên bỏ tiền tố máy chủ, giờ gọi và giờ có kết quả, rồi chữ đầu; thiếu kết quả ghi dấu ?', () => {
+  const user = (id) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'x' }] } });
+  const lines = [
+    { t: 2100, text: assistant({ type: 'tool_use', id: 'a', name: 'mcp__plugin_nlh_nep__my_context', input: {} }) },
+    { t: 5000, text: user('a') },
+    { t: 5200, text: assistant({ type: 'tool_use', id: 'b', name: 'mcp__claude_ai_nhile-governance__show_ticket', input: {} }) },
+    { t: 9000, text: assistant(say('Chào chị.')) },
+  ];
+  const parsed = parseStream(lines);
+  assert.deepEqual(parsed.tools, [
+    { name: 'my_context', startMs: 2100, endMs: 5000 },
+    { name: 'show_ticket', startMs: 5200, endMs: null },
+  ]);
+  assert.equal(renderTrace(parsed), 'my_context 2.1→5s · show_ticket 5.2→?s · chữ đầu 9s');
+  assert.equal(renderTrace({ tools: [], firstTextMs: null }), 'chữ đầu ?s');
 });
 
 test('chữ đầu tiên: đúng 15 giây còn đạt, 15,1 giây trượt, không có chữ nào là trượt', () => {
@@ -100,7 +120,8 @@ test('bảng kết quả: một dòng mỗi ca, ca trượt kèm lý do, ca đ�
 });
 
 test('công cụ được gọi thật khi chạy bộ ca: chỉ công cụ đọc của Nếp, tên đầy đủ, đủ hai máy chủ; không có công cụ ghi và không có dấu *', () => {
-  const tools = allowedTools(config);
+  const all = allowedTools(config);
+  const tools = all.filter((tool) => tool.startsWith('mcp__'));
   assert.equal(tools.length, config.readTools.length * 2);
   assert.ok(tools.includes('mcp__plugin_nlh_nep__my_context'));
   assert.ok(tools.includes('mcp__claude_ai_nhile-governance__my_context'));
@@ -114,5 +135,13 @@ test('công cụ được gọi thật khi chạy bộ ca: chỉ công cụ đ�
   assert.equal(blocked.length, config.writeTools.length * 2);
   for (const name of writes) assert.ok(config.writeTools.includes(name), name);
   assert.ok(blocked.includes('mcp__plugin_nlh_nep__report_session') && blocked.includes('mcp__claude_ai_nhile-governance__save_chat'));
-  for (const tool of blocked) assert.ok(!tools.includes(tool), tool);
+  for (const tool of blocked) assert.ok(!all.includes(tool), tool);
+});
+
+test('lệnh được chạy thật chỉ là lệnh cập nhật gói (và xem danh sách gói), không có lệnh nào khác', () => {
+  const commands = allowedTools(config).filter((tool) => !tool.startsWith('mcp__'));
+  assert.ok(commands.length > 0);
+  for (const command of commands) assert.match(command, /^(Bash|PowerShell)\(claude plugin (marketplace update nlh-governance|update nlh@nlh-governance|list):\*\)$/, command);
+  assert.ok(commands.includes('Bash(claude plugin update nlh@nlh-governance:*)'));
+  assert.ok(commands.includes('PowerShell(claude plugin update nlh@nlh-governance:*)'));
 });

@@ -1,7 +1,7 @@
 {
   "name": "nlh",
   "displayName": "Nếp",
-  "version": "0.23.3",
+  "version": "0.23.4",
   "description": "Nếp là nơi công ty giao việc, theo dõi việc và ký duyệt. Cài xong, hỏi Claude \"việc của tôi hôm nay?\" hoặc gõ /work.",
   "author": {
     "name": "NhiLe Holding"
