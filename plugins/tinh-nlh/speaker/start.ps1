@@ -68,6 +68,8 @@ function Find-Node {
 function Test-Ready {
   if (-not (Test-Path -LiteralPath (Join-Path $Dir 'tower-key.dpapi'))) { return $false }
   if (-not (Test-Path -LiteralPath (Join-Path $Dir 'policy-status.json'))) { return $false }
+  # Opened once in a window, so the folder-trust question of Claude Code was answered by a person.
+  if (-not (Test-Path -LiteralPath (Join-Path $Dir 'opened.txt'))) { return $false }
   $exe = Find-Claude
   if (-not $exe -or -not (Find-Node)) { return $false }
   try {

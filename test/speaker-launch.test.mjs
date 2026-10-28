@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { managedPath } from '../plugins/tinh-nlh/speaker/policy.mjs';
 import { KEYCHAIN, KEY_FILE } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -248,6 +249,22 @@ console.log('Đã lưu khoá Loa trên máy này.');
 
   // Hai máy khác nhau về quyền kênh (việc 26f86f3d): đã cho phép thì kênh theo tên gói; chỉ có gói đồng bộ từ claude.ai thì
   // vòng 10 phút kèm máy chủ Loa nạp bằng --mcp-config. Khoá đã có trong Keychain giả nên không hỏi.
+  test('LOA_MANAGED_SETTINGS_FILE chỉ đổi chỗ ĐỌC của lệnh mode; managedPath, ghi và nâng quyền không theo biến này', () => {
+    const dir = temp('loa-env');
+    const evil = join(dir, 'evil.json');
+    const policy = join(plugin, 'speaker/policy.mjs');
+    const env = { ...process.env, LOA_MANAGED_SETTINGS_FILE: evil };
+    assert.equal(managedPath('win32', { LOA_MANAGED_SETTINGS_FILE: evil, ProgramFiles: 'C:\\Program Files' }).replace(/\\/g, '/'), 'C:/Program Files/ClaudeCode/managed-settings.json');
+    assert.equal(managedPath('darwin', { LOA_MANAGED_SETTINGS_FILE: evil }), '/Library/Application Support/ClaudeCode/managed-settings.json');
+    // mode đọc theo biến (chỉ để thử); ensure/write thì không: không có tệp nào xuất hiện ở đường dẫn trong biến.
+    writeFileSync(evil, JSON.stringify({ channelsEnabled: true, allowedChannelPlugins: [{ marketplace: 'nlh-governance', plugin: 'nlh' }] }));
+    assert.equal(spawnSync(process.execPath, [policy, 'mode', '--marketplace', 'nlh-governance'], { encoding: 'utf8', env }).stdout.trim(), 'channel plugin:nlh@nlh-governance');
+    const before = readFileSync(evil, 'utf8');
+    spawnSync(process.execPath, [policy, 'ensure', '--marketplace', 'nlh-governance', '--no-elevate', '--status', join(dir, 'status.json')], { encoding: 'utf8', env });
+    assert.equal(readFileSync(evil, 'utf8'), before, 'ensure không đụng tới đường dẫn trong biến');
+    assert.match(readFileSync(policy, 'utf8'), /command === 'mode' && process\.env\.LOA_MANAGED_SETTINGS_FILE/);
+  });
+
   test('policy.mjs mode: đã cho phép → kênh theo tên gói; chưa cho phép hay kênh bị tắt → loop; không có gói cài từ kho → loop-config', () => {
     const dir = temp('loa-mode');
     const file = join(dir, 'managed-settings.json');

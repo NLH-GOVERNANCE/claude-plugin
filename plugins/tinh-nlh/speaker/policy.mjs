@@ -30,8 +30,6 @@ export const validMarketplace = (name) => typeof name === 'string' && /^[A-Za-z0
 
 // Nơi Claude Code đọc chính sách của máy. Windows đọc đúng C:\Program Files\ClaudeCode (thư mục ProgramData cũ không đọc).
 export function managedPath(platform = process.platform, env = process.env) {
-  // Tests only: Claude Code ignores this variable, so pointing it elsewhere only moves where this file looks.
-  if (env.LOA_MANAGED_SETTINGS_FILE) return env.LOA_MANAGED_SETTINGS_FILE;
   if (platform === 'win32') return join(env.ProgramFiles || 'C:\\Program Files', 'ClaudeCode', 'managed-settings.json');
   if (platform === 'darwin') return '/Library/Application Support/ClaudeCode/managed-settings.json';
   return '/etc/claude-code/managed-settings.json';
@@ -196,7 +194,10 @@ function main(argv) {
     const at = rest.indexOf(name);
     return at >= 0 ? rest[at + 1] : undefined;
   };
-  const file = flag('--file') || managedPath();
+  // LOA_MANAGED_SETTINGS_FILE (tests only) moves where `mode` READS. Writing and elevation never follow it: code running as
+  // the user could otherwise get a file written anywhere with admin rights once the person presses Yes. Writes use the fixed
+  // path or an explicit --file.
+  const file = flag('--file') || (command === 'mode' && process.env.LOA_MANAGED_SETTINGS_FILE) || managedPath();
   const marketplace = flag('--marketplace') || findMarketplace(flag('--home') || homedir());
   if (command === 'check') return isAllowed(file, marketplace) ? 0 : 1;
   if (command === 'mode') {
