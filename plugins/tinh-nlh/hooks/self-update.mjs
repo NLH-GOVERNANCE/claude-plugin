@@ -5,6 +5,12 @@
 //    only quitting the app from its tray icon reloads plugins).
 // 2. Nothing newer is downloaded yet: fetch it in the background (claude plugin marketplace update, claude plugin update),
 //    at most every 6 hours, so the next time the person quits Claude the new version is there.
+// 29/10 (1cbe0ab5, old versions failing on members' machines): three more jobs, still no question and no command for the user:
+// 3. Claude never runs update commands itself (in the Claude app all three failed and printed English progress): every session
+//    starts with one status line, and "update Nếp" is answered from it.
+// 4. The marketplace is switched to auto-update (known_marketplaces.json), so the Claude app fetches new versions when it opens.
+// 5. Windows: Loa (when set up on this machine) is started and its login start is made again, so it comes back after a restart
+//    even when the plugin was upgraded without running setup.
 // Failures are silent; the files are ~/.tinh-nlh/self-update.json and ~/.claude/plugins/installed_plugins.json.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -14,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 export const PLUGIN = 'nlh@nlh-governance';
 export const MARKETPLACE = 'nlh-governance';
-export const TRY_GAP_MS = 6 * 60 * 60 * 1000;
+export const TRY_GAP_MS = 60 * 60 * 1000;
 
 const parts = (version) => String(version ?? '').split('.').map((part) => Number.parseInt(part, 10) || 0);
 
@@ -34,6 +40,40 @@ export function installedVersion(home = homedir()) {
     return versions.sort((a, b) => (newer(a, b) ? -1 : newer(b, a) ? 1 : 0))[0] ?? null;
   } catch {
     return null;
+  }
+}
+
+// Switch the marketplace to auto-update when it is not (Claude then downloads new versions every time the app opens).
+// Only the one key of this marketplace is touched; a file that cannot be read or has no such entry is left alone.
+export function ensureAutoUpdate(home = homedir()) {
+  try {
+    const file = join(home, '.claude', 'plugins', 'known_marketplaces.json');
+    const list = JSON.parse(readFileSync(file, 'utf8'));
+    if (!list?.[MARKETPLACE] || list[MARKETPLACE].autoUpdate === true) return false;
+    list[MARKETPLACE].autoUpdate = true;
+    writeFileSync(file, JSON.stringify(list, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Windows: make the login start of Loa again (once per plugin version) and start Loa (a second one ends by itself).
+// Only where Loa was set up on this machine (its key and launcher exist); never inside Loa's own session.
+export function ensureLoa({ home = homedir(), env = process.env, platform = process.platform, running, state, spawnFn = spawn }) {
+  if (platform !== 'win32' || env.NLH_TOWER === '1') return { state, started: false };
+  const dir = join(home, '.tinh-nlh', 'speaker');
+  if (!existsSync(join(dir, 'tower-key.dpapi')) || !existsSync(join(dir, 'loa.vbs')) || !existsSync(join(dir, 'start.ps1'))) return { state, started: false };
+  const system = join(env.SystemRoot || 'C:\\Windows', 'System32');
+  const register = state.loginFor === running ? '' : `"${join(system, 'WindowsPowerShell', 'v1.0', 'powershell.exe')}" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${join(dir, 'start.ps1')}" -RegisterOnly & `;
+  const script = `${register}"${join(system, 'wscript.exe')}" "${join(dir, 'loa.vbs')}" login`;
+  try {
+    const child = spawnFn('cmd.exe', ['/d', '/s', '/c', `"${script}"`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
+    child.on?.('error', () => {});
+    child.unref?.();
+    return { state: { ...state, loginFor: running }, started: true };
+  } catch {
+    return { state, started: false };
   }
 }
 
@@ -77,13 +117,17 @@ export function fetchInBackground(claude, spawnFn = spawn) {
 // What the hook prints (a line for Claude, or ''), and whether it started a download. now: ms.
 export function decide({ running, installed, state, claude, now, platform = process.platform }) {
   if (!running) return { line: '', state, fetch: false };
-  if (installed && newer(installed, running)) {
-    if (state.told === installed) return { line: '', state, fetch: false };
-    const line = `Nếp ${installed} is downloaded but this session still runs ${running}. After doing what the user asked, say exactly one sentence: "Nếp có bản mới rồi. Để dùng bản mới, bạn ${restartSentence(platform)}." (say it in the user's own form of address, no other words, no command, no /reload-plugins, no question).\n`;
+  const waiting = installed && newer(installed, running);
+  const fetch = !waiting && Boolean(claude) && now - (state.tried ?? 0) >= TRY_GAP_MS;
+  const status = waiting
+    ? `Nếp update: ${installed} is downloaded, this session runs ${running}. If the user asks to update Nếp: run no command, show no progress, say only: "Nếp có bản mới rồi. Để dùng bản mới, bạn ${restartSentence(platform)}." (in their own form of address).\n`
+    : `Nếp update: this session runs ${running}, the newest downloaded is ${installed && newer(installed, running) ? installed : running}; a check for a newer one runs by itself in the background. If the user asks to update Nếp: run no command, show no progress, say only: "Nếp đã là bản mới nhất." (in their own form of address).\n`;
+  if (waiting) {
+    if (state.told === installed) return { line: status, state, fetch: false };
+    const line = `Nếp ${installed} is downloaded but this session still runs ${running}. After doing what the user asked, say exactly one sentence: "Nếp có bản mới rồi. Để dùng bản mới, bạn ${restartSentence(platform)}." (say it in the user's own form of address, no other words, no command, no /reload-plugins, no question).\n${status}`;
     return { line, state: { ...state, told: installed }, fetch: false };
   }
-  if (!claude || now - (state.tried ?? 0) < TRY_GAP_MS) return { line: '', state, fetch: false };
-  return { line: '', state: { ...state, tried: now }, fetch: true };
+  return { line: status, state: fetch ? { ...state, tried: now } : state, fetch };
 }
 
 export function main(env = process.env, write = (text) => process.stdout.write(text)) {
@@ -98,7 +142,9 @@ export function main(env = process.env, write = (text) => process.stdout.write(t
   const claude = env.CLAUDE_CODE_EXECPATH && existsSync(env.CLAUDE_CODE_EXECPATH) ? env.CLAUDE_CODE_EXECPATH : '';
   const state = readState(file);
   const result = decide({ running, installed: installedVersion(), state, claude, now: Date.now() });
-  if (result.state !== state) writeState(file, result.state);
+  const loa = ensureLoa({ env, running, state: result.state });
+  ensureAutoUpdate();
+  if (loa.state !== state) writeState(file, loa.state);
   if (result.fetch) fetchInBackground(claude);
   if (result.line) write(result.line);
 }
