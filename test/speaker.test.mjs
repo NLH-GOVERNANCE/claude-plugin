@@ -753,6 +753,40 @@ describe('Loa nhắc lại việc chưa ai nhận', () => {
     loa.close();
   });
 
+  test('việc dân làng tự mở cho mình mà chưa ai nhận: không báo ngay, nhắc đúng một lần sau 30 phút, cùng phiên (việc 015e27f1)', async () => {
+    const time = fakeClock();
+    const loa = inProcess({ feed: () => [entry('your_cell:t:o', at, { session_id: LIVE, from_cell: 'cto' })], sessions: live, clock: time.clock });
+    await loa.server.tick();
+    assert.equal(sends(loa).length, 0, 'không báo ngay');
+    let id = 2;
+    const counts = [];
+    for (let step = 1; step <= 6; step += 1) {
+      time.pass(15 * MIN);
+      await loa.server.tick();
+      const last = sends(loa).at(-1);
+      if (last && !loa.rows.some((row) => row.entry_id === last.meta.entry_id)) await loa.call(id++, 'forwarded', { entry_id: last.meta.entry_id, ok: true });
+      counts.push(sends(loa).length);
+    }
+    assert.deepEqual(counts, [0, 1, 1, 1, 1, 1], 'phút 30 nhắc một lần, không lần hai');
+    assert.deepEqual(sends(loa).map((event) => event.meta.entry_id), ['remind1:your_cell:t:o']);
+    loa.close();
+  });
+
+  test('việc tự mở đã có người nhận (claimed) hay đang giữ: không nhắc', async () => {
+    const time = fakeClock();
+    let feed = [entry('your_cell:t:o', at, { session_id: LIVE, from_cell: 'cto' })];
+    const loa = inProcess({ feed: () => feed, sessions: live, clock: time.clock });
+    await loa.server.tick();
+    feed = [entry('your_cell:t:o', at, { session_id: LIVE, from_cell: 'cto', claimed: true })];
+    for (let step = 0; step < 3; step += 1) {
+      time.pass(31 * MIN);
+      await loa.server.tick();
+    }
+    assert.equal(sends(loa).length, 0);
+    assert.deepEqual(state(loa).told, [], 'quên mục đã nhận');
+    loa.close();
+  });
+
   test('câu trả lời còn trong luồng sau 2 phút: báo như cũ, một lần; hàng chờ gửi cho việc đã rời luồng thì bỏ', async () => {
     const time = fakeClock();
     let feed = [entry('your_turn:t:k', at, { kind: 'your_turn', session_id: LIVE })];

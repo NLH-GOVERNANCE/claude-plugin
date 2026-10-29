@@ -717,6 +717,8 @@ export function startServer({
     }
     // Fresh items only: a line the villager wrote itself is not told; an answer waits confirmMs (see recheck).
     if (!told) {
+      // An own line is not told now, but is remembered like a told item: still unclaimed after REMIND_MS, the villager is reminded once.
+      if (ownLine(entry) && !taken(entry)) remember(entry, item, null, 0);
       if (ownLine(entry) || taken(entry)) return log(`not told: ${ownLine(entry) ? 'own line' : 'held'}`);
       if (entry.kind === 'your_turn' && confirmMs > 0 && item.entry_id && entry.at) {
         state.held = [...state.held.filter((other) => other.entry_id !== item.entry_id), { entry_id: item.entry_id, at: entry.at, held_at: clock() }];
