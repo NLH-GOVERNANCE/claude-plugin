@@ -227,6 +227,25 @@ try { $owned = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $
 # The key was taken back (the hub refused it) while Loa runs hidden: the icon ends the hidden one first (loa.pid is the
 # launcher's process id) and asks again.
 $pidFile = Join-Path $Dir 'loa.pid'
+# A newer plugin came while Loa runs an older one (3/10 PC: Loa stayed on 0.25.4 after the app went to 0.25.8): end the running
+# Loa and take its place, but only when nothing waits in tower-state.json (no held, told or pending send is lost).
+$runningFile = Join-Path $Dir 'loa-running.txt'
+if (-not $owned -and -not $DryRun -and $best -and (Test-Path -LiteralPath $pidFile)) {
+  $older = $false
+  try { $older = ([version](Get-Content -LiteralPath $runningFile -Raw).Trim()) -lt $best.Version } catch { $older = $true }
+  $busy = $false
+  try {
+    $queue = Get-Content -LiteralPath (Join-Path $Dir 'tower-state.json') -Raw -ErrorAction Stop | ConvertFrom-Json
+    $busy = (@($queue.pending).Count + @($queue.told).Count + @($queue.held).Count) -gt 0
+  } catch { }
+  if ($older -and -not $busy) {
+    try {
+      & (Join-Path $env:SystemRoot 'System32	askkill.exe') /PID ([int](Get-Content -LiteralPath $pidFile -Raw).Trim()) /T /F | Out-Null
+      Start-Sleep -Seconds 2
+      try { $owned = $mutex.WaitOne(3000) } catch [Threading.AbandonedMutexException] { $owned = $true }
+    } catch { }
+  }
+}
 if (-not $owned -and -not $DryRun -and -not (Test-Path -LiteralPath (Join-Path $Dir 'tower-key.dpapi')) -and (Test-Path -LiteralPath $pidFile)) {
   try {
     & (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID ([int](Get-Content -LiteralPath $pidFile -Raw).Trim()) /T /F | Out-Null
@@ -400,6 +419,7 @@ try {
 } catch { }
 Remove-Item -LiteralPath (Join-Path $Dir 'last-error.json') -Force -ErrorAction SilentlyContinue
 $started = Get-Date
+if ($best) { Set-Content -LiteralPath $runningFile -Value $best.Version.ToString() -Encoding ascii } elseif ($current) { Set-Content -LiteralPath $runningFile -Value $current.ToString() -Encoding ascii }
 & $claude @arguments
 # Claude quit within a minute (channel refused or its question not answered): run again the 10-minute way.
 if ($LASTEXITCODE -and ((Get-Date) - $started).TotalSeconds -lt 60) {

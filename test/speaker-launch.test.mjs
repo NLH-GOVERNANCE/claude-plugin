@@ -92,6 +92,10 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /New-Object Threading\.Mutex\(\$false, 'Local\\LoaTinhNhiLe'\)/);
     assert.match(ps, /if \(-not \$Auto\) \{ Read-Host 'Bấm Enter để đóng'/);
     assert.match(ps, /last-error\.json/, 'chạy ẩn mà trục trặc: để lại một dòng cho phiên Claude kế tiếp');
+    // Gói lên bản mới mà Loa cũ vẫn chạy: bản đang chạy ghi ở loa-running.txt; cũ hơn bản gói và không còn tin chờ (tower-state.json) thì thay Loa cũ.
+    assert.match(ps, /loa-running\.txt/);
+    assert.match(ps, /\$older -and -not \$busy/);
+    assert.match(ps, /tower-state\.json/);
     // Trợ giúp ẩn: chỉ gửi Enter khi màn hình đúng là câu hỏi kênh phát triển và có dòng chọn "1. I am using this for local development".
     assert.match(ps, /\[int\]\$Answer = 0/);
     assert.ok(ps.includes("$question = 'Loading development channels'"));
