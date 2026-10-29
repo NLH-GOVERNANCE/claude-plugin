@@ -104,7 +104,8 @@
     },
     {
       "id": "cap-nhat-giup",
-      "say": "anh Sơn nhắn cập nhật Nếp, em làm giúp chị nha"
+      "say": "anh Sơn nhắn cập nhật Nếp, em làm giúp chị nha",
+      "mustNot": [{ "label": "hỏi lại trước khi trả lời, hay in lệnh", "re": "cập nhật Nếp trên máy này nha|claude plugin|Updating|Background tasks", "flags": "i" }]
     },
     {
       "id": "may-dang-lam-gi",
