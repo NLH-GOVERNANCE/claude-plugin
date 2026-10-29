@@ -33,6 +33,7 @@ export function checkPullRequest({ pr, now }) {
   const out = [];
   if (now - Date.parse(pr.createdAt) > 864e5) out.push({ rule: 'R01', severity: 'block', message: 'PR cũ' });
   if (pr.commitCount > 3) out.push({ rule: 'R02', severity: 'block', message: 'PR có ' + pr.commitCount + ' commit' });
+  if (pr.changedFiles > 15) out.push({ rule: 'R03', severity: 'block', message: 'PR đổi ' + pr.changedFiles + ' file' });
   if (!['dev', 'main'].includes(pr.head) && !/^(feat|fix|chore)\\/[a-z0-9-]+$/.test(pr.head)) out.push({ rule: 'R17 (tên nhánh tiếng Anh)', severity: 'block', message: 'Tên nhánh ' + pr.head });
   if (!pr.body) out.push({ rule: 'R04', severity: 'block', message: 'Thiếu mục "## Summary".' });
   out.push({ rule: 'R12', severity: 'note', message: 'ghi chú' });
@@ -224,6 +225,35 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
     assert.match(denied.hookSpecificOutput.permissionDecisionReason, /^Nếp gate blocked git commit.*\n- junk-file · File rác trong commit: tsconfig\.tsbuildinfo\./);
     sh(work, 'rm', '--cached', '--quiet', 'tsconfig.tsbuildinfo');
     assert.equal(await run(input, gateDir), null);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('commit gộp dev vào nhánh chỉ đếm file khác so với dev, không đếm file dev kéo về (việc 9ea10c50)', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-OS/demo.git');
+    const write = (name, text = `${name}\n`) => writeFileSync(join(work, name), text);
+    write('a.mjs');
+    write('b.mjs');
+    write('README.md', 'nhánh\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'feat: a b');
+    sh(work, 'checkout', 'dev');
+    for (let i = 0; i < 20; i += 1) write(`dev-${i}.mjs`);
+    write('README.md', 'dev\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'dev: 20 file');
+    sh(work, 'push', join(dir, 'origin.git'), 'dev');
+    sh(work, 'update-ref', 'refs/remotes/origin/dev', 'dev');
+    sh(work, 'checkout', 'feat/gate');
+    assert.throws(() => sh(work, 'merge', 'origin/dev'));
+    write('README.md', 'gộp\n');
+    sh(work, 'add', 'README.md');
+    const input = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_3', cwd: work, tool_input: { command: 'git commit --no-edit' } };
+    assert.equal(await run(input, gateDir), null);
+    for (let i = 0; i < 13; i += 1) write(`pr-${i}.mjs`);
+    sh(work, 'add', '.');
+    const denied = await run(input, gateDir);
+    assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- R03 · PR đổi 16 file\.?$/m);
+    assert.doesNotMatch(denied.hookSpecificOutput.permissionDecisionReason, /R02/);
     rmSync(dir, { recursive: true, force: true });
   });
 
