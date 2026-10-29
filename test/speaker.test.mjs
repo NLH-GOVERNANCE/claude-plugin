@@ -49,6 +49,8 @@ import {
   taken,
   startServer,
   defaultToast,
+  toastNoSession,
+  TOAST_HUB,
   transcriptCwd,
 } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
@@ -519,7 +521,9 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.ok(!loa.rows.some((row) => row.kind === 'you'));
     assert.equal(JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8')).pending.length, 0, 'không có gì chờ gửi');
     // Loa ẩn: hai câu này cũng hiện thành thông báo Windows (28/10, laptop không thấy dòng in trong cửa sổ ẩn); dòng nhắc cùng ô trong 10 phút thì không.
-    assert.deepEqual(loa.toasts, [loa.pushed()[0].content, you.content]);
+    assert.deepEqual(loa.toasts, ['Có việc mới. Mở Claude, gõ "làm tiếp".', 'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".']);
+    assert.equal(toastNoSession('Nhà khoa học'), 'Nhà khoa học có việc mới. Mở Claude, gõ "làm tiếp".');
+    for (const text of [...loa.toasts, TOAST_HUB]) assert.doesNotMatch(text, /Ô |\(|[a-z]+\/[a-z]+|phiếu|[0-9a-f]{8}/, 'câu thông báo cho người: không mã, không chữ Ô');
     loa.close();
   });
 

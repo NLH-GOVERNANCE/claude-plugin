@@ -225,6 +225,12 @@ export function reminderSentence(entry, count) {
 // session here is woken for it. held_here: the ticket is held on this machine, so its news goes to the holding session.
 export const taken = (entry) => !entry?.held_here && Boolean(entry?.held_elsewhere || entry?.held_by || entry?.claimed_by || entry?.claimed === true || entry?.held === true);
 
+// The Windows notification texts: for a person, so no cell code, no "Ô", no ticket code (28/10, 26f86f3d). title: the cell's
+// friendly title, "Có việc mới" when the hub sent none.
+export const toastNoSession = (title) => `${title ? `${title} có` : 'Có'} việc mới. Mở Claude, gõ "làm tiếp".`;
+export const TOAST_YOU = 'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".';
+export const TOAST_HUB = 'Đề xuất bạn gửi có tin mới: chữ ký hay lời chấm. Mở Claude, gõ "việc của tôi".';
+
 // No session on this machine sits at the cell: the one line Loa prints instead of opening one (ticket 3a65c3bd).
 export const noSessionSentence = (seat) => `${seat} có việc mới, chưa phiên nào mở; mở Claude gõ "làm tiếp".`;
 
@@ -689,17 +695,17 @@ export function startServer({
   async function deliver(entry, { reminder = 0, told = null } = {}) {
     const text = reminder ? reminderSentence(entry, reminder) : sentence(entry);
     const base = ref(entry.id);
-    const item = { entry_id: reminder ? `remind${reminder}:${base}` : base, base_id: base, kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '', ...(reminder ? { reminder } : {}) };
+    const item = { entry_id: reminder ? `remind${reminder}:${base}` : base, base_id: base, kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '', title: plain(entry.cell_title, 60).replace(/@/g, '/'), ...(reminder ? { reminder } : {}) };
     if (HUB_CELLS.includes(item.cell)) {
       const ticket = item.ticket ? ` (phiếu ${item.ticket})` : '';
       const hubText = `Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`;
-      toast(hubText);
+      toast(TOAST_HUB);
       return push(hubText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     if (entry.kind === 'you') {
       const ticket = item.ticket ? `, phiếu ${item.ticket}` : '';
       const youText = `Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`;
-      toast(youText);
+      toast(TOAST_YOU);
       return push(youText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     // Fresh items only: a line the villager wrote itself is not told; an answer waits confirmMs (see recheck).
@@ -734,7 +740,7 @@ export function startServer({
     if (last !== undefined && clock() - last < NO_SESSION_GAP_MS) return log('no session: already told for this cell');
     noSession.set(item.cell, clock());
     const noSessionText = noSessionSentence(seat);
-    toast(noSessionText);
+    toast(toastNoSession(item.title));
     push(noSessionText, { action: 'none', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
   }
 
