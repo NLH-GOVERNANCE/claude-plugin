@@ -31,7 +31,7 @@ describe('self-update', () => {
 
   test('câu dặn bấm đúng chỗ: Windows chuột phải biểu tượng góc phải, chọn Thoát; không có chữ kỹ thuật', () => {
     const win = restartSentence('win32');
-    assert.match(win, /chuột phải.*biểu tượng Claude.*góc phải dưới.*Thoát.*mở lại/);
+    assert.match(win, /chuột phải.*biểu tượng Claude.*góc phải dưới.*Thoát \(hay Exit\).*mở lại.*bấm X chỉ ẩn/);
     assert.match(restartSentence('darwin'), /Thoát Claude/);
     for (const platform of ['win32', 'darwin', 'linux']) assert.doesNotMatch(restartSentence(platform), /plugin|reload|\/|lệnh|terminal/i);
   });
