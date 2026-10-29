@@ -79,7 +79,7 @@ export function ensureLoa({ home = homedir(), env = process.env, platform = proc
 
 // The click that restarts Claude for good, in words a person who does not know computers can follow.
 export function restartSentence(platform = process.platform) {
-  if (platform === 'win32') return 'bấm chuột phải vào biểu tượng Claude ở góc phải dưới màn hình (có thể nằm trong mũi tên ^), chọn Thoát, rồi mở lại Claude';
+  if (platform === 'win32') return 'bấm chuột phải vào biểu tượng Claude ở góc phải dưới màn hình (có thể nằm trong mũi tên ^), chọn Thoát (hay Exit), rồi mở lại Claude; bấm X chỉ ẩn Claude xuống khay, chưa mở lại được';
   if (platform === 'darwin') return 'bấm Claude trên thanh menu trên cùng, chọn Thoát Claude, rồi mở lại Claude';
   return 'đóng hẳn Claude (không chỉ đóng cửa sổ) rồi mở lại';
 }
