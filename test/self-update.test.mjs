@@ -56,6 +56,7 @@ describe('self-update', () => {
     assert.equal(decide({ ...base, claude: '', installed: '0.25.5', state: {} }).fetch, false);
     assert.equal(decide({ ...base, running: null, installed: '0.25.6', state: {} }).line, '');
     assert.match(decide({ ...base, installed: '0.25.5', claude: '', state: {} }).line, /^Nếp update: this session runs 0\.25\.5, the newest downloaded is 0\.25\.5/);
+    assert.match(decide({ ...base, running: '0.25.9', installed: '0.25.4', state: {} }).line, /runs 0\.25\.9, the newest downloaded is 0\.25\.9/, 'bản đã tải cũ hơn bản đang chạy thì không nói bản cũ');
   });
 
   test('tải ngầm: một tiến trình tách rời chạy cập nhật kho rồi cập nhật gói, không chờ', () => {
