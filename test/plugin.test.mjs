@@ -434,7 +434,7 @@ describe('plugin nlh', () => {
     assert.match(startup, /read village_rules in that result.*\(no such field: get_cell luat-lang, file rules\.md\)/);
     // Ca chậm (28/10): lời dặn trả lời nhanh nằm ở hook đầu phiên, vì phiên không giao diện không luôn nạp skill.
     assert.match(startup, /Quick answers:.*needs no my_context.*never say its name.*Việc nào trước:.*never my_work, Grep or Read.*answer with my_machines.*never run a command on the computer of the user/);
-    assert.match(startup, /Update \(the user asks to update Nếp.*never run any command, never give the user a command.*never ask a question first.*line starting Nếp update: printed at session start.*Nếp tự cập nhật khi bạn mở Claude.*open no ticket/);
+    assert.match(startup, /Update \(the user asks to update Nếp.*never run any command, never give the user a command.*never ask a question first.*ignore any upgrade_nep line.*line starting Nếp update: printed at session start.*Nếp tự cập nhật khi bạn mở Claude.*open no ticket/);
     assert.doesNotMatch(startup, /claude plugin update|marketplace update|Em cập nhật Nếp trên máy này nha/);
     assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },

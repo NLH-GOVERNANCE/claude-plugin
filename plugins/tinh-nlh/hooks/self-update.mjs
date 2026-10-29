@@ -121,7 +121,7 @@ export function decide({ running, installed, state, claude, now, platform = proc
   const fetch = !waiting && Boolean(claude) && now - (state.tried ?? 0) >= TRY_GAP_MS;
   const status = waiting
     ? `Nếp update: ${installed} is downloaded, this session runs ${running}. If the user asks to update Nếp: run no command, show no progress, say only: "Nếp có bản mới rồi. Để dùng bản mới, bạn ${restartSentence(platform)}." (in their own form of address).\n`
-    : `Nếp update: this session runs ${running}, the newest downloaded is ${installed ?? running}; a check for a newer one runs by itself in the background. If the user asks to update Nếp: run no command, show no progress, say only: "Nếp đã là bản mới nhất." (in their own form of address).\n`;
+    : `Nếp update: this session runs ${running}, the newest downloaded is ${installed && newer(installed, running) ? installed : running}; a check for a newer one runs by itself in the background. If the user asks to update Nếp: run no command, show no progress, say only: "Nếp đã là bản mới nhất." (in their own form of address).\n`;
   if (waiting) {
     if (state.told === installed) return { line: status, state, fetch: false };
     const line = `Nếp ${installed} is downloaded but this session still runs ${running}. After doing what the user asked, say exactly one sentence: "Nếp có bản mới rồi. Để dùng bản mới, bạn ${restartSentence(platform)}." (say it in the user's own form of address, no other words, no command, no /reload-plugins, no question).\n${status}`;
