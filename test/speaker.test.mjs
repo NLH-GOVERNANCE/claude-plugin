@@ -282,6 +282,8 @@ describe('hàm thuần của Loa', () => {
     assert.equal(machineId(dir, () => 'e'.repeat(32), { CLAUDE_CODE_REMOTE: 'false' }), `m-${'c'.repeat(32)}`, 'máy thật vẫn giữ mã');
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, id), `https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z&machine_id=${id}`);
     assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, 'ngắn'), 'https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z');
+    assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, id, '0.25.12'), `https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z&machine_id=${id}&plugin_version=0.25.12`);
+    assert.equal(feedUrl('https://x.nlh.vn', '2026-10-18T05:10:00.000Z', 0, null, 'x&y=1'), 'https://x.nlh.vn/tower/feed?since=2026-10-18T05%3A05%3A00.000Z', 'bản lạ không đi theo');
   });
 
   // Loa trục trặc (việc 26f86f3d): lối mở ẩn để lại một dòng; phiên Claude kế tiếp đọc một lần rồi xoá, cùng lý do trong một ngày không báo lại.
@@ -424,7 +426,7 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.deepEqual([loa.pushed().at(-1).meta.action, loa.pushed().at(-1).meta.to], ['send', 'Dân làng - techlead (son/lead)']);
     assert.equal(loa.spawned.length, 0, 'chưa mở lại khi chưa biết gửi hỏng');
     // Luồng việc đọc kèm mã máy (D-0065 · 5/5), mã giữ trong thư mục máy.
-    assert.match(loa.reads[0], new RegExp(`&machine_id=${readFileSync(join(loa.dir, 'machine-id'), 'utf8').trim()}$`));
+    assert.match(loa.reads[0], new RegExp(`&machine_id=${readFileSync(join(loa.dir, 'machine-id'), 'utf8').trim()}&plugin_version=\\d+\\.\\d+\\.\\d+$`));
     await loa.call(2, 'forwarded', { entry_id: 'your_cell:t:8', ok: false });
     assert.deepEqual(loa.spawned, [], 'không --bg, không --resume');
     assert.deepEqual(loa.rows.map((row) => [row.via, row.ok]), [['send', false], ['none', false]]);
