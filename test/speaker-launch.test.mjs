@@ -109,6 +109,8 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.doesNotMatch(ps, /-lt 60 -and \$mode -like/);
     assert.match(ps, /if \(\$Auto\) \{ Stop-Loa 'Loa đã dừng\. Bấm đúp Loa để mở lại\.' \}/);
     // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
+    assert.match(ps, /\$env:NLH_TOWER_DEV = '1'/);
+    assert.match(ps, /\$configEnv\['NLH_TOWER_CONFIG'\] = '1'/);
     assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; NLH_TOWER_TOAST = '1'; CLAUDE_BIN = \$claude \}/);
     assert.doesNotMatch(ps, /Tháp/);
     assert.doesNotMatch(ps, /\$env:NLH_TOWER\s*=|skip-permissions|bypassPermissions|AsPlainText|ConvertFrom-SecureString -Key|Write-Host \$secure/);
@@ -126,7 +128,7 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps, /Lần đầu: Loa đang chuẩn bị máy này, khoảng một phút\./);
     // Máy chỉ có app Claude: tìm claude.exe trong thư mục dữ liệu của app, trước khi tìm trên PATH.
     assert.ok(ps.includes("'Claude-Data") && ps.indexOf("'Claude-Data") < ps.indexOf('Get-Command claude.exe'));
-    assert.doesNotMatch(ps, /Startup|CurrentVersion\\Run|schtasks/i, 'tự mở là tác vụ của người dùng, không thư mục Startup hay Run');
+    assert.doesNotMatch(ps, /Startup|schtasks|(?<!Un)Register-ScheduledTask/i, 'tự mở là một giá trị khoá Run của người dùng (HKCU, không quản trị): không thư mục Startup, không tác vụ đặt lịch');
     // Giữ máy thức khi Loa mở; kênh hỏng thì mở lại không cờ, chỉ nhịp 10 phút, in một dòng (phiếu 98bd8b93).
     assert.match(ps, /SetThreadExecutionState\(\[uint32\]'0x80000001'\)/);
     assert.match(ps, /& \$claude @loop/);
@@ -149,7 +151,9 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.ok(sh.includes(`set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --mcp-config "$CONFIG"`));
     assert.ok(sh.includes(`set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS"`));
     assert.doesNotMatch(sh, /dangerously|local development|Loading development|no MCP server|Authorize/);
-    assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude \}/);
+    assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_CONFIG: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude \}/);
+    // Two speaker servers in the Loa session (29/10): the launcher says so, and only the --mcp-config one says it is the channel.
+    assert.match(sh, /export NLH_TOWER_DEV=1/);
     assert.doesNotMatch(sh, /Tháp(?! tỉnh NhiLe\.command)/);
     assert.doesNotMatch(sh, /skip-permissions|bypassPermissions/);
     assert.match(sh, /export NLH_TOWER=1 NLH_TOWER_DIR="\$DIR" NLH_TOWER_WORK="\$WORK" CLAUDE_BIN="\$CLAUDE"/);
@@ -169,14 +173,14 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.match(ps.toString('utf8'), /giữ nguyên lối tắt đó/);
     const sh = read('speaker/setup.sh');
     assert.match(sh, /name='Loa tỉnh NhiLe'/);
-    // Tự mở khi đăng nhập máy: tác vụ của chính người dùng, không cần quyền quản trị (phiếu 98bd8b93, dòng 4b62d007).
+    // Tự mở khi đăng nhập máy: một giá trị trong khoá Run của chính người dùng, không cần quyền quản trị (phiếu 98bd8b93; 28/10 tác vụ đặt lịch bị "Access is denied" trên laptop thật).
     // 28/10: setup (chạy trong phiên Claude, có thể bị chặn đặt lịch ở chế độ Auto) không đăng ký gì; lối mở làm khi người dùng bấm đúp.
     const setupPs = ps.toString('utf8');
     assert.doesNotMatch(setupPs, /Register-ScheduledTask|NoAutostart|New-ScheduledTask/);
     const startPs = read('speaker/start.ps1');
-    assert.match(startPs, /New-ScheduledTaskTrigger -AtLogOn -User \$user/);
-    assert.match(startPs, /-LogonType Interactive -RunLevel Limited/);
-    assert.match(startPs, /Register-ScheduledTask -TaskName \$TaskName /);
+    assert.match(startPs, /\$RunKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'/);
+    assert.match(startPs, /Set-ItemProperty -LiteralPath \$RunKey -Name \$RunName -Value \$command/);
+    assert.doesNotMatch(startPs, /(?<!Un)Register-ScheduledTask|New-ScheduledTask/, 'không tác vụ đặt lịch (cần quyền quản trị)');
     assert.match(startPs, /if \(-not \$Quiet -and -not \$DryRun\) \{ Register-Login \}/);
     assert.match(sh, /vn\.nlh\.tinh-nlh\.speaker\.plist/);
     assert.match(sh, /link="\$DESKTOP\/\$name\.command"/);
@@ -373,7 +377,7 @@ process.exitCode = 2;
     const { env: towerEnv } = config.mcpServers.speaker;
     assert.deepEqual(
       { ...towerEnv, NLH_TOWER_DIR: same(towerEnv.NLH_TOWER_DIR), NLH_TOWER_WORK: same(towerEnv.NLH_TOWER_WORK), CLAUDE_BIN: same(towerEnv.CLAUDE_BIN) },
-      { NLH_TOWER: '1', NLH_TOWER_DIR: same(posix(synced.dir)), NLH_TOWER_WORK: same(`${posix(synced.home)}/TinhNhiLe`), CLAUDE_BIN: same(`${posix(synced.home)}/.local/bin/claude`) },
+      { NLH_TOWER: '1', NLH_TOWER_CONFIG: '1', NLH_TOWER_DIR: same(posix(synced.dir)), NLH_TOWER_WORK: same(`${posix(synced.home)}/TinhNhiLe`), CLAUDE_BIN: same(`${posix(synced.home)}/.local/bin/claude`) },
     );
     assert.ok(!JSON.stringify(config).includes('nlh_tower_'), 'khoá không vào cấu hình');
   });
@@ -419,27 +423,25 @@ const ps = (file, args, env = {}) =>
   });
 
 describe('setup.ps1 và start.ps1 chạy thật trên Windows (thư mục người dùng giả)', { skip: process.platform === 'win32' ? false : 'chỉ Windows' }, () => {
-  test('start.ps1 -RegisterOnly: đăng ký tác vụ đăng nhập của người dùng trỏ tới loa.vbs; chạy lại không đổi; setup.ps1 không đăng ký', () => {
+  test('start.ps1 -RegisterOnly: ghi vào khoá Run của người dùng lệnh wscript mở loa.vbs; chạy lại không đổi; setup.ps1 không đăng ký', () => {
     const home = join(temp('loa-login'), 'Thùy ỉ');
     const dir = join(home, '.tinh-nlh', 'speaker');
     mkdirSync(dir, { recursive: true });
     const name = `Loa thử ${Date.now()}`;
-    const run = () => ps(join(plugin, 'speaker/start.ps1'), ['-RegisterOnly', '-Dir', dir, '-TaskName', name], { USERPROFILE: home });
+    const run = () => ps(join(plugin, 'speaker/start.ps1'), ['-RegisterOnly', '-Dir', dir, '-RunName', name], { USERPROFILE: home });
     const show = () =>
-      spawnSync(powershell, ['-NoProfile', '-Command', `[Console]::OutputEncoding = [Text.Encoding]::UTF8; $t = Get-ScheduledTask -TaskName '${name}'; $t.Actions[0].Execute; $t.Actions[0].Arguments; $t.Triggers[0].CimClass.CimClassName; $t.Principal.RunLevel`], { encoding: 'utf8', cwd: tmpdir() }).stdout.trim().split(/\r?\n/);
+      spawnSync(powershell, ['-NoProfile', '-Command', `[Console]::OutputEncoding = [Text.Encoding]::UTF8; (Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name '${name}').'${name}'`], { encoding: 'utf8', cwd: tmpdir() }).stdout.trim().split(/\r?\n/);
     try {
       const first = run();
       assert.equal(first.status, 0, first.stdout + first.stderr);
-      const [execute, args, trigger, level] = show();
-      assert.match(execute, /wscript\.exe$/i);
-      assert.equal(args, `"${join(dir, 'loa.vbs')}" login`);
-      assert.match(trigger, /LogonTrigger/);
-      assert.equal(level, 'Limited');
-      assert.deepEqual(show(), [execute, args, trigger, level]);
+      const [command] = show();
+      assert.match(command, /^"[^"]*wscript\.exe" "[^"]*loa\.vbs" login$/i);
+      assert.ok(command.includes(join(dir, 'loa.vbs')));
+      assert.deepEqual(show(), [command]);
       assert.equal(run().status, 0, 'chạy lại không lỗi');
       assert.equal(existsSync(join(dir, 'loa.log')), false, 'không ghi lỗi nào');
     } finally {
-      spawnSync(powershell, ['-NoProfile', '-Command', `Unregister-ScheduledTask -TaskName '${name}' -Confirm:$false -ErrorAction SilentlyContinue`], { cwd: tmpdir() });
+      spawnSync(powershell, ['-NoProfile', '-Command', `Remove-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name '${name}' -ErrorAction SilentlyContinue`], { cwd: tmpdir() });
     }
   });
 
@@ -599,7 +601,7 @@ process.exitCode = 2;
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { speaker: tower } = JSON.parse(raw.toString('utf8')).mcpServers;
     assert.deepEqual(tower.args, [join(syncedDir, 'speaker.mjs')]);
-    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), NLH_TOWER_TOAST: '1', CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
+    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_CONFIG: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), NLH_TOWER_TOAST: '1', CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
     assert.match(tower.command, /node(\.exe)?$/i);
     assert.ok(existsSync(join(home, 'TinhNhiLe')), 'thư mục làm việc của Loa');
 

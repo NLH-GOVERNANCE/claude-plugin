@@ -166,6 +166,8 @@ test('chữ cấm: bắt từng chữ của ticket, không bắt chữ trùng m�
   const addressed = (id, answer) => gradeCase({ answer, firstTextMs: 1000 }, byId(id), config);
   assert.deepEqual(addressed('viec-truoc-nhat', 'Chào anh Sơn, việc đầu là gộp bản sửa.').words.hits, ['gọi anh ở ca chị']);
   assert.equal(addressed('viec-truoc-nhat', 'Việc đầu của chị là gộp bản sửa.').pass, true);
+  // Tên việc trong ngoặc kép là dữ liệu, không tính là cách gọi người dùng.
+  assert.equal(addressed('viec-truoc-nhat', 'Việc đầu của chị là "Chìa dự phòng chia cho anh Sơn, chị Nhi".').pass, true);
   assert.deepEqual(addressed('chao-em', 'Chào chị Nhi.').words.hits, ['đoán xưng hô']);
   assert.equal(addressed('chao-em', 'Chào Sơn, bạn cần em làm gì ạ?').pass, true);
   const asked = gradeCase({ answer: 'PowerShell là cửa sổ gõ lệnh của Windows.', firstTextMs: 3000 }, byId('powershell-la-gi'), config);

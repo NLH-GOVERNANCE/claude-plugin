@@ -145,10 +145,12 @@ MODE=loop-config
 [ -f "$DIR/policy.mjs" ] && MODE="$("$NODE" "$DIR/policy.mjs" mode | head -n 1)"
 CONFIG="$DIR/speaker-mcp.json"
 if [ "$MODE" = loop-config ]; then
+  # Two speaker servers in this session (this one and the plugin's own): only the --mcp-config one has hands.
+  export NLH_TOWER_DEV=1
   # Node writes the JSON so paths with spaces stay right.
   "$NODE" -e '
 const [node, speaker, dir, origin, claude, work] = process.argv.slice(1);
-const env = { NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude };
+const env = { NLH_TOWER: "1", NLH_TOWER_CONFIG: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude };
 if (origin) env.TOWER_ORIGIN = origin;
 process.stdout.write(JSON.stringify({ mcpServers: { speaker: { command: node, args: [speaker], env } } }, null, 2));
 ' "$NODE" "$SPEAKER" "$DIR" "${TOWER_ORIGIN:-}" "$CLAUDE" "$WORK" > "$CONFIG" || stop_loa 'Chưa ghi được cấu hình của Loa.'

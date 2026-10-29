@@ -49,6 +49,8 @@ import {
   taken,
   startServer,
   defaultToast,
+  toastNoSession,
+  toastHub,
   transcriptCwd,
 } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
@@ -450,7 +452,9 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     assert.deepEqual(loa.rows, [{ entry_id: 'your_cell:t:1', kind: 'your_cell', ticket_id: TICKET, cell: 'cto', session_id: LIVE, via: 'send', ok: true }]);
     assert.ok(!JSON.stringify(loa.rows).includes('Việc'), 'không tiêu đề phiếu');
     assert.deepEqual(JSON.parse((await loa.call(4, 'pending', {})).result.content[0].text), []);
-    assert.equal((await loa.call(5, 'forwarded', { entry_id: 'your_cell:t:1', ok: true })).result.isError, true, 'không ghi hai lần');
+    const twice = (await loa.call(5, 'forwarded', { entry_id: 'your_cell:t:1', ok: true })).result;
+    assert.deepEqual([twice.isError, twice.content[0].text], [undefined, 'Already recorded.'], 'gọi lần hai không ghi thêm và không báo lỗi (29/10: Claude đã báo "Sổ chưa ghi được" dù tin đã tới)');
+    assert.equal(loa.rows.length, 1);
     assert.equal(loa.spawned.length, 0);
     loa.close();
   });
@@ -515,11 +519,30 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     const [you] = loa.pushed().slice(1);
     assert.equal(loa.pushed().length, 2, 'cùng ô trong 10 phút: không in dòng thứ hai');
     assert.equal(you.meta.kind, 'you');
-    assert.match(you.content, /^Có việc chờ chính bạn trả lời hay ký \(ô cto, phiếu 98bd8b93-[^)]+\)\. Loa không làm thay\.$/);
+    assert.equal(you.content, 'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".', 'ghế người dùng: không mã phiếu, không tên ô, không tên việc (D-0009)');
+    assert.doesNotMatch(you.content, /ô cto|phiếu|[0-9a-f]{8}-/);
     assert.ok(!loa.rows.some((row) => row.kind === 'you'));
     assert.equal(JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8')).pending.length, 0, 'không có gì chờ gửi');
     // Loa ẩn: hai câu này cũng hiện thành thông báo Windows (28/10, laptop không thấy dòng in trong cửa sổ ẩn); dòng nhắc cùng ô trong 10 phút thì không.
-    assert.deepEqual(loa.toasts, [loa.pushed()[0].content, you.content]);
+    assert.deepEqual(loa.toasts, ['Có việc mới. Mở Claude, gõ "làm tiếp".', 'Việc you:t:6: chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".']);
+    assert.equal(toastNoSession('Nhà khoa học'), 'Nhà khoa học có việc mới. Mở Claude, gõ "làm tiếp".');
+    for (const text of [...loa.toasts, toastHub(''), toastHub('Đổi luật chấm PR')]) assert.doesNotMatch(text, /Ô |\(|[a-z]+\/[a-z]+|phiếu|[0-9a-f]{8}/, 'câu thông báo cho người: không mã, không chữ Ô');
+    loa.close();
+  });
+
+  test('việc chờ chính người dùng: tên việc chỉ vào thông báo cho người, tin kênh không mã phiếu, không tên ô, không tên việc (29/10, D-0009)', async () => {
+    const loa = inProcess({ feed: () => [entry('you:t:7', at, { kind: 'you', cell: 'tech-lead-son', title: 'Lượt đưa lên bản chính 29/10' }), entry('hub:t:8', '2026-10-18T05:01:00.000Z', { kind: 'you', cell: 'propose-change', title: 'Đổi luật chấm PR' })] });
+    await loa.server.tick();
+    assert.deepEqual(loa.pushed().map((event) => event.content), [
+      'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".',
+      'Đề xuất bạn gửi có tin mới (chữ ký hay lời chấm). Mở Claude, gõ "việc của tôi".',
+    ]);
+    // D-0009: tên việc (chữ của người khác) chỉ vào thông báo cho người, không vào tin kênh cho phiên.
+    assert.deepEqual(loa.toasts, [
+      'Lượt đưa lên bản chính 29/10: chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".',
+      'Đổi luật chấm PR: đề xuất bạn gửi có tin mới, chữ ký hay lời chấm. Mở Claude, gõ "việc của tôi".',
+    ]);
+    for (const { content } of loa.pushed()) assert.doesNotMatch(content, /ô |phiếu|[0-9a-f]{8}|Loa/i);
     loa.close();
   });
 
@@ -912,8 +935,42 @@ describe('server Loa chạy thật qua stdio', () => {
     const second = open(dir);
     await until(() => second.pushed().length >= 1);
     assert.match(second.pushed()[0].content, /Một Loa khác đang chạy trên máy này/);
+    // Bản không giữ khoá không có tay: không công cụ nào, gọi công cụ thì không có (29/10).
+    second.write({ id: 7, method: 'tools/list' });
+    second.write({ id: 8, method: 'tools/call', params: { name: 'forwarded', arguments: { entry_id: 'x', ok: true } } });
+    await until(() => second.messages.some((message) => message.id === 8));
+    assert.deepEqual(second.messages.find((message) => message.id === 7).result.tools, []);
+    assert.ok(second.messages.find((message) => message.id === 8).error);
+    first.write({ id: 7, method: 'tools/list' });
+    await until(() => first.messages.some((message) => message.id === 7));
+    assert.deepEqual(first.messages.find((message) => message.id === 7).result.tools.map((tool) => tool.name), ['forwarded', 'pending']);
     await second.close();
     await first.close();
+  });
+
+  test('hai máy chủ speaker trong một phiên Loa (kênh mở bằng --mcp-config): chỉ bản cấu hình có tay; bản của gói nhường, không công cụ, không kênh, không đọc hub (29/10)', async () => {
+    status = 200;
+    feed = [entry('hand1', '2026-10-18T05:00:00.000Z')];
+    requests.length = 0;
+    const dir = temp('loa-state');
+    const dev = { NLH_TOWER_DEV: '1', NLH_TOWER_DIR: dir };
+    // Bản của gói khởi động trước, thắng cuộc đua khoá nếu nó có tay: nó phải nhường.
+    const plugin = open(dir, dev);
+    await until(() => plugin.messages.some((message) => message.id === 1));
+    const hand = open(dir, { ...dev, NLH_TOWER_CONFIG: '1' });
+    await until(() => hand.pushed().length >= 1, 8000);
+    for (const [name, server] of [['gói', plugin], ['cấu hình', hand]]) {
+      server.write({ id: 2, method: 'tools/list' });
+      await until(() => server.messages.some((message) => message.id === 2));
+      if (name === 'gói') assert.ok(server.messages.find((message) => message.id === 2).error, 'bản của gói nhường: không có công cụ');
+      else assert.deepEqual(server.messages.find((message) => message.id === 2).result.tools.map((tool) => tool.name), ['forwarded', 'pending']);
+    }
+    assert.deepEqual(plugin.messages.find((message) => message.id === 1).result.capabilities, {}, 'bản của gói không khai kênh');
+    assert.equal(plugin.pushed().length, 0);
+    assert.equal(hand.pushed().length, 1);
+    assert.equal(requests.filter((request) => request.url.startsWith('/tower/feed')).length > 0, true);
+    await hand.close();
+    await plugin.close();
   });
 });
 

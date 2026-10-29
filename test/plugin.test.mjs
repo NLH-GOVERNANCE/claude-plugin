@@ -88,6 +88,7 @@ describe('plugin nlh', () => {
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/sign-in-check.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/machine.mjs'] },
+      { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/self-update.mjs'] },
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/local-schedules-hook.mjs'] },
     ]);
     assert.doesNotMatch(readFileSync(join(pluginDir, 'hooks/session-start.mjs'), 'utf8'), /fetch|https?:|node:(http|net|https|fs|child_process)/);
@@ -530,6 +531,12 @@ describe('plugin nlh', () => {
     const startupHook = readJson('plugins/tinh-nlh/hooks/hooks.json').hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
     assert.ok(startupHook.includes(`say version ${version} and`), 'hook đầu phiên nói sai bản gói');
     assert.match(startupHook, /not new work and not the waiting list/);
+  });
+
+  test('hook đầu phiên: cuối lượt chỉ hỏi khi việc kế chờ đúng người đó, câu hỏi bằng chữ người dùng thấy (phiếu bdac3a50)', () => {
+    const line = readJson('plugins/tinh-nlh/hooks/hooks.json').hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.match(line, /End of every turn: ask the user a question only when the next step waits for that very person to answer, choose or sign; if you can do the next step yourself, do it, or say it is done/);
+    assert.match(line, /Write a question in the words the user sees on screen.*never hub, gói, web, plugin, connector, mã việc or a tool name, never how it works/);
   });
 
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {

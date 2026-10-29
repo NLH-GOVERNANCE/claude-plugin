@@ -112,7 +112,9 @@ export function gradeCase({ answer, firstTextMs, startupMs = null }, testCase, c
   const lines = nonEmptyLines(answer).length;
   const rows = { pass: testCase.maxLines === undefined || (lines > 0 && lines <= testCase.maxLines), lines, max: testCase.maxLines ?? null };
   // mustNot: chữ cấm riêng của ca (xưng hô sai: ca người dùng đã nói "chị" thì không được gọi "anh"), cùng khuôn với forbidden.
-  const hits = [...forbiddenHits(answer, config.forbidden, testCase.allow), ...forbiddenHits(answer, testCase.mustNot ?? [])];
+  // Tên việc trong dấu ngoặc kép là chữ của dữ liệu ("… chia cho anh Sơn, Danh, chị Nhi"), không phải cách Claude gọi người dùng.
+  const unquoted = answer.replace(/"[^"\n]*"|“[^”\n]*”/g, '');
+  const hits = [...forbiddenHits(answer, config.forbidden, testCase.allow), ...forbiddenHits(unquoted, testCase.mustNot ?? [])];
   const english = englishLines(answer, config.english);
   const missing = (testCase.must ?? []).filter((item) => !new RegExp(item.re, item.flags ?? '').test(answer)).map((item) => item.label);
   const words = { pass: answer !== '' && hits.length === 0 && english.length === 0 && missing.length === 0, hits, english, missing };
