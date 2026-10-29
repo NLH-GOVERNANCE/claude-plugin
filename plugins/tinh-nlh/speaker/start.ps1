@@ -358,7 +358,11 @@ if (Test-Path -LiteralPath $policy) {
 }
 $config = Join-Path $Dir 'speaker-mcp.json'
 if ($mode -eq 'dev-channel') {
-  $json = @{ mcpServers = @{ speaker = @{ command = $node; args = @($speaker); env = $envs } } } | ConvertTo-Json -Depth 5
+  # The Loa session has two speaker servers here (this one and the plugin's own): only this one, the development channel, has hands.
+  $env:NLH_TOWER_DEV = '1'
+  $configEnv = @{} + $envs
+  $configEnv['NLH_TOWER_CONFIG'] = '1'
+  $json = @{ mcpServers = @{ speaker = @{ command = $node; args = @($speaker); env = $configEnv } } } | ConvertTo-Json -Depth 5
   [IO.File]::WriteAllText($config, $json, (New-Object Text.UTF8Encoding $false))
 } else {
   Remove-Item -LiteralPath $config -Force -ErrorAction SilentlyContinue
