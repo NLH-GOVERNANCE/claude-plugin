@@ -228,8 +228,10 @@ export const taken = (entry) => !entry?.held_here && Boolean(entry?.held_elsewhe
 // The Windows notification texts: for a person, so no cell code, no "Ô", no ticket code (28/10, 26f86f3d). title: the cell's
 // friendly title, "Có việc mới" when the hub sent none.
 export const toastNoSession = (title) => `${title ? `${title} có` : 'Có'} việc mới. Mở Claude, gõ "làm tiếp".`;
-export const TOAST_YOU = 'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".';
-export const TOAST_HUB = 'Đề xuất bạn gửi có tin mới: chữ ký hay lời chấm. Mở Claude, gõ "việc của tôi".';
+// The work's name (free text from others) goes only into the Windows toast the person reads, never into the channel text the
+// session reads (D-0009: the channel carries no ticket content).
+export const toastYou = (title) => `${title ? `${title}: chờ` : 'Có việc chờ'} chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".`;
+export const toastHub = (title) => `${title ? `${title}: đề` : 'Đề'} xuất bạn gửi có tin mới, chữ ký hay lời chấm. Mở Claude, gõ "việc của tôi".`;
 
 // No session on this machine sits at the cell: the one line Loa prints instead of opening one (ticket 3a65c3bd).
 export const noSessionSentence = (seat) => `${seat} có việc mới, chưa phiên nào mở; mở Claude gõ "làm tiếp".`;
@@ -701,16 +703,16 @@ export function startServer({
     const text = reminder ? reminderSentence(entry, reminder) : sentence(entry);
     const base = ref(entry.id);
     const item = { entry_id: reminder ? `remind${reminder}:${base}` : base, base_id: base, kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '', title: plain(entry.cell_title, 60).replace(/@/g, '/'), ...(reminder ? { reminder } : {}) };
-    // Words for the person (29/10): the work's name when the feed has it, never a ticket code or a cell name.
+    // Words for the person (29/10): no ticket code, no cell name; the work's name only in the toast (D-0009).
     const what = plain(entry.title, 80).replace(/@/g, '/');
     if (HUB_CELLS.includes(item.cell)) {
-      const hubText = `${what ? `${what}: đề xuất bạn gửi` : 'Đề xuất bạn gửi'} có tin mới (chữ ký hay lời chấm). Mở Claude, gõ "việc của tôi".`;
-      toast(TOAST_HUB);
+      const hubText = 'Đề xuất bạn gửi có tin mới (chữ ký hay lời chấm). Mở Claude, gõ "việc của tôi".';
+      toast(toastHub(what));
       return push(hubText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     if (entry.kind === 'you') {
-      const youText = `${what ? `${what}: chờ chính bạn` : 'Có việc chờ chính bạn'} trả lời hay ký. Mở Claude, gõ "việc của tôi".`;
-      toast(TOAST_YOU);
+      const youText = 'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".';
+      toast(toastYou(what));
       return push(youText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     // Fresh items only: a line the villager wrote itself is not told; an answer waits confirmMs (see recheck).

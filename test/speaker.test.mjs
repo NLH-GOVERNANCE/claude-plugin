@@ -50,7 +50,7 @@ import {
   startServer,
   defaultToast,
   toastNoSession,
-  TOAST_HUB,
+  toastHub,
   transcriptCwd,
 } from '../plugins/tinh-nlh/speaker/speaker.mjs';
 
@@ -519,23 +519,28 @@ describe('Loa báo việc (server trong tiến trình)', () => {
     const [you] = loa.pushed().slice(1);
     assert.equal(loa.pushed().length, 2, 'cùng ô trong 10 phút: không in dòng thứ hai');
     assert.equal(you.meta.kind, 'you');
-    assert.equal(you.content, 'Việc you:t:6: chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".', 'ghế người dùng: tên việc của mục, không mã phiếu, không tên ô');
+    assert.equal(you.content, 'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".', 'ghế người dùng: không mã phiếu, không tên ô, không tên việc (D-0009)');
     assert.doesNotMatch(you.content, /ô cto|phiếu|[0-9a-f]{8}-/);
     assert.ok(!loa.rows.some((row) => row.kind === 'you'));
     assert.equal(JSON.parse(readFileSync(join(loa.dir, 'tower-state.json'), 'utf8')).pending.length, 0, 'không có gì chờ gửi');
     // Loa ẩn: hai câu này cũng hiện thành thông báo Windows (28/10, laptop không thấy dòng in trong cửa sổ ẩn); dòng nhắc cùng ô trong 10 phút thì không.
-    assert.deepEqual(loa.toasts, ['Có việc mới. Mở Claude, gõ "làm tiếp".', 'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".']);
+    assert.deepEqual(loa.toasts, ['Có việc mới. Mở Claude, gõ "làm tiếp".', 'Việc you:t:6: chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".']);
     assert.equal(toastNoSession('Nhà khoa học'), 'Nhà khoa học có việc mới. Mở Claude, gõ "làm tiếp".');
-    for (const text of [...loa.toasts, TOAST_HUB]) assert.doesNotMatch(text, /Ô |\(|[a-z]+\/[a-z]+|phiếu|[0-9a-f]{8}/, 'câu thông báo cho người: không mã, không chữ Ô');
+    for (const text of [...loa.toasts, toastHub(''), toastHub('Đổi luật chấm PR')]) assert.doesNotMatch(text, /Ô |\(|[a-z]+\/[a-z]+|phiếu|[0-9a-f]{8}/, 'câu thông báo cho người: không mã, không chữ Ô');
     loa.close();
   });
 
-  test('việc chờ chính người dùng: có tên việc thì nói tên việc, không mã phiếu, không tên ô, không chữ Loa (29/10)', async () => {
+  test('việc chờ chính người dùng: tên việc chỉ vào thông báo cho người, tin kênh không mã phiếu, không tên ô, không tên việc (29/10, D-0009)', async () => {
     const loa = inProcess({ feed: () => [entry('you:t:7', at, { kind: 'you', cell: 'tech-lead-son', title: 'Lượt đưa lên bản chính 29/10' }), entry('hub:t:8', '2026-10-18T05:01:00.000Z', { kind: 'you', cell: 'propose-change', title: 'Đổi luật chấm PR' })] });
     await loa.server.tick();
     assert.deepEqual(loa.pushed().map((event) => event.content), [
+      'Có việc chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".',
+      'Đề xuất bạn gửi có tin mới (chữ ký hay lời chấm). Mở Claude, gõ "việc của tôi".',
+    ]);
+    // D-0009: tên việc (chữ của người khác) chỉ vào thông báo cho người, không vào tin kênh cho phiên.
+    assert.deepEqual(loa.toasts, [
       'Lượt đưa lên bản chính 29/10: chờ chính bạn trả lời hay ký. Mở Claude, gõ "việc của tôi".',
-      'Đổi luật chấm PR: đề xuất bạn gửi có tin mới (chữ ký hay lời chấm). Mở Claude, gõ "việc của tôi".',
+      'Đổi luật chấm PR: đề xuất bạn gửi có tin mới, chữ ký hay lời chấm. Mở Claude, gõ "việc của tôi".',
     ]);
     for (const { content } of loa.pushed()) assert.doesNotMatch(content, /ô |phiếu|[0-9a-f]{8}|Loa/i);
     loa.close();
