@@ -15,27 +15,32 @@ import {
   gateFindings,
   gitOps,
   isBaseBranch,
+  parseAddedLines,
   pushRecord,
   pushTarget,
   repeatedFindings,
+  retiredWords,
   scopedRepo,
 } from './checks.mjs';
 
 const RULES_TTL_MS = 6 * 60 * 60 * 1000;
 const RULES_SOURCE = 'repos/NLH-OS/api/contents/gate/rules.mjs?ref=main';
+const NAMES_SOURCE = 'repos/NLH-GOVERNANCE/decisions/contents/rules/pr-review.md?ref=main';
 const TEST_TIMEOUT_MS = 240_000;
 const stateDir = process.env.NLH_GATE_DIR || join(homedir(), '.tinh-nlh', 'gate');
 const repeated = JSON.parse(readFileSync(new URL('./repeated-errors.json', import.meta.url), 'utf8'));
 
-function run(file, args, timeout = 15_000) {
+function run(file, args, timeout = 15_000, maxBuffer = 1024 * 1024) {
   try {
-    return execFileSync(file, args, { cwd: homedir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, windowsHide: true }).trim();
+    return execFileSync(file, args, { cwd: homedir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, maxBuffer, windowsHide: true }).trim();
   } catch {
     return null;
   }
 }
 // git runs with -C, not in the repo folder: on Windows a git.exe inside the repo would be found before PATH.
 const git = (dir, ...args) => run('git', ['-C', dir, '-c', 'core.quotepath=off', ...args]);
+// A big diff must not silently turn a check off (the default 1 MB buffer would): up to 64 MB, 60 s.
+const gitBig = (dir, ...args) => run('git', ['-C', dir, '-c', 'core.quotepath=off', ...args], 60_000, 64 * 1024 * 1024);
 
 // git diff --name-status -z: status, path (renames and copies: status, old path, new path).
 function nameStatus(cwd, ...args) {
@@ -86,6 +91,32 @@ async function loadRules() {
   } catch {
     return null;
   }
+}
+
+// Words D-0067 retires (R19): read from rules/pr-review.md of NLH-GOVERNANCE/decisions, cached like the rules file. No
+// text, no words: the two name checks stay silent rather than guess a list.
+function loadRetiredWords() {
+  const file = join(stateDir, 'pr-review.md');
+  const age = existsSync(file) ? Date.now() - statSync(file).mtimeMs : Infinity;
+  if (age > RULES_TTL_MS) {
+    const text = run('gh', ['api', '-H', 'Accept: application/vnd.github.raw', NAMES_SOURCE]);
+    if (text && /R19/.test(text)) {
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(file, text);
+    }
+  }
+  try {
+    return existsSync(file) ? retiredWords(readFileSync(file, 'utf8')) : [];
+  } catch {
+    return [];
+  }
+}
+
+// True only when git says the branch cannot merge into the base cleanly (merge-tree exits 1); git older than 2.38, or any
+// other failure, is "unknown" and passes.
+function conflictsWith(root, base, source) {
+  const result = spawnSync('git', ['-C', root, 'merge-tree', '--write-tree', '--no-messages', base, source], { encoding: 'utf8', timeout: 20_000, windowsHide: true });
+  return result.status === 1;
 }
 
 function openPullRequest(repo, branch) {
@@ -176,7 +207,15 @@ async function checkOp({ op, dir, args }, pending, now) {
   if (op === 'push') files = [...range, ...extraFiles];
   const commitCount = (hasBase ? Number(git(root, 'rev-list', '--count', '--no-merges', `${remoteBase}..${source}`)) || 0 : 0) + extraCount;
   const dates = hasBase ? (git(root, 'log', '--format=%aI', `${remoteBase}..${source}`) ?? '').split('\n').filter(Boolean) : [];
+  const retired = loadRetiredWords();
+  // A merge commit brings in lines other people wrote: they are not this author's new text, so nothing is scanned.
+  const diffArgs = op === 'push' ? (hasBase ? [`${remoteBase}...${source}`] : null) : merging ? null : ['--cached'];
+  const diff = retired.length && diffArgs ? gitBig(root, 'diff', '-U0', '--no-color', '--no-ext-diff', ...diffArgs) : null;
   const facts = {
+    repo,
+    retired,
+    addedLines: parseAddedLines(diff),
+    conflictsWithBase: op === 'push' && hasBase && !isBaseBranch(branch) ? conflictsWith(root, remoteBase, source) : null,
     op,
     branch,
     base,

@@ -2,7 +2,7 @@
 // tsconfig.tsbuildinfo, bỏ file thì qua; repo ngoài NLH-OS, NLH-GOVERNANCE, NLH-NEDU-* thì không đụng.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, test } from 'node:test';
@@ -13,9 +13,11 @@ import {
   gateFindings,
   gitOps,
   matchesPath,
+  parseAddedLines,
   pushRecord,
   pushTarget,
   repeatedFindings,
+  retiredWords,
   scopedRepo,
   splitCommands,
   statedCommitCount,
@@ -172,6 +174,96 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
     assert.deepEqual(only('force-push-open-pr', { force: false, pr: pr('x') }), []);
   });
 
+  test('node_modules trong commit thì chặn (junk-file); src thường thì qua', () => {
+    assert.ok(matchesPath('node_modules/**', 'web/node_modules/zod/index.js'));
+    assert.ok(!matchesPath('node_modules/**', 'src/node_modules_notes.md'));
+    assert.deepEqual(only('junk-file', { files: [{ status: 'A', path: 'app/node_modules/zod/index.js' }] }), ['junk-file']);
+    assert.deepEqual(only('junk-file', { files: [{ status: 'A', path: 'app/src/index.js' }] }), []);
+  });
+
+  test('testplan-unticked (R04): còn "- [ ]" không bắt đầu bằng Post-merge thì chặn; tick hết hay Post-merge thì qua; chưa có PR thì qua', () => {
+    const body = (plan) => `## Summary\n- x\n\n## Test Plan\n${plan}\n`;
+    assert.deepEqual(only('testplan-unticked', { pr: pr(body('- [x] a\n- [ ] chạy bài thử')) }), ['testplan-unticked']);
+    assert.deepEqual(only('testplan-unticked', { pr: pr(body('- [x] a\n- [ ] Post-merge: thử trên nepdev')) }), []);
+    assert.deepEqual(only('testplan-unticked', { pr: pr(body('- [x] a\n- [X] b')) }), []);
+    assert.deepEqual(only('testplan-unticked', { pr: null }), []);
+  });
+
+  test('merge-conflict-dev (R06): xung đột với dev thì chặn kèm cách gộp bằng commit mới; sạch hay chưa biết thì qua', () => {
+    const [found] = repeatedFindings(repeated, facts({ conflictsWithBase: true })).filter((item) => item.id === 'merge-conflict-dev');
+    assert.match(found.message, /xung đột với origin\/dev/);
+    assert.match(found.message, /commit mới/);
+    assert.deepEqual(only('merge-conflict-dev', { conflictsWithBase: false }), []);
+    assert.deepEqual(only('merge-conflict-dev', { conflictsWithBase: null }), []);
+  });
+
+  test('risk-missing: đụng migration, auth, tiền hay contract mà thiếu Risk thì chặn; migration phải được nêu tên', () => {
+    const body = (risk) => `## Summary\n- x\n\n## Test Plan\n- [x] a\n${risk}`;
+    const migration = [{ status: 'A', path: 'db/migrations/0065_use_weeks.sql' }];
+    assert.deepEqual(only('risk-missing', { files: migration, pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: migration, pr: pr(body('\n## Risk\nĐổi lược đồ, chưa rõ.')) }), ['risk-missing'], 'Risk không nêu tên migration');
+    assert.deepEqual(only('risk-missing', { files: migration, pr: pr(body('\n## Risk\nMigration 0065_use_weeks thêm bảng, chạy lại được.')) }), []);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/oauth-callback.mjs' }], pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/oauth-callback.mjs' }], pr: pr(body('\n## Risk\nĐổi đường quay về.')) }), []);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'connector/API.md' }], pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/billing/invoice.mjs' }], pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/author-name.mjs' }], pr: pr(body('')) }), [], 'author không phải auth');
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'D', path: 'db/migrations/0001.sql' }], pr: pr(body('')) }), []);
+    assert.deepEqual(only('risk-missing', { files: migration, pr: null }), []);
+  });
+
+  test('tên đã bỏ: đọc từ dòng R19 của rules/pr-review.md; không có chữ nào thì hai kiểm tên im lặng', () => {
+    assert.deepEqual(retiredWords('The words D-0067 retires (ô, Tháp, phiếu, người giữ nhịp, Trạm) are not used in new text.'), ['ô', 'Tháp', 'phiếu', 'người giữ nhịp', 'Trạm']);
+    assert.deepEqual(retiredWords('không có dòng đó'), []);
+    const lines = parseAddedLines('+++ b/docs/a.md\n@@ -0,0 +1,2 @@\n+Mở phiếu mới\n+ok\n+++ /dev/null\n+bỏ qua\n');
+    assert.deepEqual(lines, [{ path: 'docs/a.md', text: 'Mở phiếu mới' }, { path: 'docs/a.md', text: 'ok' }]);
+    assert.deepEqual(only('retired-words', { addedLines: [{ path: 'docs/a.md', text: 'Mở phiếu mới' }] }), []);
+  });
+
+  const retired = ['ô', 'Tháp', 'phiếu', 'Trạm'];
+
+  test('retired-words (R19): dòng thêm mới trong file .md dùng tên đã bỏ thì chặn; tên mới, chữ chứa "ô", dòng nêu tên cũ, file không phải .md thì qua', () => {
+    const doc = (text, path = 'docs/a.md') => only('retired-words', { retired, repo: 'NLH-GOVERNANCE/decisions', addedLines: [{ path, text }] });
+    assert.deepEqual(doc('Mở một phiếu cho chòi'), ['retired-words']);
+    assert.deepEqual(doc('Ô dùng chung cho cả làng'), [], 'chỉ bắt đúng chữ thường đã ghi trong luật, không đoán hoa thường lẫn');
+    assert.deepEqual(doc('Gửi ô của anh'), ['retired-words']);
+    assert.deepEqual(doc('Mở một việc cho chòi'), []);
+    assert.deepEqual(doc('Ngôn ngữ và tôn trọng'), []);
+    assert.deepEqual(doc('chòi (tên cũ: ô)'), []);
+    assert.deepEqual(doc('Đi ô tô, qua Trạm xăng, ngắm Tháp Eiffel'), [], 'cụm thường bắt đầu bằng chữ đã bỏ không phải tên cũ');
+    assert.deepEqual(doc('Đi ô tô rồi gửi ô của anh'), ['retired-words']);
+    assert.deepEqual(doc('Mở phiếu', 'src/a.mjs'), []);
+    assert.deepEqual(only('retired-words', { retired: [], addedLines: [{ path: 'docs/a.md', text: 'Mở phiếu' }] }), []);
+  });
+
+  test('codename-strings (R21): tên trong code theo tên đã bỏ (phieu, tram) thì chặn; tên cột code, chữ có dấu trong chú thích thì qua', () => {
+    const code = (text, path = 'src/a.mjs') => only('codename-strings', { retired, addedLines: [{ path, text }] });
+    assert.deepEqual(code('const phieuId = 1;'), ['codename-strings']);
+    assert.deepEqual(code('export function open_tram() {}'), ['codename-strings']);
+    assert.deepEqual(code('const ticketId = 1;'), []);
+    assert.deepEqual(code('// Mở phiếu cho chòi'), [], 'chữ Việt có dấu là lời cho người, không phải tên');
+    assert.deepEqual(code('const phieuId = 1;', 'docs/a.md'), []);
+    assert.deepEqual(code('const stramp = 1;'), [], 'chỉ bắt khi là cả một phần của tên');
+  });
+
+  test('review 29/10: file test không bị kiểm tên; .md ngoài docs/ ở repo thường không bị; repo decisions/cells thì mọi .md; mục chờ CI để trống không bị bắt', () => {
+    const lineFacts = (path, text, repo) => ({ retired, repo, addedLines: [{ path, text }] });
+    const both = (extra) => ids(repeatedFindings(repeated, facts(extra))).filter((id) => id === 'retired-words' || id === 'codename-strings');
+    assert.deepEqual(both(lineFacts('test/gate.test.mjs', "const phieuId = 'open_tram';", 'NLH-OS/api')), [], 'file test nêu tên cũ có chủ ý');
+    assert.deepEqual(both(lineFacts('src/a.test.mjs', 'const phieuId = 1;')), []);
+    assert.deepEqual(both(lineFacts('README.md', 'Mở phiếu', 'NLH-OS/api')), [], 'R19 chỉ chặn ở decisions và cells');
+    assert.deepEqual(both(lineFacts('docs/a.md', 'Mở phiếu', 'NLH-OS/api')), []);
+    assert.deepEqual(both(lineFacts('rules/x.md', 'Mở phiếu', 'NLH-GOVERNANCE/decisions')), ['retired-words']);
+    assert.deepEqual(both(lineFacts('review-pr/cell.md', 'Mở phiếu', 'NLH-GOVERNANCE/cells')), ['retired-words']);
+    // Mục chờ CI: test-plan-ci-ticked cấm tick sớm, nên để trống không phải lỗi; mục thường để trống vẫn bị bắt.
+    const plan = (item) => ({ pr: pr(`## Test Plan\n${item}\n`) });
+    assert.deepEqual(only('testplan-unticked', plan('- [ ] CI xanh trên commit mới')), []);
+    assert.deepEqual(only('testplan-unticked', plan('- [ ] GitHub Actions chạy hết')), []);
+    assert.deepEqual(only('testplan-unticked', plan('- [ ] chạy bài thử')), ['testplan-unticked']);
+    assert.deepEqual(only('testplan-unticked', plan('- [ ] check mobile bằng tay')), ['testplan-unticked'], 'chữ "check" đơn lẻ không phải chờ CI');
+    assert.deepEqual(only('testplan-unticked', plan('- [ ] checks xanh trên commit mới')), []);
+  });
+
   test('lời chặn mỗi lỗi một dòng; dòng ghi giếng sau push nói kiểm gì, qua, chặn trước mấy lần', () => {
     assert.equal(blockReason('commit', [{ id: 'junk-file', message: 'File rác' }]), 'Nếp gate blocked git commit: fix these, then run it again (do not bypass the check).\n- junk-file · File rác');
     const record = pushRecord({ repo: 'NLH-OS/api', branch: 'feat/x', sha: 'abcdef1234', checks: ['luật cổng', 'lỗi lặp (7)'], blocked: ['R17', 'R17'] });
@@ -254,6 +346,60 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
     const denied = await run(input, gateDir);
     assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- R03 · PR đổi 16 file\.?$/m);
     assert.doesNotMatch(denied.hookSpecificOutput.permissionDecisionReason, /R02/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('commit gộp dev không quét dòng dev kéo về: dev có docs dùng "phiếu" cũ, nhánh sạch vẫn qua; dòng mới của nhánh thì chặn (review 29/10)', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-GOVERNANCE/decisions.git');
+    writeFileSync(join(gateDir, 'pr-review.md'), 'R19: the words D-0067 retires (ô, phiếu) are not used in new text.\n');
+    const write = (name, text) => writeFileSync(join(work, name), text);
+    write('b.mjs', 'export {};\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'feat: b');
+    sh(work, 'checkout', 'dev');
+    mkdirSync(join(work, 'docs'));
+    write('docs/old.md', 'Mở phiếu cũ\n');
+    write('README.md', 'dev\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'dev: docs');
+    sh(work, 'push', join(dir, 'origin.git'), 'dev');
+    sh(work, 'update-ref', 'refs/remotes/origin/dev', 'dev');
+    sh(work, 'checkout', 'feat/gate');
+    sh(work, 'merge', '--no-commit', 'origin/dev');
+    const input = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_4', cwd: work, tool_input: { command: 'git commit --no-edit' } };
+    assert.equal(await run(input, gateDir), null, 'dòng dev kéo về không phải chữ mới của nhánh');
+    sh(work, 'commit', '--no-edit', '-q');
+    write('docs/new.md', 'Mở phiếu mới\n');
+    sh(work, 'add', '.');
+    const denied = await run({ ...input, tool_use_id: 'toolu_5', tool_input: { command: 'git commit -m "docs: new"' } }, gateDir);
+    assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- retired-words · .*docs\/new\.md.*phiếu/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('push thật (review 29/10): nhánh xung đột dev bị chặn kèm R06; dòng R19 thêm ở cuối diff 6000 dòng vẫn bị bắt; nhánh sạch qua', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-GOVERNANCE/decisions.git');
+    writeFileSync(join(gateDir, 'pr-review.md'), 'R19: the words D-0067 retires (ô, phiếu) are not used in new text.\n');
+    const write = (name, text) => writeFileSync(join(work, name), text);
+    const input = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_6', cwd: work, tool_input: { command: 'git push origin feat/gate' } };
+    write('README.md', 'nhánh\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'feat: readme');
+    sh(work, 'checkout', 'dev');
+    write('README.md', 'dev\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'dev: readme');
+    sh(work, 'push', join(dir, 'origin.git'), 'dev');
+    sh(work, 'update-ref', 'refs/remotes/origin/dev', 'dev');
+    sh(work, 'checkout', 'feat/gate');
+    const conflict = await run(input, gateDir);
+    assert.match(conflict.hookSpecificOutput.permissionDecisionReason, /- merge-conflict-dev · /);
+    sh(work, 'reset', '--hard', 'HEAD~1');
+    assert.equal(await run({ ...input, tool_use_id: 'toolu_7' }, gateDir), null, 'nhánh sạch qua');
+    write('big.md', `${Array.from({ length: 6000 }, (_, i) => `dòng ${i}`).join('\n')}\nMở phiếu mới\n`);
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'docs: big');
+    const denied = await run({ ...input, tool_use_id: 'toolu_8' }, gateDir);
+    assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- retired-words · .*big\.md.*phiếu/);
     rmSync(dir, { recursive: true, force: true });
   });
 
