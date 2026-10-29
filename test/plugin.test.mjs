@@ -533,6 +533,12 @@ describe('plugin nlh', () => {
     assert.match(startupHook, /not new work and not the waiting list/);
   });
 
+  test('hook đầu phiên: cuối lượt chỉ hỏi khi việc kế chờ đúng người đó, câu hỏi bằng chữ người dùng thấy (phiếu bdac3a50)', () => {
+    const line = readJson('plugins/tinh-nlh/hooks/hooks.json').hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
+    assert.match(line, /End of every turn: ask the user a question only when the next step waits for that very person to answer, choose or sign; if you can do the next step yourself, do it, or say it is done/);
+    assert.match(line, /Write a question in the words the user sees on screen.*never hub, gói, web, plugin, connector, mã việc or a tool name, never how it works/);
+  });
+
   test('không hứa "mở là thấy việc" ở bất cứ đâu, kể cả mô tả trong danh mục và manifest', () => {
     // Hook đầu phiên chỉ chạy ở Claude Code và Cowork; app Claude và điện thoại thì gõ /work (phiếu bdec651d).
     const promise = /(mở|mở claude|mở chat)[^.\n"]{0,20}là thấy việc/i;
