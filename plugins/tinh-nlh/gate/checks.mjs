@@ -249,7 +249,9 @@ export function repeatedFindings(list, facts) {
       if (said !== null && said !== facts.commitCount) add(check, { said, real: facts.commitCount });
     } else if (check.kind === 'test-plan-unticked') {
       if (!facts.pr) continue;
-      for (const item of testPlanItems(facts.pr.body)) if (!item.done && !/^post-merge\s*:/i.test(item.text)) add(check, { item: item.text });
+      // Items that wait for CI stay unticked until CI runs (test-plan-ci-ticked blocks ticking them early): not a miss here.
+      const waits = new RegExp(`^post-merge\\s*:|${check.except ?? '$^'}`, 'i');
+      for (const item of testPlanItems(facts.pr.body)) if (!item.done && !waits.test(item.text)) add(check, { item: item.text });
     } else if (check.kind === 'merge-conflict-base') {
       if (facts.conflictsWithBase === true) add(check, { base: facts.base });
     } else if (check.kind === 'risk-needed') {
@@ -268,7 +270,12 @@ export function repeatedFindings(list, facts) {
       const words = facts.retired ?? [];
       if (!words.length) continue;
       const docs = check.kind === 'retired-word-lines';
-      const inScope = (path) => (docs ? /\.(md|mdx)$/i.test(path) : /\.(mjs|cjs|js|jsx|ts|tsx)$/i.test(path));
+      // R19 covers decisions, cell files and docs: markdown in the decisions and cells repos, and under docs/ elsewhere.
+      // Tests quote old names on purpose, so test files are never checked.
+      const wholeRepo = (check.repos ?? []).includes(String(facts.repo ?? '').split('/').pop());
+      const inScope = (path) =>
+        !(check.skip && new RegExp(check.skip, 'i').test(path)) &&
+        (docs ? /\.(md|mdx)$/i.test(path) && (wholeRepo || !check.paths || new RegExp(check.paths, 'i').test(path)) : /\.(mjs|cjs|js|jsx|ts|tsx)$/i.test(path));
       // Docs: the retired word as a whole word. Code: its ASCII form (phiếu -> phieu) as a whole identifier part.
       const forms = docs ? words : words.map(fold).filter((word) => word.length > 3);
       if (!forms.length) continue;

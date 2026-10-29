@@ -30,15 +30,17 @@ const TEST_TIMEOUT_MS = 240_000;
 const stateDir = process.env.NLH_GATE_DIR || join(homedir(), '.tinh-nlh', 'gate');
 const repeated = JSON.parse(readFileSync(new URL('./repeated-errors.json', import.meta.url), 'utf8'));
 
-function run(file, args, timeout = 15_000) {
+function run(file, args, timeout = 15_000, maxBuffer = 1024 * 1024) {
   try {
-    return execFileSync(file, args, { cwd: homedir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, windowsHide: true }).trim();
+    return execFileSync(file, args, { cwd: homedir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, maxBuffer, windowsHide: true }).trim();
   } catch {
     return null;
   }
 }
 // git runs with -C, not in the repo folder: on Windows a git.exe inside the repo would be found before PATH.
 const git = (dir, ...args) => run('git', ['-C', dir, '-c', 'core.quotepath=off', ...args]);
+// A big diff must not silently turn a check off (the default 1 MB buffer would): up to 64 MB, 60 s.
+const gitBig = (dir, ...args) => run('git', ['-C', dir, '-c', 'core.quotepath=off', ...args], 60_000, 64 * 1024 * 1024);
 
 // git diff --name-status -z: status, path (renames and copies: status, old path, new path).
 function nameStatus(cwd, ...args) {
@@ -206,9 +208,11 @@ async function checkOp({ op, dir, args }, pending, now) {
   const commitCount = (hasBase ? Number(git(root, 'rev-list', '--count', '--no-merges', `${remoteBase}..${source}`)) || 0 : 0) + extraCount;
   const dates = hasBase ? (git(root, 'log', '--format=%aI', `${remoteBase}..${source}`) ?? '').split('\n').filter(Boolean) : [];
   const retired = loadRetiredWords();
-  const diffArgs = op === 'push' ? (hasBase ? [`${remoteBase}...${source}`] : null) : ['--cached'];
-  const diff = retired.length && diffArgs ? git(root, 'diff', '-U0', '--no-color', '--no-ext-diff', ...diffArgs) : null;
+  // A merge commit brings in lines other people wrote: they are not this author's new text, so nothing is scanned.
+  const diffArgs = op === 'push' ? (hasBase ? [`${remoteBase}...${source}`] : null) : merging ? null : ['--cached'];
+  const diff = retired.length && diffArgs ? gitBig(root, 'diff', '-U0', '--no-color', '--no-ext-diff', ...diffArgs) : null;
   const facts = {
+    repo,
     retired,
     addedLines: parseAddedLines(diff),
     conflictsWithBase: op === 'push' && hasBase && !isBaseBranch(branch) ? conflictsWith(root, remoteBase, source) : null,
