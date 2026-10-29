@@ -240,7 +240,7 @@ if (-not $owned -and -not $DryRun -and $best -and (Test-Path -LiteralPath $pidFi
   } catch { }
   if ($older -and -not $busy) {
     try {
-      & (Join-Path $env:SystemRoot 'System32	askkill.exe') /PID ([int](Get-Content -LiteralPath $pidFile -Raw).Trim()) /T /F | Out-Null
+      & (Join-Path $env:SystemRoot 'System32\taskkill.exe') /PID ([int](Get-Content -LiteralPath $pidFile -Raw).Trim()) /T /F | Out-Null
       Start-Sleep -Seconds 2
       try { $owned = $mutex.WaitOne(3000) } catch [Threading.AbandonedMutexException] { $owned = $true }
     } catch { }
