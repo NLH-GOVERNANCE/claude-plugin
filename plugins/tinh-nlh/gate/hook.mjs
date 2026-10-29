@@ -141,12 +141,13 @@ async function checkOp({ op, dir, args }, pending, now) {
   const carried = pending.get(root) ?? { count: 0, files: [] };
   let extraCount = carried.count;
   let extraFiles = carried.files;
+  let merging = null;
   if (op === 'commit') {
     const { amend, all } = commitFlags(args);
+    merging = amend ? null : git(root, 'rev-parse', '--verify', '--quiet', 'MERGE_HEAD');
     files = [...nameStatus(root, '--cached'), ...(all ? nameStatus(root) : [])];
-    extraCount += amend ? 0 : 1;
-    extraFiles = [...extraFiles, ...files];
-    pending.set(root, { count: extraCount, files: extraFiles });
+    // A merge commit adds no commit to the count, as in the PR gate (D-0017).
+    extraCount += amend || merging ? 0 : 1;
   } else {
     const target = pushTarget(args, current);
     if (target.skip) return null;
@@ -159,7 +160,19 @@ async function checkOp({ op, dir, args }, pending, now) {
   const base = pr?.baseRefName ?? (git(root, 'rev-parse', '--verify', '--quiet', 'origin/dev') ? 'dev' : 'main');
   const remoteBase = `origin/${isBaseBranch(branch) ? branch : base}`;
   const hasBase = Boolean(git(root, 'rev-parse', '--verify', '--quiet', remoteBase));
-  const range = hasBase ? nameStatus(root, `${remoteBase}...${source}`) : [];
+  let range = hasBase ? nameStatus(root, `${remoteBase}...${source}`) : [];
+  // Bringing the base into the branch (ticket 9ea10c50): the index against HEAD holds every file the base changed. Count
+  // what the PR will differ by, as the PR gate does: the index against the merge-base of the base and the merged result.
+  const forkPoint = merging && hasBase ? git(root, 'merge-base', remoteBase, 'HEAD', merging) : null;
+  if (forkPoint) {
+    const { all } = commitFlags(args);
+    files = [...nameStatus(root, '--cached', forkPoint), ...(all ? nameStatus(root, forkPoint) : [])];
+    range = [];
+  }
+  if (op === 'commit') {
+    extraFiles = [...extraFiles, ...files];
+    pending.set(root, { count: extraCount, files: extraFiles });
+  }
   if (op === 'push') files = [...range, ...extraFiles];
   const commitCount = (hasBase ? Number(git(root, 'rev-list', '--count', '--no-merges', `${remoteBase}..${source}`)) || 0 : 0) + extraCount;
   const dates = hasBase ? (git(root, 'log', '--format=%aI', `${remoteBase}..${source}`) ?? '').split('\n').filter(Boolean) : [];
