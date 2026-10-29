@@ -629,7 +629,12 @@ export function startServer({
   onClose = () => process.exit(0),
   clock = () => Date.now(),
 } = {}) {
-  const enabled = env.NLH_TOWER === '1';
+  // Only one server of a Loa session has hands (29/10: the launcher's NLH_TOWER=1 also woke the plugin's own speaker server, so
+  // Claude called `forwarded` on the one that did not hold the lock and got "No pending send"). When the launcher opens the
+  // development channel (NLH_TOWER_DEV=1) the channel is the --mcp-config server (NLH_TOWER_CONFIG=1); the plugin's copy yields:
+  // no channel, no tools, no feed read. A server that loses the lock lists no tools either (see begin).
+  const enabled = env.NLH_TOWER === '1' && !(env.NLH_TOWER_DEV === '1' && env.NLH_TOWER_CONFIG !== '1');
+  let hand = true;
   const confirmMs = env.TOWER_CONFIRM_MS !== undefined && env.TOWER_CONFIRM_MS !== '' ? Number(env.TOWER_CONFIRM_MS) : CONFIRM_MS;
   let lastCheck = 0;
   // The Loa folder, set by the launcher; plugin data folder otherwise.
@@ -696,15 +701,15 @@ export function startServer({
     const text = reminder ? reminderSentence(entry, reminder) : sentence(entry);
     const base = ref(entry.id);
     const item = { entry_id: reminder ? `remind${reminder}:${base}` : base, base_id: base, kind: entry.kind, ticket: ref(entry.ticket_id), cell: cellsOf(entry.cell)[0] ?? '', title: plain(entry.cell_title, 60).replace(/@/g, '/'), ...(reminder ? { reminder } : {}) };
+    // Words for the person (29/10): the work's name when the feed has it, never a ticket code or a cell name.
+    const what = plain(entry.title, 80).replace(/@/g, '/');
     if (HUB_CELLS.includes(item.cell)) {
-      const ticket = item.ticket ? ` (phiếu ${item.ticket})` : '';
-      const hubText = `Đề xuất bạn gửi có tin mới${ticket}: chữ ký hay lời chấm. Mở bằng "việc của tôi"; Loa không mở phiên cho việc này.`;
+      const hubText = `${what ? `${what}: đề xuất bạn gửi` : 'Đề xuất bạn gửi'} có tin mới (chữ ký hay lời chấm). Mở Claude, gõ "việc của tôi".`;
       toast(TOAST_HUB);
       return push(hubText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
     if (entry.kind === 'you') {
-      const ticket = item.ticket ? `, phiếu ${item.ticket}` : '';
-      const youText = `Có việc chờ chính bạn trả lời hay ký (ô ${cellsOf(entry.cell).join(', ') || 'không rõ'}${ticket}). Loa không làm thay.`;
+      const youText = `${what ? `${what}: chờ chính bạn` : 'Có việc chờ chính bạn'} trả lời hay ký. Mở Claude, gõ "việc của tôi".`;
       toast(TOAST_YOU);
       return push(youText, { kind: 'you', cell: item.cell, ticket: item.ticket, entry_id: item.entry_id });
     }
@@ -876,7 +881,9 @@ export function startServer({
     if (tool === 'pending') return reply(JSON.stringify(state.pending.map(({ entry_id, to, text }) => ({ entry_id, to, text }))));
     if (tool === 'forwarded') {
       const item = state.pending.find((other) => other.entry_id === args.entry_id);
-      if (!item) return reply('No pending send with that entry_id.', true);
+      // Not an error for the caller: the send was already settled (a second call, or the wait ran out), and Claude must not
+      // tell the person about a ledger row they cannot act on.
+      if (!item) return reply('Already recorded.');
       state.pending = state.pending.filter((other) => other !== item);
       if (dir) saveState(dir, state);
       await record(item, 'send', args.ok === true);
@@ -892,7 +899,10 @@ export function startServer({
     if (!enabled || timer) return;
     if (dir) {
       mkdirSync(dir, { recursive: true });
-      if (!takeLock(dir)) return notice('locked', 'Một Loa khác đang chạy trên máy này, nên phiên này không đọc việc. Tắt bớt một cửa sổ Loa.');
+      if (!takeLock(dir)) {
+        hand = false;
+        return notice('locked', 'Một Loa khác đang chạy trên máy này, nên phiên này không đọc việc. Tắt bớt một cửa sổ Loa.');
+      }
       process.on('exit', () => rmSync(join(dir, 'tower.lock'), { force: true }));
       state = loadState(dir);
     }
@@ -926,8 +936,8 @@ export function startServer({
     } else if (message.method === 'ping') {
       send({ id: message.id, result: {} });
     } else if (message.method === 'tools/list' && enabled) {
-      send({ id: message.id, result: { tools: TOOLS } });
-    } else if (message.method === 'tools/call' && enabled) {
+      send({ id: message.id, result: { tools: hand ? TOOLS : [] } });
+    } else if (message.method === 'tools/call' && enabled && hand) {
       callTool(message).catch((error) => send({ id: message.id, error: { code: -32603, message: error?.name ?? 'Error' } }));
     } else if (message.id !== undefined && message.method) {
       send({ id: message.id, error: { code: -32601, message: `Loa has no ${message.method}` } });

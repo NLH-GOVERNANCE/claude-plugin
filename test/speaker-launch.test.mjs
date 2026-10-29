@@ -109,6 +109,8 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.doesNotMatch(ps, /-lt 60 -and \$mode -like/);
     assert.match(ps, /if \(\$Auto\) \{ Stop-Loa 'Loa đã dừng\. Bấm đúp Loa để mở lại\.' \}/);
     // Kênh cần đường dẫn claude và thư mục làm việc để tra, mở lại và mở phiên (phiếu 98bd8b93).
+    assert.match(ps, /\$env:NLH_TOWER_DEV = '1'/);
+    assert.match(ps, /\$configEnv\['NLH_TOWER_CONFIG'\] = '1'/);
     assert.match(ps, /\$envs = @\{ NLH_TOWER = '1'; NLH_TOWER_DIR = \$Dir; NLH_TOWER_WORK = \$Work; NLH_TOWER_TOAST = '1'; CLAUDE_BIN = \$claude \}/);
     assert.doesNotMatch(ps, /Tháp/);
     assert.doesNotMatch(ps, /\$env:NLH_TOWER\s*=|skip-permissions|bypassPermissions|AsPlainText|ConvertFrom-SecureString -Key|Write-Host \$secure/);
@@ -149,7 +151,9 @@ describe('lệnh "bật Loa" và các file của lối mở', () => {
     assert.ok(sh.includes(`set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS" --mcp-config "$CONFIG"`));
     assert.ok(sh.includes(`set -- "$LOOP" -n 'Loa tỉnh NhiLe' --model sonnet --settings "$SETTINGS"`));
     assert.doesNotMatch(sh, /dangerously|local development|Loading development|no MCP server|Authorize/);
-    assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude \}/);
+    assert.match(sh, /const env = \{ NLH_TOWER: "1", NLH_TOWER_CONFIG: "1", NLH_TOWER_DIR: dir, NLH_TOWER_WORK: work, CLAUDE_BIN: claude \}/);
+    // Two speaker servers in the Loa session (29/10): the launcher says so, and only the --mcp-config one says it is the channel.
+    assert.match(sh, /export NLH_TOWER_DEV=1/);
     assert.doesNotMatch(sh, /Tháp(?! tỉnh NhiLe\.command)/);
     assert.doesNotMatch(sh, /skip-permissions|bypassPermissions/);
     assert.match(sh, /export NLH_TOWER=1 NLH_TOWER_DIR="\$DIR" NLH_TOWER_WORK="\$WORK" CLAUDE_BIN="\$CLAUDE"/);
@@ -373,7 +377,7 @@ process.exitCode = 2;
     const { env: towerEnv } = config.mcpServers.speaker;
     assert.deepEqual(
       { ...towerEnv, NLH_TOWER_DIR: same(towerEnv.NLH_TOWER_DIR), NLH_TOWER_WORK: same(towerEnv.NLH_TOWER_WORK), CLAUDE_BIN: same(towerEnv.CLAUDE_BIN) },
-      { NLH_TOWER: '1', NLH_TOWER_DIR: same(posix(synced.dir)), NLH_TOWER_WORK: same(`${posix(synced.home)}/TinhNhiLe`), CLAUDE_BIN: same(`${posix(synced.home)}/.local/bin/claude`) },
+      { NLH_TOWER: '1', NLH_TOWER_CONFIG: '1', NLH_TOWER_DIR: same(posix(synced.dir)), NLH_TOWER_WORK: same(`${posix(synced.home)}/TinhNhiLe`), CLAUDE_BIN: same(`${posix(synced.home)}/.local/bin/claude`) },
     );
     assert.ok(!JSON.stringify(config).includes('nlh_tower_'), 'khoá không vào cấu hình');
   });
@@ -597,7 +601,7 @@ process.exitCode = 2;
     assert.notEqual(raw[0], 0xef, 'JSON không có BOM');
     const { speaker: tower } = JSON.parse(raw.toString('utf8')).mcpServers;
     assert.deepEqual(tower.args, [join(syncedDir, 'speaker.mjs')]);
-    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), NLH_TOWER_TOAST: '1', CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
+    assert.deepEqual(tower.env, { NLH_TOWER: '1', NLH_TOWER_CONFIG: '1', NLH_TOWER_DIR: syncedDir, NLH_TOWER_WORK: join(synced, 'TinhNhiLe'), NLH_TOWER_TOAST: '1', CLAUDE_BIN: join(synced, '.local', 'bin', 'claude.exe') });
     assert.match(tower.command, /node(\.exe)?$/i);
     assert.ok(existsSync(join(home, 'TinhNhiLe')), 'thư mục làm việc của Loa');
 
