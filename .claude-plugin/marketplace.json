@@ -1,18 +1,15 @@
 {
-  "name": "nlh-governance",
-  "description": "Nếp của NhiLe Holding cho Claude",
+  "name": "nlh-loa-nhe",
+  "description": "Nhánh thử Loa nhẹ của Nếp (chưa gộp, không phải bản chính)",
   "owner": {
     "name": "NhiLe Holding"
   },
   "plugins": [
     {
-      "name": "nlh",
-      "displayName": "Nếp",
-      "source": "./plugins/tinh-nlh",
-      "description": "Nếp là nơi công ty giao việc, theo dõi việc và ký duyệt. Cài xong, hỏi Claude \"việc của tôi hôm nay?\" hoặc gõ /work."
+      "name": "loa-nhe",
+      "displayName": "Loa nhẹ (thử)",
+      "source": "./plugins/loa-nhe",
+      "description": "Thử: việc mới của bạn trong Nếp hiện một dòng ngay trong phiên Claude đang mở."
     }
-  ],
-  "renames": {
-    "tinh-nlh": "nlh"
-  }
+  ]
 }

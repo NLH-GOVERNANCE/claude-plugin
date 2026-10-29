@@ -1,0 +1,14 @@
+{
+  "name": "loa-nhe",
+  "displayName": "Loa nhẹ (thử)",
+  "version": "0.1.0",
+  "description": "Thử: việc mới của bạn trong Nếp hiện một dòng ngay trong phiên Claude đang mở, không cần mở thêm cửa sổ Loa.",
+  "author": {
+    "name": "NhiLe Holding"
+  },
+  "keywords": [
+    "nep",
+    "nhile",
+    "trial"
+  ]
+}

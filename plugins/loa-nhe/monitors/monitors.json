@@ -1,0 +1,7 @@
+[
+  {
+    "name": "loa-nhe",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}/monitor.mjs\"",
+    "description": "Việc mới của bạn trong Nếp"
+  }
+]
