@@ -223,13 +223,15 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
   const retired = ['ô', 'Tháp', 'phiếu', 'Trạm'];
 
   test('retired-words (R19): dòng thêm mới trong file .md dùng tên đã bỏ thì chặn; tên mới, chữ chứa "ô", dòng nêu tên cũ, file không phải .md thì qua', () => {
-    const doc = (text, path = 'docs/a.md') => only('retired-words', { retired, addedLines: [{ path, text }] });
+    const doc = (text, path = 'docs/a.md') => only('retired-words', { retired, repo: 'NLH-GOVERNANCE/decisions', addedLines: [{ path, text }] });
     assert.deepEqual(doc('Mở một phiếu cho chòi'), ['retired-words']);
     assert.deepEqual(doc('Ô dùng chung cho cả làng'), [], 'chỉ bắt đúng chữ thường đã ghi trong luật, không đoán hoa thường lẫn');
     assert.deepEqual(doc('Gửi ô của anh'), ['retired-words']);
     assert.deepEqual(doc('Mở một việc cho chòi'), []);
     assert.deepEqual(doc('Ngôn ngữ và tôn trọng'), []);
     assert.deepEqual(doc('chòi (tên cũ: ô)'), []);
+    assert.deepEqual(doc('Đi ô tô, qua Trạm xăng, ngắm Tháp Eiffel'), [], 'cụm thường bắt đầu bằng chữ đã bỏ không phải tên cũ');
+    assert.deepEqual(doc('Đi ô tô rồi gửi ô của anh'), ['retired-words']);
     assert.deepEqual(doc('Mở phiếu', 'src/a.mjs'), []);
     assert.deepEqual(only('retired-words', { retired: [], addedLines: [{ path: 'docs/a.md', text: 'Mở phiếu' }] }), []);
   });
@@ -249,8 +251,8 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
     const both = (extra) => ids(repeatedFindings(repeated, facts(extra))).filter((id) => id === 'retired-words' || id === 'codename-strings');
     assert.deepEqual(both(lineFacts('test/gate.test.mjs', "const phieuId = 'open_tram';", 'NLH-OS/api')), [], 'file test nêu tên cũ có chủ ý');
     assert.deepEqual(both(lineFacts('src/a.test.mjs', 'const phieuId = 1;')), []);
-    assert.deepEqual(both(lineFacts('README.md', 'Mở phiếu', 'NLH-OS/api')), [], 'R19 chỉ phủ decisions, cell và docs');
-    assert.deepEqual(both(lineFacts('docs/a.md', 'Mở phiếu', 'NLH-OS/api')), ['retired-words']);
+    assert.deepEqual(both(lineFacts('README.md', 'Mở phiếu', 'NLH-OS/api')), [], 'R19 chỉ chặn ở decisions và cells');
+    assert.deepEqual(both(lineFacts('docs/a.md', 'Mở phiếu', 'NLH-OS/api')), []);
     assert.deepEqual(both(lineFacts('rules/x.md', 'Mở phiếu', 'NLH-GOVERNANCE/decisions')), ['retired-words']);
     assert.deepEqual(both(lineFacts('review-pr/cell.md', 'Mở phiếu', 'NLH-GOVERNANCE/cells')), ['retired-words']);
     // Mục chờ CI: test-plan-ci-ticked cấm tick sớm, nên để trống không phải lỗi; mục thường để trống vẫn bị bắt.
@@ -258,6 +260,8 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
     assert.deepEqual(only('testplan-unticked', plan('- [ ] CI xanh trên commit mới')), []);
     assert.deepEqual(only('testplan-unticked', plan('- [ ] GitHub Actions chạy hết')), []);
     assert.deepEqual(only('testplan-unticked', plan('- [ ] chạy bài thử')), ['testplan-unticked']);
+    assert.deepEqual(only('testplan-unticked', plan('- [ ] check mobile bằng tay')), ['testplan-unticked'], 'chữ "check" đơn lẻ không phải chờ CI');
+    assert.deepEqual(only('testplan-unticked', plan('- [ ] checks xanh trên commit mới')), []);
   });
 
   test('lời chặn mỗi lỗi một dòng; dòng ghi giếng sau push nói kiểm gì, qua, chặn trước mấy lần', () => {
@@ -346,7 +350,7 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
   });
 
   test('commit gộp dev không quét dòng dev kéo về: dev có docs dùng "phiếu" cũ, nhánh sạch vẫn qua; dòng mới của nhánh thì chặn (review 29/10)', async () => {
-    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-OS/demo.git');
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-GOVERNANCE/decisions.git');
     writeFileSync(join(gateDir, 'pr-review.md'), 'R19: the words D-0067 retires (ô, phiếu) are not used in new text.\n');
     const write = (name, text) => writeFileSync(join(work, name), text);
     write('b.mjs', 'export {};\n');
@@ -369,6 +373,33 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
     sh(work, 'add', '.');
     const denied = await run({ ...input, tool_use_id: 'toolu_5', tool_input: { command: 'git commit -m "docs: new"' } }, gateDir);
     assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- retired-words · .*docs\/new\.md.*phiếu/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('push thật (review 29/10): nhánh xung đột dev bị chặn kèm R06; dòng R19 thêm ở cuối diff 6000 dòng vẫn bị bắt; nhánh sạch qua', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-GOVERNANCE/decisions.git');
+    writeFileSync(join(gateDir, 'pr-review.md'), 'R19: the words D-0067 retires (ô, phiếu) are not used in new text.\n');
+    const write = (name, text) => writeFileSync(join(work, name), text);
+    const input = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_6', cwd: work, tool_input: { command: 'git push origin feat/gate' } };
+    write('README.md', 'nhánh\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'feat: readme');
+    sh(work, 'checkout', 'dev');
+    write('README.md', 'dev\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'dev: readme');
+    sh(work, 'push', join(dir, 'origin.git'), 'dev');
+    sh(work, 'update-ref', 'refs/remotes/origin/dev', 'dev');
+    sh(work, 'checkout', 'feat/gate');
+    const conflict = await run(input, gateDir);
+    assert.match(conflict.hookSpecificOutput.permissionDecisionReason, /- merge-conflict-dev · /);
+    sh(work, 'reset', '--hard', 'HEAD~1');
+    assert.equal(await run({ ...input, tool_use_id: 'toolu_7' }, gateDir), null, 'nhánh sạch qua');
+    write('big.md', `${Array.from({ length: 6000 }, (_, i) => `dòng ${i}`).join('\n')}\nMở phiếu mới\n`);
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'docs: big');
+    const denied = await run({ ...input, tool_use_id: 'toolu_8' }, gateDir);
+    assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- retired-words · .*big\.md.*phiếu/);
     rmSync(dir, { recursive: true, force: true });
   });
 

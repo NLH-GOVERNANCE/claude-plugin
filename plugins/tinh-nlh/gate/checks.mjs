@@ -200,12 +200,12 @@ export function riskSection(body) {
 }
 
 // Unified diff (-U0) to added lines: [{ path, text }]. Deleted files and binary files add none.
-export function parseAddedLines(diff, limit = 5000) {
+export function parseAddedLines(diff) {
   const lines = [];
   let path = null;
   for (const line of String(diff ?? '').split('\n')) {
     if (line.startsWith('+++ ')) path = line.startsWith('+++ b/') ? line.slice(6) : null;
-    else if (line.startsWith('+') && path && lines.length < limit) lines.push({ path, text: line.slice(1) });
+    else if (line.startsWith('+') && path) lines.push({ path, text: line.slice(1) });
   }
   return lines;
 }
@@ -270,12 +270,12 @@ export function repeatedFindings(list, facts) {
       const words = facts.retired ?? [];
       if (!words.length) continue;
       const docs = check.kind === 'retired-word-lines';
-      // R19 covers decisions, cell files and docs: markdown in the decisions and cells repos, and under docs/ elsewhere.
+      // R19 blocks in the decisions and cells repos (markdown); other repos are not checked.
       // Tests quote old names on purpose, so test files are never checked.
       const wholeRepo = (check.repos ?? []).includes(String(facts.repo ?? '').split('/').pop());
       const inScope = (path) =>
         !(check.skip && new RegExp(check.skip, 'i').test(path)) &&
-        (docs ? /\.(md|mdx)$/i.test(path) && (wholeRepo || !check.paths || new RegExp(check.paths, 'i').test(path)) : /\.(mjs|cjs|js|jsx|ts|tsx)$/i.test(path));
+        (docs ? /\.(md|mdx)$/i.test(path) && wholeRepo : /\.(mjs|cjs|js|jsx|ts|tsx)$/i.test(path));
       // Docs: the retired word as a whole word. Code: its ASCII form (phiếu -> phieu) as a whole identifier part.
       const forms = docs ? words : words.map(fold).filter((word) => word.length > 3);
       if (!forms.length) continue;
@@ -284,7 +284,9 @@ export function repeatedFindings(list, facts) {
         if (!inScope(path)) continue;
         // A line that quotes the old name on purpose ("tên cũ: phiếu", the D-0067 table) is not new use.
         if (/tên cũ|trước là|D-0067|retired|formerly/i.test(text)) continue;
-        const code = docs ? text : text.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_\-./]/g, ' ');
+        // Ordinary phrases that begin with a retired word ("ô tô", "Trạm xăng", "Tháp Eiffel") are not the retired name.
+        const plain = check.ignore ? text.replace(new RegExp(check.ignore, 'giu'), ' ') : text;
+        const code = docs ? plain : plain.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_\-./]/g, ' ');
         const found = code.match(pattern);
         if (found) {
           add(check, { path, word: found[1] });
