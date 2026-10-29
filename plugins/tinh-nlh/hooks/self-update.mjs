@@ -100,12 +100,27 @@ const writeState = (file, state) => {
   }
 };
 
-// Run both commands one after the other in a hidden background process; nothing waits for them.
+// Run both commands one after the other in a hidden background process; nothing waits for them. No shell (d8492aab):
+// a small Node runner (fixed text, the path and names only as argv) runs claude twice with an argument list, so a path
+// or name with quotes, & or spaces is never parsed as a command line.
+export const FETCH_RUNNER = [
+  "const { spawnSync } = require('node:child_process');",
+  'const [claude, marketplace, plugin] = process.argv.slice(1);',
+  "const run = (args) => spawnSync(claude, args, { stdio: 'ignore', windowsHide: true });",
+  "if (run(['plugin', 'marketplace', 'update', marketplace]).status === 0) run(['plugin', 'update', plugin]);",
+].join('\n');
+
+// On Windows spawn cannot start a claude.cmd or claude.bat without a shell: use the claude.exe the npm install keeps next
+// to it, else nothing (no fetch; the app's own auto-update still runs). Other systems and .exe paths are used as given.
+export function runnableClaude(claude, platform = process.platform, exists = existsSync) {
+  if (!claude || platform !== 'win32' || !/\.(cmd|bat)$/i.test(claude)) return claude || '';
+  const exe = join(dirname(claude), 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+  return exists(exe) ? exe : '';
+}
+
 export function fetchInBackground(claude, spawnFn = spawn) {
-  const run = (args) => `"${claude}" ${args}`;
-  const script = `${run(`plugin marketplace update ${MARKETPLACE}`)} && ${run(`plugin update ${PLUGIN}`)}`;
   try {
-    const child = spawnFn(process.platform === 'win32' ? 'cmd.exe' : '/bin/sh', process.platform === 'win32' ? ['/d', '/s', '/c', `"${script}"`] : ['-c', script], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
+    const child = spawnFn(process.execPath, ['-e', FETCH_RUNNER, claude, MARKETPLACE, PLUGIN], { detached: true, stdio: 'ignore', windowsHide: true });
     child.on?.('error', () => {});
     child.unref?.();
     return true;
@@ -139,7 +154,7 @@ export function main(env = process.env, write = (text) => process.stdout.write(t
     return;
   }
   const file = join(env.NLH_MACHINE_DIR || join(homedir(), '.tinh-nlh'), 'self-update.json');
-  const claude = env.CLAUDE_CODE_EXECPATH && existsSync(env.CLAUDE_CODE_EXECPATH) ? env.CLAUDE_CODE_EXECPATH : '';
+  const claude = env.CLAUDE_CODE_EXECPATH && existsSync(env.CLAUDE_CODE_EXECPATH) ? runnableClaude(env.CLAUDE_CODE_EXECPATH) : '';
   const state = readState(file);
   const result = decide({ running, installed: installedVersion(), state, claude, now: Date.now() });
   const loa = ensureLoa({ env, running, state: result.state });

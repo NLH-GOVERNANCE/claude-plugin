@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { decide, ensureAutoUpdate, ensureLoa, fetchInBackground, installedVersion, MARKETPLACE, newer, PLUGIN, restartSentence, TRY_GAP_MS } from '../plugins/tinh-nlh/hooks/self-update.mjs';
+import { decide, ensureAutoUpdate, ensureLoa, FETCH_RUNNER, fetchInBackground, installedVersion, MARKETPLACE, newer, PLUGIN, restartSentence, runnableClaude, TRY_GAP_MS } from '../plugins/tinh-nlh/hooks/self-update.mjs';
 
 const hook = join(fileURLToPath(new URL('..', import.meta.url)), 'plugins/tinh-nlh/hooks/self-update.mjs');
 const temp = (name) => mkdtempSync(join(tmpdir(), `${name}-`));
@@ -59,15 +59,40 @@ describe('self-update', () => {
     assert.match(decide({ ...base, running: '0.25.9', installed: '0.25.4', state: {} }).line, /runs 0\.25\.9, the newest downloaded is 0\.25\.9/, 'bản đã tải cũ hơn bản đang chạy thì không nói bản cũ');
   });
 
-  test('tải ngầm: một tiến trình tách rời chạy cập nhật kho rồi cập nhật gói, không chờ', () => {
+  test('tải ngầm không qua shell (d8492aab): một Node tách rời nhận đường dẫn và tên làm tham số riêng, không ghép thành dòng lệnh', () => {
     const calls = [];
     const child = { on: () => {}, unref: () => calls.push('unref') };
-    assert.equal(fetchInBackground('C:\\c\\claude.exe', (command, args, options) => (calls.push([command, args.join(' '), options.detached, options.stdio, options.windowsHide]), child)), true);
-    const [command, args, detached, stdio, hidden] = calls[0];
-    assert.match(command, /cmd\.exe$|\/bin\/sh$/);
-    assert.ok(args.includes(`plugin marketplace update ${MARKETPLACE}`) && args.includes(`plugin update ${PLUGIN}`));
-    assert.deepEqual([detached, stdio, hidden, calls[1]], [true, 'ignore', true, 'unref']);
+    const hostile = '/opt/a & b/"claude" && rm -rf x';
+    assert.equal(fetchInBackground(hostile, (command, args, options) => (calls.push([command, args, options]), child)), true);
+    const [command, args, options] = calls[0];
+    assert.equal(command, process.execPath);
+    assert.deepEqual(args, ['-e', FETCH_RUNNER, hostile, MARKETPLACE, PLUGIN], 'mỗi giá trị một tham số, đường dẫn nguyên văn');
+    assert.deepEqual([options.detached, options.stdio, options.windowsHide, options.shell, options.windowsVerbatimArguments], [true, 'ignore', true, undefined, undefined]);
+    assert.equal(calls[1], 'unref');
+    for (const word of ['shell', 'exec(', 'cmd.exe', '/bin/sh']) assert.ok(!FETCH_RUNNER.includes(word), `bộ chạy không có ${word}`);
     assert.equal(fetchInBackground('x', () => { throw new Error('no'); }), false);
+  });
+
+  test('bộ chạy tải ngầm: chạy kho trước, gói sau, chỉ khi kho xong; tham số vào đúng thứ tự', () => {
+    const order = [];
+    const argv = ['node', '/opt/claude', MARKETPLACE, PLUGIN];
+    const spawnSync = (file, args) => (order.push([file, args.join(' ')]), { status: order.length === 1 ? 0 : 1 });
+    new Function('require', 'process', FETCH_RUNNER)(() => ({ spawnSync }), { argv });
+    assert.deepEqual(order, [['/opt/claude', `plugin marketplace update ${MARKETPLACE}`], ['/opt/claude', `plugin update ${PLUGIN}`]]);
+    order.length = 0;
+    const failing = (file, args) => (order.push(args.join(' ')), { status: 1 });
+    new Function('require', 'process', FETCH_RUNNER)(() => ({ spawnSync: failing }), { argv });
+    assert.deepEqual(order, [`plugin marketplace update ${MARKETPLACE}`], 'kho lỗi thì không cập nhật gói');
+  });
+
+  test('Windows: claude.cmd không chạy được nếu không qua shell; dùng claude.exe cạnh nó, không có thì không tải; .exe và máy khác giữ nguyên', () => {
+    const exe = join('C:', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+    const exists = (file) => file === exe;
+    assert.equal(runnableClaude(join('C:', 'npm', 'claude.cmd'), 'win32', exists), exe);
+    assert.equal(runnableClaude(join('C:', 'other', 'claude.cmd'), 'win32', exists), '');
+    assert.equal(runnableClaude('C:/c/claude.exe', 'win32', exists), 'C:/c/claude.exe');
+    assert.equal(runnableClaude('/usr/bin/claude', 'linux', exists), '/usr/bin/claude');
+    assert.equal(runnableClaude('', 'win32', exists), '');
   });
 
   test('chạy thật: bản mới đã tải thì in một dòng một lần; hai lần chạy liền chỉ một dòng; không có claude thì im', () => {
