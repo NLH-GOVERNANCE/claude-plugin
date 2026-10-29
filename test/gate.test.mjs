@@ -13,9 +13,11 @@ import {
   gateFindings,
   gitOps,
   matchesPath,
+  parseAddedLines,
   pushRecord,
   pushTarget,
   repeatedFindings,
+  retiredWords,
   scopedRepo,
   splitCommands,
   statedCommitCount,
@@ -170,6 +172,76 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
     assert.deepEqual(only('force-push-open-pr', { force: true, pr: pr('x') }), ['force-push-open-pr']);
     assert.deepEqual(only('force-push-open-pr', { force: true, pr: null }), []);
     assert.deepEqual(only('force-push-open-pr', { force: false, pr: pr('x') }), []);
+  });
+
+  test('node_modules trong commit thì chặn (junk-file); src thường thì qua', () => {
+    assert.ok(matchesPath('node_modules/**', 'web/node_modules/zod/index.js'));
+    assert.ok(!matchesPath('node_modules/**', 'src/node_modules_notes.md'));
+    assert.deepEqual(only('junk-file', { files: [{ status: 'A', path: 'app/node_modules/zod/index.js' }] }), ['junk-file']);
+    assert.deepEqual(only('junk-file', { files: [{ status: 'A', path: 'app/src/index.js' }] }), []);
+  });
+
+  test('testplan-unticked (R04): còn "- [ ]" không bắt đầu bằng Post-merge thì chặn; tick hết hay Post-merge thì qua; chưa có PR thì qua', () => {
+    const body = (plan) => `## Summary\n- x\n\n## Test Plan\n${plan}\n`;
+    assert.deepEqual(only('testplan-unticked', { pr: pr(body('- [x] a\n- [ ] chạy bài thử')) }), ['testplan-unticked']);
+    assert.deepEqual(only('testplan-unticked', { pr: pr(body('- [x] a\n- [ ] Post-merge: thử trên nepdev')) }), []);
+    assert.deepEqual(only('testplan-unticked', { pr: pr(body('- [x] a\n- [X] b')) }), []);
+    assert.deepEqual(only('testplan-unticked', { pr: null }), []);
+  });
+
+  test('merge-conflict-dev (R06): xung đột với dev thì chặn kèm cách gộp bằng commit mới; sạch hay chưa biết thì qua', () => {
+    const [found] = repeatedFindings(repeated, facts({ conflictsWithBase: true })).filter((item) => item.id === 'merge-conflict-dev');
+    assert.match(found.message, /xung đột với origin\/dev/);
+    assert.match(found.message, /commit mới/);
+    assert.deepEqual(only('merge-conflict-dev', { conflictsWithBase: false }), []);
+    assert.deepEqual(only('merge-conflict-dev', { conflictsWithBase: null }), []);
+  });
+
+  test('risk-missing: đụng migration, auth, tiền hay contract mà thiếu Risk thì chặn; migration phải được nêu tên', () => {
+    const body = (risk) => `## Summary\n- x\n\n## Test Plan\n- [x] a\n${risk}`;
+    const migration = [{ status: 'A', path: 'db/migrations/0065_use_weeks.sql' }];
+    assert.deepEqual(only('risk-missing', { files: migration, pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: migration, pr: pr(body('\n## Risk\nĐổi lược đồ, chưa rõ.')) }), ['risk-missing'], 'Risk không nêu tên migration');
+    assert.deepEqual(only('risk-missing', { files: migration, pr: pr(body('\n## Risk\nMigration 0065_use_weeks thêm bảng, chạy lại được.')) }), []);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/oauth-callback.mjs' }], pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/oauth-callback.mjs' }], pr: pr(body('\n## Risk\nĐổi đường quay về.')) }), []);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'connector/API.md' }], pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/billing/invoice.mjs' }], pr: pr(body('')) }), ['risk-missing']);
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'M', path: 'src/author-name.mjs' }], pr: pr(body('')) }), [], 'author không phải auth');
+    assert.deepEqual(only('risk-missing', { files: [{ status: 'D', path: 'db/migrations/0001.sql' }], pr: pr(body('')) }), []);
+    assert.deepEqual(only('risk-missing', { files: migration, pr: null }), []);
+  });
+
+  test('tên đã bỏ: đọc từ dòng R19 của rules/pr-review.md; không có chữ nào thì hai kiểm tên im lặng', () => {
+    assert.deepEqual(retiredWords('The words D-0067 retires (ô, Tháp, phiếu, người giữ nhịp, Trạm) are not used in new text.'), ['ô', 'Tháp', 'phiếu', 'người giữ nhịp', 'Trạm']);
+    assert.deepEqual(retiredWords('không có dòng đó'), []);
+    const lines = parseAddedLines('+++ b/docs/a.md\n@@ -0,0 +1,2 @@\n+Mở phiếu mới\n+ok\n+++ /dev/null\n+bỏ qua\n');
+    assert.deepEqual(lines, [{ path: 'docs/a.md', text: 'Mở phiếu mới' }, { path: 'docs/a.md', text: 'ok' }]);
+    assert.deepEqual(only('retired-words', { addedLines: [{ path: 'docs/a.md', text: 'Mở phiếu mới' }] }), []);
+  });
+
+  const retired = ['ô', 'Tháp', 'phiếu', 'Trạm'];
+
+  test('retired-words (R19): dòng thêm mới trong file .md dùng tên đã bỏ thì chặn; tên mới, chữ chứa "ô", dòng nêu tên cũ, file không phải .md thì qua', () => {
+    const doc = (text, path = 'docs/a.md') => only('retired-words', { retired, addedLines: [{ path, text }] });
+    assert.deepEqual(doc('Mở một phiếu cho chòi'), ['retired-words']);
+    assert.deepEqual(doc('Ô dùng chung cho cả làng'), [], 'chỉ bắt đúng chữ thường đã ghi trong luật, không đoán hoa thường lẫn');
+    assert.deepEqual(doc('Gửi ô của anh'), ['retired-words']);
+    assert.deepEqual(doc('Mở một việc cho chòi'), []);
+    assert.deepEqual(doc('Ngôn ngữ và tôn trọng'), []);
+    assert.deepEqual(doc('chòi (tên cũ: ô)'), []);
+    assert.deepEqual(doc('Mở phiếu', 'src/a.mjs'), []);
+    assert.deepEqual(only('retired-words', { retired: [], addedLines: [{ path: 'docs/a.md', text: 'Mở phiếu' }] }), []);
+  });
+
+  test('codename-strings (R21): tên trong code theo tên đã bỏ (phieu, tram) thì chặn; tên cột code, chữ có dấu trong chú thích thì qua', () => {
+    const code = (text, path = 'src/a.mjs') => only('codename-strings', { retired, addedLines: [{ path, text }] });
+    assert.deepEqual(code('const phieuId = 1;'), ['codename-strings']);
+    assert.deepEqual(code('export function open_tram() {}'), ['codename-strings']);
+    assert.deepEqual(code('const ticketId = 1;'), []);
+    assert.deepEqual(code('// Mở phiếu cho chòi'), [], 'chữ Việt có dấu là lời cho người, không phải tên');
+    assert.deepEqual(code('const phieuId = 1;', 'docs/a.md'), []);
+    assert.deepEqual(code('const stramp = 1;'), [], 'chỉ bắt khi là cả một phần của tên');
   });
 
   test('lời chặn mỗi lỗi một dòng; dòng ghi giếng sau push nói kiểm gì, qua, chặn trước mấy lần', () => {

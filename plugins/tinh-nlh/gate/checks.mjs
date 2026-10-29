@@ -130,9 +130,10 @@ export function pushTarget(args, currentBranch) {
 
 export const isBaseBranch = (branch) => BASE_BRANCHES.includes(branch);
 
-// Glob with * only. A pattern without "/" matches the file name, with "/" the end of the path.
+// Glob with * (inside one folder) and ** (across folders). A pattern without "/" matches the file name, with "/" the end of the path.
 export function matchesPath(pattern, path) {
-  const source = pattern.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*');
+  const escape = (part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  const source = pattern.split('**').map((chunk) => chunk.split('*').map(escape).join('[^/]*')).join('.*');
   return pattern.includes('/') ? new RegExp(`(^|/)${source}$`).test(path) : new RegExp(`^${source}$`).test(path.split('/').pop());
 }
 
@@ -172,8 +173,8 @@ export function gateFindings(rules, facts) {
 export const plain = (value) => String(value).replace(/[\u0000-\u001f\u007f-\u009f"`<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
 const fill = (message, values) => message.replace(/\{(\w+)\}/g, (all, key) => (key in values ? plain(values[key]) : all));
 
-// Ticked items of the "## Test Plan" section of a PR description.
-export function tickedItems(body) {
+// Checkbox items of the "## Test Plan" section of a PR description: { done, text }.
+export function testPlanItems(body) {
   const lines = String(body ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
   const start = lines.findIndex((line) => /^##\s+test plan\s*:?\s*$/i.test(line.trim()));
   if (start === -1) return [];
@@ -181,9 +182,42 @@ export function tickedItems(body) {
   const end = rest.findIndex((line) => /^#{1,2}\s+/.test(line));
   return (end === -1 ? rest : rest.slice(0, end))
     .map((line) => line.match(CHECKBOX))
-    .filter((match) => match && match[1] !== ' ')
-    .map((match) => match[2].trim());
+    .filter(Boolean)
+    .map((match) => ({ done: match[1] !== ' ', text: match[2].trim() }));
 }
+
+// Ticked items of the "## Test Plan" section.
+export const tickedItems = (body) => testPlanItems(body).filter((item) => item.done).map((item) => item.text);
+
+// The text under "## Risk" of a PR description, or null when there is none.
+export function riskSection(body) {
+  const lines = String(body ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
+  const start = lines.findIndex((line) => /^##\s+risk\b/i.test(line.trim()));
+  if (start === -1) return null;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{1,2}\s+/.test(line));
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
+}
+
+// Unified diff (-U0) to added lines: [{ path, text }]. Deleted files and binary files add none.
+export function parseAddedLines(diff, limit = 5000) {
+  const lines = [];
+  let path = null;
+  for (const line of String(diff ?? '').split('\n')) {
+    if (line.startsWith('+++ ')) path = line.startsWith('+++ b/') ? line.slice(6) : null;
+    else if (line.startsWith('+') && path && lines.length < limit) lines.push({ path, text: line.slice(1) });
+  }
+  return lines;
+}
+
+// Words the village names retire, read from the R19 line of rules/pr-review.md (decisions repo): the text after
+// "retires (" up to ")". Nothing hard-coded: no rules text, no words, and the two name checks stay silent.
+export function retiredWords(ruleText) {
+  const match = String(ruleText ?? '').match(/\bretires \(([^)]{1,300})\)/);
+  return match ? match[1].split(',').map((word) => word.trim()).filter((word) => word && word.length <= 20) : [];
+}
+const fold = (text) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // The commit count a PR description states ("2 commit", "một commit"), or null.
 export function statedCommitCount(body) {
@@ -213,6 +247,43 @@ export function repeatedFindings(list, facts) {
     } else if (check.kind === 'description-commit-count') {
       const said = facts.pr ? statedCommitCount(facts.pr.body) : null;
       if (said !== null && said !== facts.commitCount) add(check, { said, real: facts.commitCount });
+    } else if (check.kind === 'test-plan-unticked') {
+      if (!facts.pr) continue;
+      for (const item of testPlanItems(facts.pr.body)) if (!item.done && !/^post-merge\s*:/i.test(item.text)) add(check, { item: item.text });
+    } else if (check.kind === 'merge-conflict-base') {
+      if (facts.conflictsWithBase === true) add(check, { base: facts.base });
+    } else if (check.kind === 'risk-needed') {
+      if (!facts.pr) continue;
+      const risk = riskSection(facts.pr.body);
+      const hit = (group) => facts.files.filter((file) => file.status !== 'D' && new RegExp(group.re, 'i').test(file.path));
+      const groups = check.groups.map((group) => ({ ...group, files: hit(group) })).filter((group) => group.files.length);
+      if (!groups.length) continue;
+      if (risk === null) add(check, { areas: groups.map((group) => group.name).join(', '), why: 'thiếu mục "## Risk"' });
+      else {
+        // R23.4: for a migration the Risk names the migration file (with or without extension).
+        const unnamed = groups.find((group) => group.mention && !group.files.some((file) => risk.includes(file.path.split('/').pop().replace(/\.[^.]+$/, ''))));
+        if (unnamed) add(check, { areas: unnamed.name, why: `"## Risk" chưa nhắc tên file ${unnamed.name}: ${unnamed.files[0].path.split('/').pop()}` });
+      }
+    } else if (check.kind === 'retired-word-lines' || check.kind === 'retired-word-identifiers') {
+      const words = facts.retired ?? [];
+      if (!words.length) continue;
+      const docs = check.kind === 'retired-word-lines';
+      const inScope = (path) => (docs ? /\.(md|mdx)$/i.test(path) : /\.(mjs|cjs|js|jsx|ts|tsx)$/i.test(path));
+      // Docs: the retired word as a whole word. Code: its ASCII form (phiếu -> phieu) as a whole identifier part.
+      const forms = docs ? words : words.map(fold).filter((word) => word.length > 3);
+      if (!forms.length) continue;
+      const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(${forms.map(escapeRegex).join('|')})(?![\\p{L}\\p{N}])`, docs ? 'u' : 'iu');
+      for (const { path, text } of facts.addedLines ?? []) {
+        if (!inScope(path)) continue;
+        // A line that quotes the old name on purpose ("tên cũ: phiếu", the D-0067 table) is not new use.
+        if (/tên cũ|trước là|D-0067|retired|formerly/i.test(text)) continue;
+        const code = docs ? text : text.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_\-./]/g, ' ');
+        const found = code.match(pattern);
+        if (found) {
+          add(check, { path, word: found[1] });
+          break;
+        }
+      }
     } else if (check.kind === 'force-push-open-pr') {
       if (facts.force && facts.pr) add(check, { pr: facts.pr.number });
     }
