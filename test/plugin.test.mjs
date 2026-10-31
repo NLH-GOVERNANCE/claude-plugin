@@ -527,6 +527,17 @@ describe('plugin nlh', () => {
       assert.match(skill(), /Never copy and never delete or trash a file \(D-0051\), even when the user asks/);
     });
 
+    test('ca cất vào việc: link ở body dòng fact, không ghép files với kind khác handoff (connector từ chối)', () => {
+      assert.match(skill(), /kind `fact`, the link in the body only/);
+      for (const line of skill().split('\n')) {
+        if (/`files`/.test(line) && /kind `(fact|reply|check|close|claim|lesson|correction)`/.test(line)) {
+          assert.match(line, /`files` is accepted only on a `handoff` line/, line);
+        }
+      }
+      assert.match(skill(), /use `attach_file` instead/);
+      assert.match(skill(), /Sensitivity 3–4 .*Nếp keeps only the link/);
+    });
+
     test('mỗi lần tìm, cất, dời ghi một dòng vào giếng, không ghi tên hay nội dung file', () => {
       assert.match(skill(), /ticket `07edc527-096c-499b-a984-6df035ed4642`, kind `fact`/);
       assert.match(skill(), /"drive_op": "find" \| "store" \| "move"/);
