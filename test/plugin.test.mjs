@@ -528,14 +528,13 @@ describe('plugin nlh', () => {
     });
 
     test('ca cất vào việc: link ở body dòng fact, không ghép files với kind khác handoff (connector từ chối)', () => {
-      assert.match(skill(), /kind `fact`, the link in the body only/);
-      for (const line of skill().split('\n')) {
-        if (/`files`/.test(line) && /kind `(fact|reply|check|close|claim|lesson|correction)`/.test(line)) {
-          assert.match(line, /`files` is accepted only on a `handoff` line/, line);
-        }
-      }
-      assert.match(skill(), /use `attach_file` instead/);
-      assert.match(skill(), /Sensitivity 3–4 .*Nếp keeps only the link/);
+      const store = skill().split('## 2.')[1].split('## 3.')[0];
+      assert.match(store, /kind `fact`, the link in the body only/);
+      assert.match(store, /`files` is accepted only on a `handoff` line/);
+      assert.doesNotMatch(store, /link in `files`/);
+      // Một bản sống: Nếp giữ link, không chép (attach_file chép file).
+      assert.match(store, /Nếp keeps only the link, never a copy: do not use `attach_file` here/);
+      assert.doesNotMatch(store, /use `attach_file` instead/);
     });
 
     test('mỗi lần tìm, cất, dời ghi một dòng vào giếng, không ghi tên hay nội dung file', () => {
