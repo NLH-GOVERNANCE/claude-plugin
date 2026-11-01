@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 import {
   blockReason,
   commitFlags,
+  descriptionFindings,
   gateFindings,
+  ghPrOps,
   gitOps,
   matchesPath,
   parseAddedLines,
@@ -19,6 +21,7 @@ import {
   repeatedFindings,
   retiredWords,
   scopedRepo,
+  shellBodyText,
   splitCommands,
   statedCommitCount,
   tickedItems,
@@ -124,7 +127,7 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
     assert.equal(lines.length, repeated.length);
     for (const check of repeated) {
       assert.ok(check.id && check.kind && check.message && check.source, check.id);
-      assert.ok(check.on.every((op) => ['commit', 'push'].includes(op)), check.id);
+      assert.ok(check.on.every((op) => ['commit', 'push', 'pr'].includes(op)), check.id);
     }
   });
 
@@ -275,6 +278,79 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
   });
 });
 
+// Luật mô tả giả (việc 8605c42a), cùng dạng R04 và R12 của gate/rules.mjs: thiếu Summary, mục chưa tick; lượt dev lên
+// main có "## Rules" thì mỗi dòng phải là mã quyết định. Không chép luật thật.
+const DESCRIPTION_STUB = `
+export const SEVERITY = { block: 'block', note: 'note' };
+export function checkPullRequest({ pr }) {
+  const out = [];
+  const body = pr.body ?? '';
+  if (!/^## Summary/m.test(body)) out.push({ rule: 'R04', severity: 'block', message: 'Thiếu mục "## Summary".' });
+  for (const m of body.matchAll(/^- \\[ \\] (?!Post-merge)(.*)$/gm)) out.push({ rule: 'R04', severity: 'block', message: 'Mục chưa tick: "' + m[1] + '".' });
+  const rules = body.match(/^## Rules\\n([\\s\\S]*)$/m);
+  if (pr.base === 'main' && pr.head === 'dev' && rules && rules[1].split('\\n').some((l) => l.trim() && !/D-\\d{4}/.test(l))) out.push({ rule: 'R12', severity: 'block', message: 'Mục "## Rules" cần mỗi dòng một luật đổi, kèm mã quyết định đã ký.' });
+  if (pr.commitCount > 3) out.push({ rule: 'R02', severity: 'block', message: 'không phải luật mô tả' });
+  out.push({ rule: 'R12', severity: 'note', message: 'ghi chú' });
+  return out;
+}
+`;
+const descriptionRules = await import(`data:text/javascript,${encodeURIComponent(DESCRIPTION_STUB)}`);
+const GOOD_BODY = '## Summary\n- đổi x\n\n## Test Plan\n- [x] node --test\n- [ ] Post-merge: chạy trên prod\n';
+const CREDIT = '🤖 Generated with [Claude Code](https://claude.com/claude-code)';
+
+describe('cổng trên máy: mô tả PR trước khi gửi (việc 8605c42a)', () => {
+  const join = (from, to) => resolve(from, to);
+  const base = resolve('/w');
+
+  test('đọc gh pr create và gh pr edit: repo, base, head, số PR, --body, --body-file; lệnh gh khác thì bỏ', () => {
+    const [create] = ghPrOps('cd api && gh pr create -R NLH-OS/api --base dev --head feat/x --title "a b" --draft --body "## Summary"', base, join);
+    assert.deepEqual(create, { op: 'gh pr create', edit: false, dir: resolve('/w/api'), repo: 'NLH-OS/api', base: 'dev', head: 'feat/x', selector: null, body: '## Summary', bodyFile: null });
+    const [edit] = ghPrOps('gh pr edit 857 --repo=NLH-OS/api --add-label x -F body.md', base, join);
+    assert.deepEqual([edit.op, edit.selector, edit.repo, edit.bodyFile, edit.body], ['gh pr edit', '857', 'NLH-OS/api', 'body.md', null]);
+    assert.deepEqual(ghPrOps('gh pr view 857; gh pr list; git commit -m "gh pr create"', base, join), []);
+  });
+
+  test('chữ của --body: chuỗi thường, heredoc của bash, here-string của PowerShell; biến hay lệnh thì không đoán', () => {
+    assert.equal(shellBodyText('## Summary\n- a'), '## Summary\n- a');
+    assert.equal(shellBodyText("$(cat <<'EOF'\n## Summary\n- a (b)\nEOF\n)"), '## Summary\n- a (b)');
+    assert.equal(shellBodyText('@\n## Summary\n- a\n@'), '## Summary\n- a');
+    assert.equal(shellBodyText('@\n## Summary\n- don'), null, 'here-string bị cắt bởi dấu nháy trong chữ');
+    assert.equal(shellBodyText('$body'), null);
+    assert.equal(shellBodyText('$(Get-Content body.md -Raw)'), null);
+    assert.equal(shellBodyText('Giá $5'), 'Giá $5');
+  });
+
+  const desc = (body, extra = {}) =>
+    ids(descriptionFindings(descriptionRules, repeated, { body, base: 'dev', head: 'feat/x', headInDev: true, commitCount: 1, files: [], now: Date.parse('2026-11-01T01:00:00Z'), ...extra }));
+
+  test('mô tả đúng thì qua; mục chưa tick, thiếu Summary thì chặn (R04), không lặp thêm lỗi cục bộ cùng ý', () => {
+    assert.deepEqual(desc(GOOD_BODY), []);
+    assert.deepEqual(desc('## Summary\n- a\n\n## Test Plan\n- [ ] chạy bài thử\n'), ['R04']);
+    assert.deepEqual(desc('## Test Plan\n- [x] a\n'), ['R04']);
+    assert.deepEqual(desc(GOOD_BODY, { commitCount: 9 }), [], 'R02 không phải luật mô tả');
+  });
+
+  test('lượt dev lên main: dòng ghi công nằm trong "## Rules" thì chặn (R12, api#856); ghi công ngoài mục thì qua', () => {
+    const rulesLast = `${GOOD_BODY}\n## Rules\n- D-0097\n\n${CREDIT}\n`;
+    assert.deepEqual(desc(rulesLast, { base: 'main', head: 'dev' }), ['R12']);
+    assert.deepEqual(desc(`${GOOD_BODY}\n## Rules\n- D-0097\n`, { base: 'main', head: 'dev' }), []);
+    assert.deepEqual(desc(rulesLast), [], 'vào dev thì R12 không xét mục Rules');
+  });
+
+  test('lỗi lặp đánh dấu "pr": tick mục chờ CI, số commit ghi sai; số commit chưa biết thì không so; BOM thì báo rõ', () => {
+    assert.deepEqual(desc('## Summary\n- a, 2 commit\n\n## Test Plan\n- [x] a\n', { commitCount: 1 }), ['description-commit-count']);
+    assert.deepEqual(desc('## Summary\n- a, 2 commit\n\n## Test Plan\n- [x] a\n', { commitCount: null }), []);
+    assert.deepEqual(desc(`${GOOD_BODY}- [x] CI xanh\n`), ['test-plan-ci-ticked']);
+    assert.deepEqual(desc(`﻿${GOOD_BODY}`), ['description-bom', 'R04']);
+    assert.deepEqual(ids(descriptionFindings(null, repeated, { body: '## Summary\n## Test Plan\n- [ ] a\n', base: 'dev', head: 'feat/x', commitCount: 1, files: [], now: 0 })), ['testplan-unticked'], 'không tải được luật: kiểm cục bộ vẫn chạy');
+  });
+
+  test('lời chặn ghi đúng lệnh hay công cụ bị chặn', () => {
+    assert.match(blockReason('gh pr create', [{ id: 'R04', message: 'x' }]), /^Nếp gate blocked gh pr create: /);
+    assert.match(blockReason('create_pull_request', [{ id: 'R04', message: 'x' }]), /^Nếp gate blocked create_pull_request: /);
+  });
+});
+
 describe('cổng trên máy: hook chạy thật trên một repo git', () => {
   const sh = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   const run = (input, gateDir) =>
@@ -400,6 +476,32 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
     sh(work, 'commit', '-m', 'docs: big');
     const denied = await run({ ...input, tool_use_id: 'toolu_8' }, gateDir);
     assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- retired-words · .*big\.md.*phiếu/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('gh pr create (heredoc) mục chưa tick bị chặn ngay trên máy; --body-file đúng thì qua (việc 8605c42a)', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-OS/demo.git');
+    writeFileSync(join(gateDir, 'rules.mjs'), DESCRIPTION_STUB);
+    const input = (command) => ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_9', cwd: work, tool_input: { command } });
+    const bad = `gh pr create --base dev --title "feat: x" --body "$(cat <<'EOF'\n## Summary\n- x\n\n## Test Plan\n- [ ] chạy bài thử\nEOF\n)"`;
+    const denied = await run(input(bad), gateDir);
+    assert.equal(denied.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(denied.hookSpecificOutput.permissionDecisionReason, /^Nếp gate blocked gh pr create: .*\n- R04 · Mục chưa tick: chạy bài thử \.$/);
+    writeFileSync(join(work, 'body.md'), GOOD_BODY);
+    assert.equal(await run(input('gh pr create --base dev --title "feat: x" --body-file body.md'), gateDir), null);
+    assert.equal(await run(input('gh pr create --base dev --title "feat: x" --body "$BODY"'), gateDir), null, 'chữ do shell dựng lúc chạy: không đoán');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('công cụ GitHub create_pull_request dev lên main, ghi công trong "## Rules": chặn R12; repo ngoài phạm vi thì không đụng', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-OS/demo.git');
+    writeFileSync(join(gateDir, 'rules.mjs'), DESCRIPTION_STUB);
+    const call = (args) => ({ hook_event_name: 'PreToolUse', tool_name: 'mcp__github__create_pull_request', tool_use_id: 'toolu_10', cwd: work, tool_input: { title: 'golive', head: 'dev', base: 'main', ...args } });
+    const body = `${GOOD_BODY}\n## Rules\n- D-0097\n\n${CREDIT}\n`;
+    const denied = await run(call({ owner: 'NLH-OS', repo: 'demo', body }), gateDir);
+    assert.match(denied.hookSpecificOutput.permissionDecisionReason, /^Nếp gate blocked create_pull_request: .*\n- R12 · Mục ## Rules cần/);
+    assert.equal(await run(call({ owner: 'NLH-OS', repo: 'demo', body: `${GOOD_BODY}\n## Rules\n- D-0097\n` }), gateDir), null);
+    assert.equal(await run(call({ owner: 'someone', repo: 'else', body }), gateDir), null);
     rmSync(dir, { recursive: true, force: true });
   });
 

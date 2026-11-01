@@ -1,5 +1,6 @@
 // Checks of the local gate (ticket 6c4e1825): what to look at in a Bash or PowerShell command, and which findings block a
-// git commit or git push. Pure functions, no git, no network: hook.mjs collects the facts and calls these.
+// git commit, a git push, or a PR description about to be sent (ticket 8605c42a). Pure functions, no git, no network:
+// hook.mjs collects the facts and calls these.
 // Counted rules come from gate/rules.mjs of NLH-OS/api (passed in as `rules`, never copied here); repeated errors come
 // from repeated-errors.json, one check per line.
 
@@ -60,10 +61,10 @@ export function splitCommands(line) {
   return commands;
 }
 
-// git commit and git push in a command line, each with the folder it runs in (after cd / Set-Location / git -C).
+// The commands of a line, each with the folder it runs in (after cd / Set-Location / pushd).
 // `join` resolves a folder against the current one (path.resolve in the hook).
-export function gitOps(line, cwd, join) {
-  const ops = [];
+function commandsIn(line, cwd, join) {
+  const commands = [];
   let dir = cwd;
   for (const words of splitCommands(line)) {
     const [head, ...rest] = words;
@@ -72,6 +73,15 @@ export function gitOps(line, cwd, join) {
       if (target) dir = join(dir, target);
       continue;
     }
+    commands.push({ words, dir });
+  }
+  return commands;
+}
+
+// git commit and git push in a command line, each with the folder it runs in (after cd / Set-Location / git -C).
+export function gitOps(line, cwd, join) {
+  const ops = [];
+  for (const { words, dir } of commandsIn(line, cwd, join)) {
     const at = words.findIndex((word) => /^git(\.exe)?$/i.test(word));
     if (at === -1) continue;
     let opDir = dir;
@@ -84,6 +94,57 @@ export function gitOps(line, cwd, join) {
     if (words[i] === 'commit' || words[i] === 'push') ops.push({ op: words[i], dir: opDir, args: words.slice(i + 1) });
   }
   return ops;
+}
+
+// gh pr create / gh pr edit flags that take no value: the word after them is not theirs.
+const GH_SWITCHES = new Set(['-d', '--draft', '-f', '--fill', '--fill-first', '--fill-verbose', '-w', '--web', '-e', '--editor', '--no-maintainer-edit', '--dry-run', '--remove-milestone']);
+
+// gh pr create and gh pr edit in a command line (ticket 8605c42a): folder, PR selector, and the flags that set the
+// description and its target. Values are the words as the shell gave them; shellBodyText reads a --body word.
+export function ghPrOps(line, cwd, join) {
+  const ops = [];
+  for (const { words, dir } of commandsIn(line, cwd, join)) {
+    const at = words.findIndex((word) => /^gh(\.exe)?$/i.test(word));
+    if (at === -1 || words[at + 1] !== 'pr' || !['create', 'edit'].includes(words[at + 2])) continue;
+    const flags = {};
+    const positional = [];
+    const args = words.slice(at + 3);
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i];
+      const eq = arg.indexOf('=');
+      if (!arg.startsWith('-') || arg === '-') positional.push(arg);
+      else if (arg.startsWith('--') && eq !== -1) flags[arg.slice(0, eq)] = arg.slice(eq + 1);
+      else if (GH_SWITCHES.has(arg)) flags[arg] = true;
+      else flags[arg] = args[(i += 1)] ?? '';
+    }
+    const flag = (short, long) => flags[short] ?? flags[long] ?? null;
+    ops.push({
+      op: `gh pr ${words[at + 2]}`,
+      edit: words[at + 2] === 'edit',
+      dir,
+      repo: flag('-R', '--repo'),
+      base: flag('-B', '--base'),
+      head: flag('-H', '--head'),
+      selector: positional[0] ?? null,
+      body: flag('-b', '--body'),
+      bodyFile: flag('-F', '--body-file'),
+    });
+  }
+  return ops;
+}
+
+// The text a --body (or --body-file) word holds, or null when the shell builds it at run time (a variable, a command):
+// the gate checks only text it can read. Two forms are read: bash "$(cat <<'EOF' … EOF)" and a PowerShell here-string.
+export function shellBodyText(word) {
+  const text = String(word ?? '');
+  const heredoc = text.match(/^\$\(cat\s+<<-?\s*(['"]?)(\w+)\1[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*\2[ \t]*(?:\r?\n)?\s*\)$/);
+  if (heredoc) return heredoc[3];
+  if (/^@\r?\n/.test(text)) {
+    // A here-string the splitter read in full ends with "@" on its own line; one cut short by a quote inside is unknown.
+    const here = text.match(/^@\r?\n([\s\S]*?)\r?\n@$/);
+    return here ? here[1] : null;
+  }
+  return /\$[({A-Za-z_]/.test(text) ? null : text;
 }
 
 // git commit flags that change what gets counted: --amend adds no commit, -a also commits modified tracked files.
@@ -169,6 +230,36 @@ export function gateFindings(rules, facts) {
     .map((finding) => ({ id: finding.rule, message: finding.message }));
 }
 
+// Rules of the PR gate that read the description or the target: R04 (Summary, Test Plan), R12 (into main, "## Rules").
+const DESCRIPTION_RULES = ['R04', 'R12'];
+
+// Findings on a PR description about to be sent by gh pr create, gh pr edit or a GitHub tool (ticket 8605c42a), so it
+// never reaches GitHub's gate wrong. Facts: { body, base, head, headInDev, commitCount (null: unknown), files, now }.
+// `rules` is gate/rules.mjs of NLH-OS/api or null; `list` is repeated-errors.json (checks with "pr" in `on`).
+export function descriptionFindings(rules, list, facts) {
+  const findings = [];
+  if (facts.body.startsWith('﻿')) {
+    findings.push({ id: 'description-bom', message: 'Mô tả PR bắt đầu bằng BOM nên cổng không thấy "## Summary". Ghi file mô tả không BOM (PowerShell 5.1: [IO.File]::WriteAllText).' });
+  }
+  if (rules) {
+    const found = rules.checkPullRequest({
+      pr: { createdAt: new Date(facts.now).toISOString(), base: facts.base, head: facts.head, commitCount: 0, changedFiles: 0, body: facts.body, headInDev: facts.headInDev },
+      commitAuthorDates: [],
+      forcePushCount: 0,
+      now: facts.now,
+    });
+    findings.push(
+      ...found
+        .filter((finding) => finding.severity === (rules.SEVERITY?.block ?? 'block') && DESCRIPTION_RULES.includes(finding.rule.split(' ')[0]))
+        .map((finding) => ({ id: finding.rule, message: finding.message })),
+    );
+  }
+  // R04 already names each unticked item; the local copy of that check is only for when the rules file is missing.
+  const r04 = findings.some((finding) => finding.id.split(' ')[0] === 'R04');
+  const local = repeatedFindings(list, { op: 'pr', pr: { body: facts.body }, files: facts.files ?? [], commitCount: facts.commitCount, branch: facts.head, base: facts.base });
+  return [...findings, ...local.filter((finding) => !(r04 && finding.id === 'testplan-unticked'))];
+}
+
 // Values from the repo or the PR description go into text Claude reads: one line, no quotes or backticks, short.
 export const plain = (value) => String(value).replace(/[\u0000-\u001f\u007f-\u009f"`<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
 const fill = (message, values) => message.replace(/\{(\w+)\}/g, (all, key) => (key in values ? plain(values[key]) : all));
@@ -246,7 +337,8 @@ export function repeatedFindings(list, facts) {
       for (const item of tickedItems(facts.pr.body)) if (pattern.test(item)) add(check, { item });
     } else if (check.kind === 'description-commit-count') {
       const said = facts.pr ? statedCommitCount(facts.pr.body) : null;
-      if (said !== null && said !== facts.commitCount) add(check, { said, real: facts.commitCount });
+      // A GitHub tool run outside the repo: the commit count is unknown, so there is nothing to compare.
+      if (said !== null && facts.commitCount != null && said !== facts.commitCount) add(check, { said, real: facts.commitCount });
     } else if (check.kind === 'test-plan-unticked') {
       if (!facts.pr) continue;
       // Items that wait for CI stay unticked until CI runs (test-plan-ci-ticked blocks ticking them early): not a miss here.
@@ -300,10 +392,11 @@ export function repeatedFindings(list, facts) {
   return findings;
 }
 
-// The deny reason Claude reads: one line per finding, so it can fix them at once.
+// The deny reason Claude reads: one line per finding, so it can fix them at once. `op` is commit, push, or the PR
+// command or tool as it was called (gh pr create, create_pull_request...).
 export function blockReason(op, findings) {
   return [
-    `Nếp gate blocked git ${op}: fix these, then run it again (do not bypass the check).`,
+    `Nếp gate blocked ${op === 'commit' || op === 'push' ? `git ${op}` : op}: fix these, then run it again (do not bypass the check).`,
     ...findings.map((finding) => `- ${plain(finding.id)} · ${plain(finding.message)}`),
   ].join('\n');
 }

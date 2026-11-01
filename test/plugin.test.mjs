@@ -473,8 +473,12 @@ describe('plugin nlh', () => {
 
   test('cổng trên máy (việc 6c4e1825): trước và sau lệnh Bash hay PowerShell chạy gate/hook.mjs, không gọi connector', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
-    const gate = (timeout) => ({ matcher: '^(Bash|PowerShell)$', hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs'], timeout }] });
-    assert.deepEqual(hooks.PreToolUse, [gate(300)]);
+    const gate = (timeout, matcher = '^(Bash|PowerShell)$') => ({ matcher, hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs'], timeout }] });
+    // Công cụ GitHub tạo hay sửa PR cũng qua cổng, để mô tả PR được kiểm trước khi gửi (việc 8605c42a).
+    assert.deepEqual(hooks.PreToolUse, [gate(300), gate(60, '^mcp__.+__(create_pull_request|update_pull_request)$')]);
+    const github = new RegExp(hooks.PreToolUse[1].matcher);
+    assert.ok(github.test('mcp__ad3cdfee-d3d3-4c19-b6ff-0640eb3faeb2__create_pull_request') && github.test('mcp__github__update_pull_request'));
+    assert.ok(!github.test('mcp__github__pull_request_read') && !github.test('mcp__github__create_pull_request_review'));
     assert.deepEqual(hooks.PostToolUse[1], gate(30));
     // Thứ ba: tự đẩy nhánh sau git commit (việc eca924c5), chạy riêng sau cổng, hạn 20 giây, không gọi connector.
     assert.deepEqual(hooks.PostToolUse[2], { matcher: '^(Bash|PowerShell)$', hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/autopush-hook.mjs'], timeout: 20 }] });
