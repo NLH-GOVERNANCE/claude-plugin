@@ -289,6 +289,7 @@ export function checkPullRequest({ pr }) {
   for (const m of body.matchAll(/^- \\[ \\] (?!Post-merge)(.*)$/gm)) out.push({ rule: 'R04', severity: 'block', message: 'Mục chưa tick: "' + m[1] + '".' });
   const rules = body.match(/^## Rules\\n([\\s\\S]*)$/m);
   if (pr.base === 'main' && pr.head === 'dev' && rules && rules[1].split('\\n').some((l) => l.trim() && !/D-\\d{4}/.test(l))) out.push({ rule: 'R12', severity: 'block', message: 'Mục "## Rules" cần mỗi dòng một luật đổi, kèm mã quyết định đã ký.' });
+  if (pr.base === 'main' && pr.head !== 'dev' && !(/^release\\//.test(pr.head) && pr.headInDev)) out.push({ rule: 'R12', severity: 'block', message: 'Vào main chỉ từ dev hay release ghim commit đã ở dev.' });
   if (pr.commitCount > 3) out.push({ rule: 'R02', severity: 'block', message: 'không phải luật mô tả' });
   out.push({ rule: 'R12', severity: 'note', message: 'ghi chú' });
   return out;
@@ -328,6 +329,12 @@ describe('cổng trên máy: mô tả PR trước khi gửi (việc 8605c42a)', 
     assert.deepEqual(desc('## Summary\n- a\n\n## Test Plan\n- [ ] chạy bài thử\n'), ['R04']);
     assert.deepEqual(desc('## Test Plan\n- [x] a\n'), ['R04']);
     assert.deepEqual(desc(GOOD_BODY, { commitCount: 9 }), [], 'R02 không phải luật mô tả');
+  });
+
+  test('không biết nhánh đầu (gh chạy ngoài bản clone, không --head): R12 không xét, R04 vẫn xét (review claude-plugin#123)', () => {
+    assert.deepEqual(desc(GOOD_BODY, { base: 'main', head: 'feat/x' }), ['R12'], 'nhánh lạ vào main thì chặn');
+    assert.deepEqual(desc(GOOD_BODY, { base: 'main', head: '' }), []);
+    assert.deepEqual(desc('## Test Plan\n- [x] a\n', { base: 'main', head: '' }), ['R04']);
   });
 
   test('lượt dev lên main: dòng ghi công nằm trong "## Rules" thì chặn (R12, api#856); ghi công ngoài mục thì qua', () => {
@@ -490,6 +497,43 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
     writeFileSync(join(work, 'body.md'), GOOD_BODY);
     assert.equal(await run(input('gh pr create --base dev --title "feat: x" --body-file body.md'), gateDir), null);
     assert.equal(await run(input('gh pr create --base dev --title "feat: x" --body "$BODY"'), gateDir), null, 'chữ do shell dựng lúc chạy: không đoán');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('lượt release vào main khi origin/dev trên máy đã cũ: cổng lấy dev mới trước khi xét R12, không chặn nhầm (review claude-plugin#123)', async () => {
+    // Kho gốc nằm ở đường có github.com/NLH-OS/demo.git: cổng nhận là repo trong phạm vi, mà git fetch vẫn chạy trên máy.
+    const dir = mkdtempSync(join(tmpdir(), 'nlh-gate-'));
+    const origin = join(dir, 'github.com', 'NLH-OS', 'demo.git');
+    const work = join(dir, 'work');
+    mkdirSync(join(dir, 'github.com', 'NLH-OS'), { recursive: true });
+    sh(dir, 'init', '--bare', '-b', 'dev', origin);
+    // Đường dùng dấu / để url của origin đọc ra github.com/NLH-OS/demo.git như trên mọi máy.
+    sh(dir, 'clone', origin.replace(/\\/g, '/'), work);
+    sh(work, 'config', 'user.email', 'build@nlh.vn');
+    sh(work, 'config', 'user.name', 'build');
+    sh(work, 'checkout', '-b', 'dev');
+    writeFileSync(join(work, 'README.md'), 'x\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'init');
+    sh(work, 'push', '-q', 'origin', 'dev', 'dev:main');
+    const old = sh(work, 'rev-parse', 'HEAD');
+    writeFileSync(join(work, 'a.mjs'), 'export {};\n');
+    sh(work, 'add', '.');
+    sh(work, 'commit', '-m', 'feat: a');
+    sh(work, 'push', '-q', 'origin', 'dev');
+    sh(work, 'checkout', '-q', '-b', 'release/round-1');
+    // Bản origin/dev trên máy lùi về commit cũ: chưa thấy commit mới của dev.
+    sh(work, 'update-ref', 'refs/remotes/origin/dev', old);
+    const gateDir = join(dir, 'gate');
+    mkdirSync(gateDir);
+    writeFileSync(join(gateDir, 'rules.mjs'), DESCRIPTION_STUB);
+    const input = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_11', cwd: work, tool_input: { command: 'gh pr create --base main --head release/round-1 --title "golive" --body-file body.md' } };
+    writeFileSync(join(work, 'body.md'), `${GOOD_BODY}- [ ] chạy bài thử\n`);
+    assert.match((await run(input, gateDir)).hookSpecificOutput.permissionDecisionReason, /- R04 · /, 'cổng có xét repo này');
+    sh(work, 'update-ref', 'refs/remotes/origin/dev', old);
+    writeFileSync(join(work, 'body.md'), GOOD_BODY);
+    assert.equal(await run({ ...input, tool_use_id: 'toolu_12' }, gateDir), null, 'đã lấy dev mới: commit của lượt nằm trong dev');
+    assert.equal(sh(work, 'rev-parse', 'origin/dev'), sh(work, 'rev-parse', 'HEAD'));
     rmSync(dir, { recursive: true, force: true });
   });
 
