@@ -310,6 +310,9 @@ async function checkDescriptionOp(spec, now) {
   if (ref && git(root, 'rev-parse', '--verify', '--quiet', `origin/${base}`)) {
     commitCount = Number(git(root, 'rev-list', '--count', '--no-merges', `origin/${base}..${ref}`)) || 0;
     files = nameStatus(root, `origin/${base}...${ref}`);
+    // A release branch into main (R12): "already in dev" is read against origin/dev, so bring it up to date first; a stale
+    // local copy would block a round pinned to a fresh dev commit. No network: the old copy is used.
+    if (base === 'main' && head !== 'dev') run('git', ['-C', root, 'fetch', '--quiet', 'origin', 'dev'], 20_000);
     if (git(root, 'rev-parse', '--verify', '--quiet', 'origin/dev')) {
       headInDev = spawnSync('git', ['-C', root, 'merge-base', '--is-ancestor', ref, 'origin/dev'], { timeout: 15_000, windowsHide: true }).status === 0;
     }

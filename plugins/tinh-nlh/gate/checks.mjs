@@ -251,6 +251,8 @@ export function descriptionFindings(rules, list, facts) {
     findings.push(
       ...found
         .filter((finding) => finding.severity === (rules.SEVERITY?.block ?? 'block') && DESCRIPTION_RULES.includes(finding.rule.split(' ')[0]))
+        // The branch is unknown (gh run outside the clone, no --head): R12 needs it, so R12 is not judged here.
+        .filter((finding) => facts.head || finding.rule.split(' ')[0] !== 'R12')
         .map((finding) => ({ id: finding.rule, message: finding.message })),
     );
   }
