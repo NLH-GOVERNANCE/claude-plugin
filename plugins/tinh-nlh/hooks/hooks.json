@@ -467,6 +467,19 @@
             "timeout": 300
           }
         ]
+      },
+      {
+        "matcher": "^mcp__.+__(create_pull_request|update_pull_request)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs"
+            ],
+            "timeout": 60
+          }
+        ]
       }
     ],
     "PostToolUse": [
