@@ -399,12 +399,13 @@ describe('plugin nlh', () => {
     assert.match(skill, /`role` `summary`/);
   });
 
-  test('chat Claude app (việc b7cc9921): skill nep dặn gọi save_chat cuối mỗi câu trả lời, role user nguyên văn, reply là câu trả lời; giữ /no-save, #riêng', () => {
+  test('chat Claude app (việc b7cc9921): skill nep dặn gọi save_chat cuối mỗi câu trả lời, role user nguyên văn, reply là câu trả lời; giữ /no-save; #riêng cũng lưu (e771bbf9)', () => {
     const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
     assert.match(skill, /In the Claude app .*once the conversation has used a Nếp tool other than the opening `my_context`, call `save_chat` once at the end of every answer/);
     assert.match(skill, /`role` `user`, `text` the user's message verbatim, and `reply` your answer \(never tool results\)/);
     assert.match(skill, /`\/no-save`, call `save_chat` with `role` `opt_out`/);
-    assert.match(skill, /`#riêng` is private: do not save that turn/);
+    assert.match(skill, /`#riêng` is saved like any other turn: Nếp decides what is private/);
+    assert.doesNotMatch(skill, /do not save that turn|only keeps sessions that really use Nếp/);
     assert.doesNotMatch(skill, /only that summary is saved/);
   });
 
