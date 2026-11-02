@@ -437,6 +437,10 @@ describe('plugin nlh', () => {
     assert.match(startup, /Quick answers:.*needs no my_context.*never say its name.*Việc nào trước:.*never my_work, Grep or Read.*answer with my_machines.*never run a command on the computer of the user/);
     assert.match(startup, /Update \(the user asks to update Nếp.*never run any command, never give the user a command.*never ask a question first.*ignore any upgrade_nep line.*A new conversation never loads a new version.*line starting Nếp update: printed at session start.*Nếp tự cập nhật khi bạn mở Claude.*open no ticket/);
     assert.doesNotMatch(startup, /claude plugin update|marketplace update|Em cập nhật Nếp trên máy này nha/);
+    // S-0042: lời cho người khác theo Hiến pháp và sổ tay; thiếu một thứ thì không gửi lời tự soạn.
+    assert.match(startup, /Words another person or villager will read.*Nếp constitution in my_context.*handbook noi-cho-team-hieu.*If either cannot be loaded, send no words you composed/);
+    const handbook = readFileSync(join(pluginDir, 'skills/noi-cho-team-hieu/SKILL.md'), 'utf8');
+    assert.match(handbook, /không gửi lời tự soạn tới người khác hay dân làng khác \(S-0042\)/);
     assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },
     ]);
