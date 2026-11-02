@@ -12,6 +12,6 @@ Sổ tay nằm trên Nếp, ô `dai-dien-ceo-nhi`, không chép vào gói này. 
 - `dai-dien-ceo-nhi/noi-cho-team-hieu-2-giai-thich-va-tieng-viet.md`: cách giải thích và tiếng Việt. Đọc khi phải giải thích điều khó.
 - `dai-dien-ceo-nhi/noi-cho-team-hieu-3-tu-dien-va-tu-hoc.md`: từ điển và bảng kiểm. Đọc khi còn nghi một chữ nghề, và để kiểm lần cuối trước khi gửi.
 
-Không mở được (không có quyền hay Nếp không trả lời): theo luật làng dòng 11 trong `my_context`, viết ngắn, mở bằng điều người đọc cần biết hay cần làm, dùng chữ thường, giải thích chữ nghề bằng lời thường. Không bịa nội dung sổ tay, không nói đã theo sổ tay khi chưa đọc được.
+Không mở được file 1 (không có quyền hay Nếp không trả lời), hay `my_context` không có Hiến pháp (`constitution`): không gửi lời tự soạn tới người khác hay dân làng khác (S-0042). Nói với người dùng một dòng là chưa đọc được sổ tay hay Hiến pháp nên chưa gửi, rồi dừng phần gửi. Không bịa nội dung sổ tay, không nói đã theo sổ tay khi chưa đọc được.
 
 Chỉ trích sổ tay khi người dùng hỏi; câu trả lời cho người dùng là chữ của chính Claude theo khuôn, không dán nguyên file.
