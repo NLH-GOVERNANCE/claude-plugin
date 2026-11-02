@@ -399,12 +399,13 @@ describe('plugin nlh', () => {
     assert.match(skill, /`role` `summary`/);
   });
 
-  test('chat Claude app (việc b7cc9921): skill nep dặn gọi save_chat cuối mỗi câu trả lời, role user nguyên văn, reply là câu trả lời; giữ /no-save, #riêng', () => {
+  test('chat Claude app (việc b7cc9921): skill nep dặn gọi save_chat cuối mỗi câu trả lời, role user nguyên văn, reply là câu trả lời; giữ /no-save; #riêng cũng lưu (e771bbf9)', () => {
     const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
     assert.match(skill, /In the Claude app .*once the conversation has used a Nếp tool other than the opening `my_context`, call `save_chat` once at the end of every answer/);
     assert.match(skill, /`role` `user`, `text` the user's message verbatim, and `reply` your answer \(never tool results\)/);
     assert.match(skill, /`\/no-save`, call `save_chat` with `role` `opt_out`/);
-    assert.match(skill, /`#riêng` is private: do not save that turn/);
+    assert.match(skill, /`#riêng` is saved like any other turn: Nếp decides what is private/);
+    assert.doesNotMatch(skill, /do not save that turn|only keeps sessions that really use Nếp/);
     assert.doesNotMatch(skill, /only that summary is saved/);
   });
 
@@ -436,6 +437,10 @@ describe('plugin nlh', () => {
     assert.match(startup, /Quick answers:.*needs no my_context.*never say its name.*Việc nào trước:.*never my_work, Grep or Read.*answer with my_machines.*never run a command on the computer of the user/);
     assert.match(startup, /Update \(the user asks to update Nếp.*never run any command, never give the user a command.*never ask a question first.*ignore any upgrade_nep line.*A new conversation never loads a new version.*line starting Nếp update: printed at session start.*Nếp tự cập nhật khi bạn mở Claude.*open no ticket/);
     assert.doesNotMatch(startup, /claude plugin update|marketplace update|Em cập nhật Nếp trên máy này nha/);
+    // S-0042: lời cho người khác theo Hiến pháp và sổ tay; thiếu một thứ thì không gửi lời tự soạn.
+    assert.match(startup, /Words another person or villager will read.*Nếp constitution in my_context.*handbook noi-cho-team-hieu.*If either cannot be loaded, send no words you composed/);
+    const handbook = readFileSync(join(pluginDir, 'skills/noi-cho-team-hieu/SKILL.md'), 'utf8');
+    assert.match(handbook, /không gửi lời tự soạn tới người khác hay dân làng khác \(S-0042\)/);
     assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },
     ]);
@@ -473,8 +478,12 @@ describe('plugin nlh', () => {
 
   test('cổng trên máy (việc 6c4e1825): trước và sau lệnh Bash hay PowerShell chạy gate/hook.mjs, không gọi connector', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
-    const gate = (timeout) => ({ matcher: '^(Bash|PowerShell)$', hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs'], timeout }] });
-    assert.deepEqual(hooks.PreToolUse, [gate(300)]);
+    const gate = (timeout, matcher = '^(Bash|PowerShell)$') => ({ matcher, hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/gate/hook.mjs'], timeout }] });
+    // Công cụ GitHub tạo hay sửa PR cũng qua cổng, để mô tả PR được kiểm trước khi gửi (việc 8605c42a).
+    assert.deepEqual(hooks.PreToolUse, [gate(300), gate(60, '^mcp__.+__(create_pull_request|update_pull_request)$')]);
+    const github = new RegExp(hooks.PreToolUse[1].matcher);
+    assert.ok(github.test('mcp__ad3cdfee-d3d3-4c19-b6ff-0640eb3faeb2__create_pull_request') && github.test('mcp__github__update_pull_request'));
+    assert.ok(!github.test('mcp__github__pull_request_read') && !github.test('mcp__github__create_pull_request_review'));
     assert.deepEqual(hooks.PostToolUse[1], gate(30));
     // Thứ ba: tự đẩy nhánh sau git commit (việc eca924c5), chạy riêng sau cổng, hạn 20 giây, không gọi connector.
     assert.deepEqual(hooks.PostToolUse[2], { matcher: '^(Bash|PowerShell)$', hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/autopush-hook.mjs'], timeout: 20 }] });
@@ -490,6 +499,58 @@ describe('plugin nlh', () => {
     assert.match(skill, /kind `handoff`/);
     assert.match(skill, /## Feedback/);
     assert.match(skill, /cell `tech-lead-son`, title starting with "Góp ý:"/);
+  });
+
+  // Đợt 0 Chuyển nhà (việc b4586ab4): Nếp trả link mở được, cất đúng ngăn, dọn giúp trên 5 Drive "NLH ·".
+  describe('skill tai-lieu', () => {
+    const path = join(pluginDir, 'skills/tai-lieu/SKILL.md');
+    const skill = () => readFileSync(path, 'utf8').replace(/\r/g, '');
+
+    test('nạp khi người dùng hỏi "ở đâu", nhờ cất hay dọn; đủ 5 Drive, 3 ngăn, mục lục Sổ tài nguyên', () => {
+      const { description } = frontMatter(path);
+      for (const said of ['ở đâu', 'lưu file này vào việc', 'dọn thư mục này']) assert.ok(description.includes(said), said);
+      for (const id of ['0APHclyvXZmBCUk9PVA', '0ANzNAhaH9WKtUk9PVA', '0APUuXEtCh5k2Uk9PVA', '0ADiDf06El5UYUk9PVA', '0AOiHThB968q_Uk9PVA']) {
+        assert.ok(skill().includes(id), id);
+      }
+      for (const drawer of ['`1 Đang làm`', '`2 Tra cứu`', '`3 Lưu trữ`']) assert.ok(skill().includes(drawer), drawer);
+      assert.match(skill(), /tab "Tài liệu lõi" of Sổ tài nguyên, spreadsheet `1-VAsIqWjMlJ-KMwVudxJ0v7oedMDJDqehUdG8EpBhqE`/);
+    });
+
+    test('ca không có quyền mở: kiểm trước khi đưa link, không mở được thì không đưa, nói ai cấp quyền', () => {
+      assert.match(skill(), /Before giving a link, check the user can open it: `get_file_metadata`/);
+      assert.match(skill(), /It fails, or the file is only in the index: do not give the link; say who grants access/);
+      assert.match(skill(), /Never guess a link\./);
+    });
+
+    test('ca tên sai quy chuẩn: không ngày, không v2, không mã; đề xuất tên đúng, chờ người đồng ý', () => {
+      assert.match(skill(), /No date, no "v2", "bản cuối", "copy", no code like "NEP-02"/);
+      assert.match(skill(), /Snapshot: `Tên · chốt 2026-10-29`/);
+      assert.match(skill(), /"NEP-02 Ban ve Nep 1\.0 2026-10-28" becomes "Bản vẽ Nếp · chốt 2026-10-28"/);
+      assert.match(skill(), /propose the right name .*then use it once the user agrees/);
+    });
+
+    test('ca dời không xoá: chờ người đồng ý, dời bằng parentId giữ link cũ, không chép, không xoá (D-0051)', () => {
+      assert.match(skill(), /Do nothing before the user says yes\./);
+      assert.match(skill(), /Move with `update_file` \(`parentId`/);
+      assert.match(skill(), /every old link still opens/);
+      assert.match(skill(), /Never copy and never delete or trash a file \(D-0051\), even when the user asks/);
+    });
+
+    test('ca cất vào việc: link ở body dòng fact, không ghép files với kind khác handoff (connector từ chối)', () => {
+      const store = skill().split('## 2.')[1].split('## 3.')[0];
+      assert.match(store, /kind `fact`, the link in the body only/);
+      assert.match(store, /`files` is accepted only on a `handoff` line/);
+      assert.doesNotMatch(store, /link in `files`/);
+      // Một bản sống: Nếp giữ link, không chép (attach_file chép file).
+      assert.match(store, /Nếp keeps only the link, never a copy: do not use `attach_file` here/);
+      assert.doesNotMatch(store, /use `attach_file` instead/);
+    });
+
+    test('mỗi lần tìm, cất, dời ghi một dòng vào giếng, không ghi tên hay nội dung file', () => {
+      assert.match(skill(), /ticket `07edc527-096c-499b-a984-6df035ed4642`, kind `fact`/);
+      assert.match(skill(), /"drive_op": "find" \| "store" \| "move"/);
+      assert.match(skill(), /never file names or content/);
+    });
   });
 
   test('skill: câu đầu mỗi cuộc trò chuyện gọi my_context, trả lời "tôi đang làm gì dở" không tra thêm, giữ bảng mức nhạy', () => {

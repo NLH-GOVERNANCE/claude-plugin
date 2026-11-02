@@ -2,6 +2,8 @@
 // runs git commit or git push in a repo of NLH-OS, NLH-GOVERNANCE or NLH-NEDU-*, run the checks Review would fail on:
 // the counted rules of the PR gate (gate/rules.mjs of NLH-OS/api, fetched with the user's gh and cached for 6 hours),
 // the repo's `test:fast` script when package.json declares one, and the repeated errors in repeated-errors.json.
+// The same goes for a PR description before it is sent (ticket 8605c42a): gh pr create, gh pr edit, or a GitHub tool
+// creating or updating a PR get the description rules (R04, R12, and the repeated-error checks marked "pr").
 // Anything fails: deny the command with one line per finding. After a push that passed, tell Claude to write one line
 // on its ticket. Other repos, other commands, or the hook itself failing: the command runs as usual.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -12,30 +14,38 @@ import { pathToFileURL } from 'node:url';
 import {
   blockReason,
   commitFlags,
+  descriptionFindings,
   gateFindings,
+  ghPrOps,
   gitOps,
   isBaseBranch,
+  parseAddedLines,
   pushRecord,
   pushTarget,
   repeatedFindings,
+  retiredWords,
   scopedRepo,
+  shellBodyText,
 } from './checks.mjs';
 
 const RULES_TTL_MS = 6 * 60 * 60 * 1000;
 const RULES_SOURCE = 'repos/NLH-OS/api/contents/gate/rules.mjs?ref=main';
+const NAMES_SOURCE = 'repos/NLH-GOVERNANCE/decisions/contents/rules/pr-review.md?ref=main';
 const TEST_TIMEOUT_MS = 240_000;
 const stateDir = process.env.NLH_GATE_DIR || join(homedir(), '.tinh-nlh', 'gate');
 const repeated = JSON.parse(readFileSync(new URL('./repeated-errors.json', import.meta.url), 'utf8'));
 
-function run(file, args, timeout = 15_000) {
+function run(file, args, timeout = 15_000, maxBuffer = 1024 * 1024) {
   try {
-    return execFileSync(file, args, { cwd: homedir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, windowsHide: true }).trim();
+    return execFileSync(file, args, { cwd: homedir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout, maxBuffer, windowsHide: true }).trim();
   } catch {
     return null;
   }
 }
 // git runs with -C, not in the repo folder: on Windows a git.exe inside the repo would be found before PATH.
 const git = (dir, ...args) => run('git', ['-C', dir, '-c', 'core.quotepath=off', ...args]);
+// A big diff must not silently turn a check off (the default 1 MB buffer would): up to 64 MB, 60 s.
+const gitBig = (dir, ...args) => run('git', ['-C', dir, '-c', 'core.quotepath=off', ...args], 60_000, 64 * 1024 * 1024);
 
 // git diff --name-status -z: status, path (renames and copies: status, old path, new path).
 function nameStatus(cwd, ...args) {
@@ -86,6 +96,32 @@ async function loadRules() {
   } catch {
     return null;
   }
+}
+
+// Words D-0067 retires (R19): read from rules/pr-review.md of NLH-GOVERNANCE/decisions, cached like the rules file. No
+// text, no words: the two name checks stay silent rather than guess a list.
+function loadRetiredWords() {
+  const file = join(stateDir, 'pr-review.md');
+  const age = existsSync(file) ? Date.now() - statSync(file).mtimeMs : Infinity;
+  if (age > RULES_TTL_MS) {
+    const text = run('gh', ['api', '-H', 'Accept: application/vnd.github.raw', NAMES_SOURCE]);
+    if (text && /R19/.test(text)) {
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(file, text);
+    }
+  }
+  try {
+    return existsSync(file) ? retiredWords(readFileSync(file, 'utf8')) : [];
+  } catch {
+    return [];
+  }
+}
+
+// True only when git says the branch cannot merge into the base cleanly (merge-tree exits 1); git older than 2.38, or any
+// other failure, is "unknown" and passes.
+function conflictsWith(root, base, source) {
+  const result = spawnSync('git', ['-C', root, 'merge-tree', '--write-tree', '--no-messages', base, source], { encoding: 'utf8', timeout: 20_000, windowsHide: true });
+  return result.status === 1;
 }
 
 function openPullRequest(repo, branch) {
@@ -176,7 +212,15 @@ async function checkOp({ op, dir, args }, pending, now) {
   if (op === 'push') files = [...range, ...extraFiles];
   const commitCount = (hasBase ? Number(git(root, 'rev-list', '--count', '--no-merges', `${remoteBase}..${source}`)) || 0 : 0) + extraCount;
   const dates = hasBase ? (git(root, 'log', '--format=%aI', `${remoteBase}..${source}`) ?? '').split('\n').filter(Boolean) : [];
+  const retired = loadRetiredWords();
+  // A merge commit brings in lines other people wrote: they are not this author's new text, so nothing is scanned.
+  const diffArgs = op === 'push' ? (hasBase ? [`${remoteBase}...${source}`] : null) : merging ? null : ['--cached'];
+  const diff = retired.length && diffArgs ? gitBig(root, 'diff', '-U0', '--no-color', '--no-ext-diff', ...diffArgs) : null;
   const facts = {
+    repo,
+    retired,
+    addedLines: parseAddedLines(diff),
+    conflictsWithBase: op === 'push' && hasBase && !isBaseBranch(branch) ? conflictsWith(root, remoteBase, source) : null,
     op,
     branch,
     base,
@@ -215,14 +259,109 @@ async function checkOp({ op, dir, args }, pending, now) {
   return { op, root, repo, branch, remote, sha, checks, findings, rulesMissing: !rules };
 }
 
+// The branch a PR will merge into when gh pr create names none: the repo's default branch, else dev when origin has it.
+function defaultBase(repo, root) {
+  const name = run('gh', ['repo', 'view', repo, '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name']);
+  if (name) return name;
+  return root && git(root, 'rev-parse', '--verify', '--quiet', 'origin/dev') ? 'dev' : 'main';
+}
+
+// A PR description about to be sent (ticket 8605c42a): gh pr create, gh pr edit with --body or --body-file, or a GitHub
+// tool creating or updating a PR. The description rules run on that text before GitHub's gate sees it. Commit count,
+// files and "already in dev" come from the local clone when it is the same repo; otherwise they stay unknown and the
+// checks that need them are skipped. A description the shell builds at run time (a variable, stdin) is not checked.
+async function checkDescriptionOp(spec, now) {
+  const root = spec.dir ? git(spec.dir, 'rev-parse', '--show-toplevel') : null;
+  const local = root ? scopedRepo(git(root, 'remote', 'get-url', 'origin')) : null;
+  const repo = spec.repo ? scopedRepo(/github\.com/i.test(spec.repo) ? spec.repo : `github.com/${spec.repo}`) : local;
+  if (!repo) return null;
+  let body = spec.body;
+  if (body == null && spec.bodyFile != null) {
+    const file = spec.bodyFile === '-' ? null : shellBodyText(spec.bodyFile);
+    try {
+      body = file ? readFileSync(resolve(spec.dir ?? homedir(), file), 'utf8') : null;
+    } catch {
+      body = null;
+    }
+  }
+  if (typeof body !== 'string') return null;
+
+  const sameClone = root && local === repo;
+  const current = sameClone ? git(root, 'rev-parse', '--abbrev-ref', 'HEAD') : null;
+  let head = spec.head ? String(spec.head).replace(/^[^:]*:/, '') : current && current !== 'HEAD' ? current : null;
+  let base = spec.base;
+  if (spec.edit) {
+    const out = run('gh', ['pr', 'view', ...(spec.selector || head ? [String(spec.selector || head)] : []), '-R', repo, '--json', 'baseRefName,headRefName']);
+    let pr;
+    try {
+      pr = JSON.parse(out);
+    } catch {
+      return null;
+    }
+    base ??= pr.baseRefName;
+    head = pr.headRefName;
+  }
+  base ??= defaultBase(repo, root);
+
+  let commitCount = null;
+  let files = [];
+  let headInDev = true;
+  const ref = sameClone && head ? [`origin/${head}`, head].find((name) => git(root, 'rev-parse', '--verify', '--quiet', `${name}^{commit}`)) : null;
+  if (ref && git(root, 'rev-parse', '--verify', '--quiet', `origin/${base}`)) {
+    commitCount = Number(git(root, 'rev-list', '--count', '--no-merges', `origin/${base}..${ref}`)) || 0;
+    files = nameStatus(root, `origin/${base}...${ref}`);
+    // A release branch into main (R12): "already in dev" is read against origin/dev, so bring it up to date first; a stale
+    // local copy would block a round pinned to a fresh dev commit. No network: the old copy is used.
+    if (base === 'main' && head !== 'dev') run('git', ['-C', root, 'fetch', '--quiet', 'origin', 'dev'], 20_000);
+    if (git(root, 'rev-parse', '--verify', '--quiet', 'origin/dev')) {
+      headInDev = spawnSync('git', ['-C', root, 'merge-base', '--is-ancestor', ref, 'origin/dev'], { timeout: 15_000, windowsHide: true }).status === 0;
+    }
+  }
+
+  const rules = await loadRules();
+  let findings;
+  try {
+    findings = descriptionFindings(rules, repeated, { body, base, head: head ?? '', headInDev, commitCount, files, now });
+  } catch {
+    // A rules file this hook cannot run: the local checks still run, Review's gate checks the rest on the PR.
+    findings = descriptionFindings(null, repeated, { body, base, head: head ?? '', headInDev, commitCount, files, now });
+  }
+  return { op: spec.op, repo, branch: head ?? '', findings };
+}
+
+// A GitHub tool call (create_pull_request, update_pull_request) as a description to check; an update without a new
+// body changes no description.
+function fromGithubTool(tool, args, cwd) {
+  if (typeof args.body !== 'string') return null;
+  return {
+    op: tool,
+    edit: tool === 'update_pull_request',
+    dir: cwd,
+    repo: args.owner && args.repo ? `${args.owner}/${args.repo}` : null,
+    base: typeof args.base === 'string' && args.base ? args.base : null,
+    head: typeof args.head === 'string' && args.head ? args.head : null,
+    selector: args.pullNumber ?? args.pull_number ?? null,
+    body: args.body,
+  };
+}
+
 async function pre(input) {
-  const command = String(input.tool_input?.command ?? '');
-  if (!/\bgit\b/.test(command) || !/\b(commit|push)\b/.test(command)) return;
   const cwd = input.cwd || process.cwd();
-  const ops = gitOps(command, cwd, (from, to) => resolve(from, to.replace(/^~(?=$|[\\/])/, homedir())));
-  const pending = new Map();
   const now = Date.now();
   const results = [];
+  const tool = String(input.tool_name ?? '').match(/__(create_pull_request|update_pull_request)$/);
+  const command = tool ? '' : String(input.tool_input?.command ?? '');
+  const specs = tool ? [fromGithubTool(tool[1], input.tool_input ?? {}, cwd)] : [];
+  const join = (from, to) => resolve(from, to.replace(/^~(?=$|[\\/])/, homedir()));
+  if (/\bgh\b/.test(command) && /\bpr\b/.test(command)) {
+    specs.push(...ghPrOps(command, cwd, join).map((op) => ({ ...op, body: op.body == null ? null : shellBodyText(op.body) })));
+  }
+  for (const spec of specs.filter(Boolean)) {
+    const result = await checkDescriptionOp(spec, now);
+    if (result) results.push(result);
+  }
+  const ops = /\bgit\b/.test(command) && /\b(commit|push)\b/.test(command) ? gitOps(command, cwd, join) : [];
+  const pending = new Map();
   for (const op of ops) {
     const result = await checkOp(op, pending, now);
     if (result) results.push(result);

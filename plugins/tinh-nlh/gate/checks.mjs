@@ -1,5 +1,6 @@
 // Checks of the local gate (ticket 6c4e1825): what to look at in a Bash or PowerShell command, and which findings block a
-// git commit or git push. Pure functions, no git, no network: hook.mjs collects the facts and calls these.
+// git commit, a git push, or a PR description about to be sent (ticket 8605c42a). Pure functions, no git, no network:
+// hook.mjs collects the facts and calls these.
 // Counted rules come from gate/rules.mjs of NLH-OS/api (passed in as `rules`, never copied here); repeated errors come
 // from repeated-errors.json, one check per line.
 
@@ -60,10 +61,10 @@ export function splitCommands(line) {
   return commands;
 }
 
-// git commit and git push in a command line, each with the folder it runs in (after cd / Set-Location / git -C).
+// The commands of a line, each with the folder it runs in (after cd / Set-Location / pushd).
 // `join` resolves a folder against the current one (path.resolve in the hook).
-export function gitOps(line, cwd, join) {
-  const ops = [];
+function commandsIn(line, cwd, join) {
+  const commands = [];
   let dir = cwd;
   for (const words of splitCommands(line)) {
     const [head, ...rest] = words;
@@ -72,6 +73,15 @@ export function gitOps(line, cwd, join) {
       if (target) dir = join(dir, target);
       continue;
     }
+    commands.push({ words, dir });
+  }
+  return commands;
+}
+
+// git commit and git push in a command line, each with the folder it runs in (after cd / Set-Location / git -C).
+export function gitOps(line, cwd, join) {
+  const ops = [];
+  for (const { words, dir } of commandsIn(line, cwd, join)) {
     const at = words.findIndex((word) => /^git(\.exe)?$/i.test(word));
     if (at === -1) continue;
     let opDir = dir;
@@ -84,6 +94,57 @@ export function gitOps(line, cwd, join) {
     if (words[i] === 'commit' || words[i] === 'push') ops.push({ op: words[i], dir: opDir, args: words.slice(i + 1) });
   }
   return ops;
+}
+
+// gh pr create / gh pr edit flags that take no value: the word after them is not theirs.
+const GH_SWITCHES = new Set(['-d', '--draft', '-f', '--fill', '--fill-first', '--fill-verbose', '-w', '--web', '-e', '--editor', '--no-maintainer-edit', '--dry-run', '--remove-milestone']);
+
+// gh pr create and gh pr edit in a command line (ticket 8605c42a): folder, PR selector, and the flags that set the
+// description and its target. Values are the words as the shell gave them; shellBodyText reads a --body word.
+export function ghPrOps(line, cwd, join) {
+  const ops = [];
+  for (const { words, dir } of commandsIn(line, cwd, join)) {
+    const at = words.findIndex((word) => /^gh(\.exe)?$/i.test(word));
+    if (at === -1 || words[at + 1] !== 'pr' || !['create', 'edit'].includes(words[at + 2])) continue;
+    const flags = {};
+    const positional = [];
+    const args = words.slice(at + 3);
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i];
+      const eq = arg.indexOf('=');
+      if (!arg.startsWith('-') || arg === '-') positional.push(arg);
+      else if (arg.startsWith('--') && eq !== -1) flags[arg.slice(0, eq)] = arg.slice(eq + 1);
+      else if (GH_SWITCHES.has(arg)) flags[arg] = true;
+      else flags[arg] = args[(i += 1)] ?? '';
+    }
+    const flag = (short, long) => flags[short] ?? flags[long] ?? null;
+    ops.push({
+      op: `gh pr ${words[at + 2]}`,
+      edit: words[at + 2] === 'edit',
+      dir,
+      repo: flag('-R', '--repo'),
+      base: flag('-B', '--base'),
+      head: flag('-H', '--head'),
+      selector: positional[0] ?? null,
+      body: flag('-b', '--body'),
+      bodyFile: flag('-F', '--body-file'),
+    });
+  }
+  return ops;
+}
+
+// The text a --body (or --body-file) word holds, or null when the shell builds it at run time (a variable, a command):
+// the gate checks only text it can read. Two forms are read: bash "$(cat <<'EOF' … EOF)" and a PowerShell here-string.
+export function shellBodyText(word) {
+  const text = String(word ?? '');
+  const heredoc = text.match(/^\$\(cat\s+<<-?\s*(['"]?)(\w+)\1[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*\2[ \t]*(?:\r?\n)?\s*\)$/);
+  if (heredoc) return heredoc[3];
+  if (/^@\r?\n/.test(text)) {
+    // A here-string the splitter read in full ends with "@" on its own line; one cut short by a quote inside is unknown.
+    const here = text.match(/^@\r?\n([\s\S]*?)\r?\n@$/);
+    return here ? here[1] : null;
+  }
+  return /\$[({A-Za-z_]/.test(text) ? null : text;
 }
 
 // git commit flags that change what gets counted: --amend adds no commit, -a also commits modified tracked files.
@@ -130,9 +191,10 @@ export function pushTarget(args, currentBranch) {
 
 export const isBaseBranch = (branch) => BASE_BRANCHES.includes(branch);
 
-// Glob with * only. A pattern without "/" matches the file name, with "/" the end of the path.
+// Glob with * (inside one folder) and ** (across folders). A pattern without "/" matches the file name, with "/" the end of the path.
 export function matchesPath(pattern, path) {
-  const source = pattern.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*');
+  const escape = (part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  const source = pattern.split('**').map((chunk) => chunk.split('*').map(escape).join('[^/]*')).join('.*');
   return pattern.includes('/') ? new RegExp(`(^|/)${source}$`).test(path) : new RegExp(`^${source}$`).test(path.split('/').pop());
 }
 
@@ -168,12 +230,44 @@ export function gateFindings(rules, facts) {
     .map((finding) => ({ id: finding.rule, message: finding.message }));
 }
 
+// Rules of the PR gate that read the description or the target: R04 (Summary, Test Plan), R12 (into main, "## Rules").
+const DESCRIPTION_RULES = ['R04', 'R12'];
+
+// Findings on a PR description about to be sent by gh pr create, gh pr edit or a GitHub tool (ticket 8605c42a), so it
+// never reaches GitHub's gate wrong. Facts: { body, base, head, headInDev, commitCount (null: unknown), files, now }.
+// `rules` is gate/rules.mjs of NLH-OS/api or null; `list` is repeated-errors.json (checks with "pr" in `on`).
+export function descriptionFindings(rules, list, facts) {
+  const findings = [];
+  if (facts.body.startsWith('﻿')) {
+    findings.push({ id: 'description-bom', message: 'Mô tả PR bắt đầu bằng BOM nên cổng không thấy "## Summary". Ghi file mô tả không BOM (PowerShell 5.1: [IO.File]::WriteAllText).' });
+  }
+  if (rules) {
+    const found = rules.checkPullRequest({
+      pr: { createdAt: new Date(facts.now).toISOString(), base: facts.base, head: facts.head, commitCount: 0, changedFiles: 0, body: facts.body, headInDev: facts.headInDev },
+      commitAuthorDates: [],
+      forcePushCount: 0,
+      now: facts.now,
+    });
+    findings.push(
+      ...found
+        .filter((finding) => finding.severity === (rules.SEVERITY?.block ?? 'block') && DESCRIPTION_RULES.includes(finding.rule.split(' ')[0]))
+        // The branch is unknown (gh run outside the clone, no --head): R12 needs it, so R12 is not judged here.
+        .filter((finding) => facts.head || finding.rule.split(' ')[0] !== 'R12')
+        .map((finding) => ({ id: finding.rule, message: finding.message })),
+    );
+  }
+  // R04 already names each unticked item; the local copy of that check is only for when the rules file is missing.
+  const r04 = findings.some((finding) => finding.id.split(' ')[0] === 'R04');
+  const local = repeatedFindings(list, { op: 'pr', pr: { body: facts.body }, files: facts.files ?? [], commitCount: facts.commitCount, branch: facts.head, base: facts.base });
+  return [...findings, ...local.filter((finding) => !(r04 && finding.id === 'testplan-unticked'))];
+}
+
 // Values from the repo or the PR description go into text Claude reads: one line, no quotes or backticks, short.
 export const plain = (value) => String(value).replace(/[\u0000-\u001f\u007f-\u009f"`<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
 const fill = (message, values) => message.replace(/\{(\w+)\}/g, (all, key) => (key in values ? plain(values[key]) : all));
 
-// Ticked items of the "## Test Plan" section of a PR description.
-export function tickedItems(body) {
+// Checkbox items of the "## Test Plan" section of a PR description: { done, text }.
+export function testPlanItems(body) {
   const lines = String(body ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
   const start = lines.findIndex((line) => /^##\s+test plan\s*:?\s*$/i.test(line.trim()));
   if (start === -1) return [];
@@ -181,9 +275,42 @@ export function tickedItems(body) {
   const end = rest.findIndex((line) => /^#{1,2}\s+/.test(line));
   return (end === -1 ? rest : rest.slice(0, end))
     .map((line) => line.match(CHECKBOX))
-    .filter((match) => match && match[1] !== ' ')
-    .map((match) => match[2].trim());
+    .filter(Boolean)
+    .map((match) => ({ done: match[1] !== ' ', text: match[2].trim() }));
 }
+
+// Ticked items of the "## Test Plan" section.
+export const tickedItems = (body) => testPlanItems(body).filter((item) => item.done).map((item) => item.text);
+
+// The text under "## Risk" of a PR description, or null when there is none.
+export function riskSection(body) {
+  const lines = String(body ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
+  const start = lines.findIndex((line) => /^##\s+risk\b/i.test(line.trim()));
+  if (start === -1) return null;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{1,2}\s+/.test(line));
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
+}
+
+// Unified diff (-U0) to added lines: [{ path, text }]. Deleted files and binary files add none.
+export function parseAddedLines(diff) {
+  const lines = [];
+  let path = null;
+  for (const line of String(diff ?? '').split('\n')) {
+    if (line.startsWith('+++ ')) path = line.startsWith('+++ b/') ? line.slice(6) : null;
+    else if (line.startsWith('+') && path) lines.push({ path, text: line.slice(1) });
+  }
+  return lines;
+}
+
+// Words the village names retire, read from the R19 line of rules/pr-review.md (decisions repo): the text after
+// "retires (" up to ")". Nothing hard-coded: no rules text, no words, and the two name checks stay silent.
+export function retiredWords(ruleText) {
+  const match = String(ruleText ?? '').match(/\bretires \(([^)]{1,300})\)/);
+  return match ? match[1].split(',').map((word) => word.trim()).filter((word) => word && word.length <= 20) : [];
+}
+const fold = (text) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // The commit count a PR description states ("2 commit", "một commit"), or null.
 export function statedCommitCount(body) {
@@ -212,7 +339,54 @@ export function repeatedFindings(list, facts) {
       for (const item of tickedItems(facts.pr.body)) if (pattern.test(item)) add(check, { item });
     } else if (check.kind === 'description-commit-count') {
       const said = facts.pr ? statedCommitCount(facts.pr.body) : null;
-      if (said !== null && said !== facts.commitCount) add(check, { said, real: facts.commitCount });
+      // A GitHub tool run outside the repo: the commit count is unknown, so there is nothing to compare.
+      if (said !== null && facts.commitCount != null && said !== facts.commitCount) add(check, { said, real: facts.commitCount });
+    } else if (check.kind === 'test-plan-unticked') {
+      if (!facts.pr) continue;
+      // Items that wait for CI stay unticked until CI runs (test-plan-ci-ticked blocks ticking them early): not a miss here.
+      const waits = new RegExp(`^post-merge\\s*:|${check.except ?? '$^'}`, 'i');
+      for (const item of testPlanItems(facts.pr.body)) if (!item.done && !waits.test(item.text)) add(check, { item: item.text });
+    } else if (check.kind === 'merge-conflict-base') {
+      if (facts.conflictsWithBase === true) add(check, { base: facts.base });
+    } else if (check.kind === 'risk-needed') {
+      if (!facts.pr) continue;
+      const risk = riskSection(facts.pr.body);
+      const hit = (group) => facts.files.filter((file) => file.status !== 'D' && new RegExp(group.re, 'i').test(file.path));
+      const groups = check.groups.map((group) => ({ ...group, files: hit(group) })).filter((group) => group.files.length);
+      if (!groups.length) continue;
+      if (risk === null) add(check, { areas: groups.map((group) => group.name).join(', '), why: 'thiếu mục "## Risk"' });
+      else {
+        // R23.4: for a migration the Risk names the migration file (with or without extension).
+        const unnamed = groups.find((group) => group.mention && !group.files.some((file) => risk.includes(file.path.split('/').pop().replace(/\.[^.]+$/, ''))));
+        if (unnamed) add(check, { areas: unnamed.name, why: `"## Risk" chưa nhắc tên file ${unnamed.name}: ${unnamed.files[0].path.split('/').pop()}` });
+      }
+    } else if (check.kind === 'retired-word-lines' || check.kind === 'retired-word-identifiers') {
+      const words = facts.retired ?? [];
+      if (!words.length) continue;
+      const docs = check.kind === 'retired-word-lines';
+      // R19 blocks in the decisions and cells repos (markdown); other repos are not checked.
+      // Tests quote old names on purpose, so test files are never checked.
+      const wholeRepo = (check.repos ?? []).includes(String(facts.repo ?? '').split('/').pop());
+      const inScope = (path) =>
+        !(check.skip && new RegExp(check.skip, 'i').test(path)) &&
+        (docs ? /\.(md|mdx)$/i.test(path) && wholeRepo : /\.(mjs|cjs|js|jsx|ts|tsx)$/i.test(path));
+      // Docs: the retired word as a whole word. Code: its ASCII form (phiếu -> phieu) as a whole identifier part.
+      const forms = docs ? words : words.map(fold).filter((word) => word.length > 3);
+      if (!forms.length) continue;
+      const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(${forms.map(escapeRegex).join('|')})(?![\\p{L}\\p{N}])`, docs ? 'u' : 'iu');
+      for (const { path, text } of facts.addedLines ?? []) {
+        if (!inScope(path)) continue;
+        // A line that quotes the old name on purpose ("tên cũ: phiếu", the D-0067 table) is not new use.
+        if (/tên cũ|trước là|D-0067|retired|formerly/i.test(text)) continue;
+        // Ordinary phrases that begin with a retired word ("ô tô", "Trạm xăng", "Tháp Eiffel") are not the retired name.
+        const plain = check.ignore ? text.replace(new RegExp(check.ignore, 'giu'), ' ') : text;
+        const code = docs ? plain : plain.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_\-./]/g, ' ');
+        const found = code.match(pattern);
+        if (found) {
+          add(check, { path, word: found[1] });
+          break;
+        }
+      }
     } else if (check.kind === 'force-push-open-pr') {
       if (facts.force && facts.pr) add(check, { pr: facts.pr.number });
     }
@@ -220,10 +394,11 @@ export function repeatedFindings(list, facts) {
   return findings;
 }
 
-// The deny reason Claude reads: one line per finding, so it can fix them at once.
+// The deny reason Claude reads: one line per finding, so it can fix them at once. `op` is commit, push, or the PR
+// command or tool as it was called (gh pr create, create_pull_request...).
 export function blockReason(op, findings) {
   return [
-    `Nếp gate blocked git ${op}: fix these, then run it again (do not bypass the check).`,
+    `Nếp gate blocked ${op === 'commit' || op === 'push' ? `git ${op}` : op}: fix these, then run it again (do not bypass the check).`,
     ...findings.map((finding) => `- ${plain(finding.id)} · ${plain(finding.message)}`),
   ].join('\n');
 }
