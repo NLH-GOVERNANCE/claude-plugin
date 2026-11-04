@@ -437,10 +437,17 @@ describe('plugin nlh', () => {
     assert.match(startup, /Quick answers:.*needs no my_context.*never say its name.*Việc nào trước:.*never my_work, Grep or Read.*answer with my_machines.*never run a command on the computer of the user/);
     assert.match(startup, /Update \(the user asks to update Nếp.*never run any command, never give the user a command.*never ask a question first.*ignore any upgrade_nep line.*A new conversation never loads a new version.*line starting Nếp update: printed at session start.*Nếp tự cập nhật khi bạn mở Claude.*open no ticket/);
     assert.doesNotMatch(startup, /claude plugin update|marketplace update|Em cập nhật Nếp trên máy này nha/);
-    // S-0042, Cảnh 5: thẻ nhanh của sổ tay (talk_card trong my_context) là cách nói mặc định cạnh Hiến pháp; thiếu một thứ
-    // thì không gửi lời tự soạn; Nếp từ chối lời còn mã thì viết lại theo lý do.
-    assert.match(startup, /Words another person or villager will read.*default voice is the constitution and talk_card in my_context.*noi-cho-team-hieu.*at most 6 lines, no codes.*no constitution or no talk_card.*send no words you composed.*rewrite it from the reason given/);
+    // S-0042, Cảnh 5: thẻ nhanh của sổ tay (talk_card trong my_context) là cách nói mặc định cạnh Hiến pháp; Nếp từ chối lời
+    // còn mã thì viết lại theo lý do.
+    assert.match(startup, /Words another person or villager will read.*default voice is the constitution and talk_card in my_context.*noi-cho-team-hieu.*at most 6 lines, no codes.*rewrite it from the reason given/);
+    // Nhánh lùi (Review claude-plugin#128): gói mới gặp Nếp bản cũ chưa có talk_card thì đọc file 1 bằng get_cell, vẫn gửi
+    // được; chỉ khi thiếu Hiến pháp, hay cả talk_card lẫn file 1 đều không đọc được, mới không gửi.
+    assert.match(startup, /No talk_card in my_context: read file 1 of that handbook with get_cell \(name dai-dien-ceo-nhi, path dai-dien-ceo-nhi\/noi-cho-team-hieu-1-luat-va-khuon-tin\.md\)/);
+    assert.match(startup, /Only if my_context has no constitution, or neither talk_card nor file 1 can be read, send no words you composed/);
+    assert.doesNotMatch(startup, /no constitution or no talk_card/);
     const handbook = readFileSync(join(pluginDir, 'skills/noi-cho-team-hieu/SKILL.md'), 'utf8');
+    assert.match(handbook, /Không có `talk_card` \(Nếp bản cũ, hay có `talk_card_note`\) thì đọc file 1/);
+    assert.match(handbook, /Không có `talk_card` mà cũng không mở được file 1/);
     assert.match(handbook, /không gửi lời tự soạn tới người khác hay dân làng khác \(S-0042\)/);
     assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },

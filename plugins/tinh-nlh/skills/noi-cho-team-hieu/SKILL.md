@@ -7,7 +7,7 @@ description: Viết cho người đọc hiểu ngay theo sổ tay cách nói c�
 
 Trước khi viết thứ người khác sẽ đọc (tin, báo cáo, tóm tắt, mô tả PR, lời giải thích), mở sổ tay của chị Nhi và viết theo đó. Người dùng nói "không hiểu" hay "nói lại": đọc sổ tay rồi viết lại, không giải thích dài hơn.
 
-Thẻ nhanh của sổ tay (phần đọc là đủ cho tin thường) đã có sẵn trong `my_context`, trường `talk_card`: đó là cách nói mặc định. Cần giải thích điều khó hay tra chữ nghề thì mở thêm file. Sổ tay nằm trên Nếp, ô `dai-dien-ceo-nhi`, không chép vào gói này. Gọi `get_cell` với `name` là `dai-dien-ceo-nhi` và `path` lần lượt là:
+Thẻ nhanh của sổ tay (phần đọc là đủ cho tin thường) có sẵn trong `my_context`, trường `talk_card`: đó là cách nói mặc định. Không có `talk_card` (Nếp bản cũ, hay có `talk_card_note`) thì đọc file 1 dưới đây thay cho nó. Cần giải thích điều khó hay tra chữ nghề thì mở thêm file. Sổ tay nằm trên Nếp, ô `dai-dien-ceo-nhi`, không chép vào gói này. Gọi `get_cell` với `name` là `dai-dien-ceo-nhi` và `path` lần lượt là:
 - `dai-dien-ceo-nhi/noi-cho-team-hieu-1-luat-va-khuon-tin.md`: luật, khuôn tin và thẻ nhanh. Đọc file này trước, mọi lần.
 - `dai-dien-ceo-nhi/noi-cho-team-hieu-2-giai-thich-va-tieng-viet.md`: cách giải thích và tiếng Việt. Đọc khi phải giải thích điều khó.
 - `dai-dien-ceo-nhi/noi-cho-team-hieu-3-tu-dien-va-tu-hoc.md`: từ điển và bảng kiểm. Đọc khi còn nghi một chữ nghề, và để kiểm lần cuối trước khi gửi.
