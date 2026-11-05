@@ -561,6 +561,39 @@ describe('plugin nlh', () => {
     });
   });
 
+  // Việc 6a6dd54b: chị Nhi muốn mỗi việc làm web, sản phẩm tự đi qua 8 bước, ghi từng bước lên việc, chưa đạt thì dừng báo người.
+  describe('skill bang-kiem-san-pham', () => {
+    const path = join(pluginDir, 'skills/bang-kiem-san-pham/SKILL.md');
+    const skill = () => readFileSync(path, 'utf8').replace(/\r/g, '');
+
+    test('nạp khi nhận việc làm web, sản phẩm; skill nep dặn nạp trước khi viết code', () => {
+      const { description } = frontMatter(path);
+      for (const said of ['làm web', 'thêm tính năng', 'làm sản phẩm']) assert.ok(description.includes(said), said);
+      const nep = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+      assert.match(nep, /load the skill `bang-kiem-san-pham` before writing code/);
+    });
+
+    test('đủ 8 bước, mỗi bước có "Làm" và "Đạt khi"', () => {
+      const steps = skill().split('\n### ').slice(1);
+      assert.equal(steps.length, 8);
+      steps.forEach((step, i) => {
+        assert.ok(step.startsWith(`${i + 1}. `), `bước ${i + 1}`);
+        assert.match(step, /- Làm: /, `bước ${i + 1}`);
+        assert.match(step, /- Đạt khi/, `bước ${i + 1}`);
+      });
+      for (const term of ['MaxDiff', 'conjoint', 'ERRC', 'B = MAP', 'CSAT', 'next-best action', 'RAG', 'A/B test', 'AARRR', 'Dual-Track Agile']) {
+        assert.ok(skill().includes(term), term);
+      }
+    });
+
+    test('ghi lên việc đủ 8 mục pass, fail, na; chưa đạt thì dừng và hỏi người nhờ; không áp dụng thì ghi lý do, không dừng', () => {
+      assert.match(skill(), /kind `fact`.*`details\.checklist`.*"pass" \| "fail" \| "na".*đủ 8 mục/);
+      assert.match(skill(), /\*\*Có bước chưa đạt thì dừng\*\*.*`open_ticket` gửi đúng người đó \(`to`\), `parent_ticket_id` là việc này/);
+      assert.match(skill(), /\*\*Không áp dụng\*\* thì ghi lý do một dòng, không dừng/);
+      assert.match(skill(), /sửa chữ.*không áp dụng bước 1, 2, 7/);
+    });
+  });
+
   test('skill: câu đầu mỗi cuộc trò chuyện gọi my_context, trả lời "tôi đang làm gì dở" không tra thêm, giữ bảng mức nhạy', () => {
     const skill = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
     assert.match(frontMatter(join(pluginDir, 'skills/nep/SKILL.md')).description, /first turn of every conversation, including web and phone/);

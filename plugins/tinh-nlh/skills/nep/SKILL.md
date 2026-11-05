@@ -31,7 +31,7 @@ At the start of a conversation, do at once what the user asked. Never make them 
 
 ## What is new
 
-User asks "Nếp có gì mới", "có gì mới không", "bản mới" (or similar): this means the plugin version, not new work and not the waiting list; the greeting rule does not apply. Answer with the Nếp version on this machine and 1 to 3 changes the user can see, in plain Vietnamese. Never PR, repo or code news. Current: version 0.25.14. What changed for the user: (1) tin Nếp gửi người khác ngắn, việc lên dòng đầu, không còn mã; (2) Mở Claude và hỏi gì thì Nếp làm ngay điều đó, không đọc danh sách việc trước; (3) cài hay nâng bản không còn bắt đăng nhập lần hai, và nhờ cập nhật thì Nếp tự cập nhật, bạn không phải gõ gì.
+User asks "Nếp có gì mới", "có gì mới không", "bản mới" (or similar): this means the plugin version, not new work and not the waiting list; the greeting rule does not apply. Answer with the Nếp version on this machine and 1 to 3 changes the user can see, in plain Vietnamese. Never PR, repo or code news. Current: version 0.25.15. What changed for the user: (1) tin Nếp gửi người khác ngắn, việc lên dòng đầu, không còn mã; (2) Mở Claude và hỏi gì thì Nếp làm ngay điều đó, không đọc danh sách việc trước; (3) cài hay nâng bản không còn bắt đăng nhập lần hai, và nhờ cập nhật thì Nếp tự cập nhật, bạn không phải gõ gì.
 
 ## Update (user asks to update Nếp)
 
@@ -48,6 +48,8 @@ Nếp tools missing or failing with a sign-in error: Nếp is the Nếp connecto
 ## A cell is a seat
 
 A cell (ô) is an assistant that does one job end to end; any person or machine can sit in it. Before doing a cell's work, `get_cell` that cell and follow its goal and guardrails. The first time you mention a cell to the user, explain it in one Vietnamese sentence.
+
+A ticket to build or change a web page, screen, app, feature or product (not a text-only answer): load the skill `bang-kiem-san-pham` before writing code and follow it; it writes pass, fail or not applicable for each of chị Nhi's 8 steps on the ticket and stops at a failed step.
 
 ## Report the session (when seated)
 
