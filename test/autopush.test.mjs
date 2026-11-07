@@ -8,9 +8,15 @@ import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { addedLines, allowedRemote, autoPushOn, commitDirs, decideAutoPush, gateCommand, gateVerdict, isProtectedBranch, isSafePushArgs, looksLikeKey, pushArgs, redact, runAutoPush, secretFindings, transportViolations } from '../plugins/tinh-nlh/hooks/autopush.mjs';
+import { addedLines, allowedRemote, autoPushOn, commitDirs, decideAutoPush, gateCommand, gateVerdict, isProtectedBranch, isSafePushArgs, looksLikeKey, pushArgs, redact, transportEnvNames, runAutoPush, secretFindings, transportViolations } from '../plugins/tinh-nlh/hooks/autopush.mjs';
 import { lsRemote, pushFacts, repoFacts } from '../plugins/tinh-nlh/hooks/autopush-git.mjs';
 import { dataDirs, localSchedules, scheduleFiles, summarizeSchedules } from '../plugins/tinh-nlh/hooks/local-schedules.mjs';
+
+// Bài kiểm kín: không đọc cấu hình git của máy chạy (hook coi mọi cấu hình lạ là đổi đường tới GitHub). Trỏ HOME về thư mục rỗng.
+const isolatedHome = mkdtempSync(join(tmpdir(), 'nlh-home-'));
+for (const name of ['HOME', 'USERPROFILE', 'XDG_CONFIG_HOME']) process.env[name] = isolatedHome;
+// Biến môi trường đổi đường tới GitHub (proxy, chứng chỉ, GIT_*) của máy chạy cũng bị hook từ chối: bỏ khỏi tiến trình thử.
+for (const name of Object.keys(process.env)) if (transportEnvNames({ [name]: 'x' }).length) delete process.env[name];
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const hook = join(root, 'plugins/tinh-nlh/hooks/autopush-hook.mjs');
