@@ -437,9 +437,17 @@ describe('plugin nlh', () => {
     assert.match(startup, /Quick answers:.*needs no my_context.*never say its name.*Việc nào trước:.*never my_work, Grep or Read.*answer with my_machines.*never run a command on the computer of the user/);
     assert.match(startup, /Update \(the user asks to update Nếp.*never run any command, never give the user a command.*never ask a question first.*ignore any upgrade_nep line.*A new conversation never loads a new version.*line starting Nếp update: printed at session start.*Nếp tự cập nhật khi bạn mở Claude.*open no ticket/);
     assert.doesNotMatch(startup, /claude plugin update|marketplace update|Em cập nhật Nếp trên máy này nha/);
-    // S-0042: lời cho người khác theo Hiến pháp và sổ tay; thiếu một thứ thì không gửi lời tự soạn.
-    assert.match(startup, /Words another person or villager will read.*Nếp constitution in my_context.*handbook noi-cho-team-hieu.*If either cannot be loaded, send no words you composed/);
+    // S-0042, Cảnh 5: thẻ nhanh của sổ tay (talk_card trong my_context) là cách nói mặc định cạnh Hiến pháp; Nếp từ chối lời
+    // còn mã thì viết lại theo lý do.
+    assert.match(startup, /Words another person or villager will read.*default voice is the constitution and talk_card in my_context.*noi-cho-team-hieu.*at most 6 lines, no codes.*rewrite it from the reason given/);
+    // Nhánh lùi (Review claude-plugin#128): gói mới gặp Nếp bản cũ chưa có talk_card thì đọc file 1 bằng get_cell, vẫn gửi
+    // được; chỉ khi thiếu Hiến pháp, hay cả talk_card lẫn file 1 đều không đọc được, mới không gửi.
+    assert.match(startup, /No talk_card in my_context: read file 1 of that handbook with get_cell \(name dai-dien-ceo-nhi, path dai-dien-ceo-nhi\/noi-cho-team-hieu-1-luat-va-khuon-tin\.md\)/);
+    assert.match(startup, /Only if my_context has no constitution, or neither talk_card nor file 1 can be read, send no words you composed/);
+    assert.doesNotMatch(startup, /no constitution or no talk_card/);
     const handbook = readFileSync(join(pluginDir, 'skills/noi-cho-team-hieu/SKILL.md'), 'utf8');
+    assert.match(handbook, /Không có `talk_card` \(Nếp bản cũ, hay có `talk_card_note`\) thì đọc file 1/);
+    assert.match(handbook, /Không có `talk_card` mà cũng không mở được file 1/);
     assert.match(handbook, /không gửi lời tự soạn tới người khác hay dân làng khác \(S-0042\)/);
     assert.deepEqual(hooks.UserPromptSubmit.flatMap((group) => group.hooks).filter((hook) => hook.type === 'command'), [
       { type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/correction.mjs'], timeout: 5 },
@@ -550,6 +558,39 @@ describe('plugin nlh', () => {
       assert.match(skill(), /ticket `07edc527-096c-499b-a984-6df035ed4642`, kind `fact`/);
       assert.match(skill(), /"drive_op": "find" \| "store" \| "move"/);
       assert.match(skill(), /never file names or content/);
+    });
+  });
+
+  // Việc 6a6dd54b: chị Nhi muốn mỗi việc làm web, sản phẩm tự đi qua 8 bước, ghi từng bước lên việc, chưa đạt thì dừng báo người.
+  describe('skill bang-kiem-san-pham', () => {
+    const path = join(pluginDir, 'skills/bang-kiem-san-pham/SKILL.md');
+    const skill = () => readFileSync(path, 'utf8').replace(/\r/g, '');
+
+    test('nạp khi nhận việc làm web, sản phẩm; skill nep dặn nạp trước khi viết code', () => {
+      const { description } = frontMatter(path);
+      for (const said of ['làm web', 'thêm tính năng', 'làm sản phẩm']) assert.ok(description.includes(said), said);
+      const nep = readFileSync(join(pluginDir, 'skills/nep/SKILL.md'), 'utf8');
+      assert.match(nep, /load the skill `bang-kiem-san-pham` before writing code/);
+    });
+
+    test('đủ 8 bước, mỗi bước có "Làm" và "Đạt khi"', () => {
+      const steps = skill().split('\n### ').slice(1);
+      assert.equal(steps.length, 8);
+      steps.forEach((step, i) => {
+        assert.ok(step.startsWith(`${i + 1}. `), `bước ${i + 1}`);
+        assert.match(step, /- Làm: /, `bước ${i + 1}`);
+        assert.match(step, /- Đạt khi/, `bước ${i + 1}`);
+      });
+      for (const term of ['MaxDiff', 'conjoint', 'ERRC', 'B = MAP', 'CSAT', 'next-best action', 'RAG', 'A/B test', 'AARRR', 'Dual-Track Agile']) {
+        assert.ok(skill().includes(term), term);
+      }
+    });
+
+    test('ghi lên việc đủ 8 mục pass, fail, na; chưa đạt thì dừng và hỏi người nhờ; không áp dụng thì ghi lý do, không dừng', () => {
+      assert.match(skill(), /kind `fact`.*`details\.checklist`.*"pass" \| "fail" \| "na".*đủ 8 mục/);
+      assert.match(skill(), /\*\*Có bước chưa đạt thì dừng\*\*.*`open_ticket` gửi đúng người đó \(`to`\), `parent_ticket_id` là việc này/);
+      assert.match(skill(), /\*\*Không áp dụng\*\* thì ghi lý do một dòng, không dừng/);
+      assert.match(skill(), /sửa chữ.*không áp dụng bước 1, 2, 7/);
     });
   });
 
