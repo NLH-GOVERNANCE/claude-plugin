@@ -607,13 +607,14 @@ describe('plugin nlh', () => {
     assert.match(skill, /When Loa sends a message into this session .*open the ticket with `show_ticket`, `claim` it if it is still waiting/);
   });
 
-  test('luật 22: hook đầu phiên và skill dặn làm ngay điều người dùng hỏi, tra lặng lẽ, việc chờ chỉ một dòng cuối hay khi được hỏi, tối đa 3 việc', () => {
+  test('luật 22: hook đầu phiên và skill dặn làm ngay điều người dùng hỏi, tra lặng lẽ, không nhắc việc chờ, chỉ kể khi được hỏi, tối đa 3 việc', () => {
     const { hooks } = readJson('plugins/tinh-nlh/hooks/hooks.json');
     const line = hooks.SessionStart.find((group) => group.matcher === 'startup').hooks[0].command;
     assert.match(line, /do at once what the user asked; never make them wait for a lookup before the first words/);
     assert.match(line, /silently/);
-    assert.match(line, /do not tell the user what is waiting before the answer/);
-    assert.match(line, /add exactly one line at the end, naming it by its title/);
+    // Việc a82b163b: không nhắc việc chờ trong câu trả lời, kể cả một dòng cuối; Nếp tự báo người.
+    assert.match(line, /never remind the user of waiting work in an answer, not even one line at the end/);
+    assert.doesNotMatch(line, /add exactly one line at the end/);
     assert.match(line, /at most 3 items/);
     assert.match(line, /do not call save_chat per turn/);
     // Câu cũ ép kể việc chờ ngay đầu phiên đã bỏ.
@@ -622,7 +623,8 @@ describe('plugin nlh', () => {
     const skill = readFileSync(skillPath, 'utf8');
     assert.match(skill, /do at once what the user asked\. Never make them wait for a lookup before the first words/);
     assert.match(skill, /Do not tell the user what is waiting before the answer/);
-    assert.match(skill, /add exactly one line at the end, naming it by its title/);
+    assert.match(skill, /Never remind the user of waiting work in an answer, not even one line at the end/);
+    assert.doesNotMatch(skill, /add exactly one line at the end/);
     assert.match(skill, /at most 3 items, the ones that need them first/);
     assert.doesNotMatch(skill, /Hôm nay chưa có việc chờ bạn/);
     // "Nếp có gì mới": bản trong skill khớp bản gói, để câu trả lời không nói bản cũ.
