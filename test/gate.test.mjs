@@ -162,6 +162,20 @@ describe('cổng trên máy: lỗi đã lặp (repeated-errors.json)', () => {
     assert.deepEqual(tickedItems(body('- [x] a\n- [ ] b')), ['a']);
   });
 
+  test('Test Plan: lệnh kiểm chạy tay (pnpm run check) không phải chờ CI; mục chờ CI thật vẫn bị bắt (anh Sơn 24/11, nep-backend 2128)', () => {
+    const ticked = (item) => only('test-plan-ci-ticked', { pr: pr(`## Test Plan\n${item}\n`) });
+    assert.deepEqual(ticked('- [x] `pnpm run check` (tsc, biome, depcruise, cỡ file) xanh.'), []);
+    assert.deepEqual(ticked('- [x] pnpm run check xanh'), []);
+    assert.deepEqual(ticked('- [x] check mobile bằng tay'), []);
+    assert.deepEqual(ticked('- [x] checks xanh trên commit mới'), ['test-plan-ci-ticked']);
+    assert.deepEqual(ticked('- [x] check pass trên PR'), ['test-plan-ci-ticked']);
+    assert.deepEqual(ticked('- [x] GitHub Actions chạy hết'), ['test-plan-ci-ticked']);
+    // Hai luật dùng cùng một mẫu: mục nào không được tick sớm thì để trống cũng không bị bắt, và ngược lại.
+    const unticked = (item) => only('testplan-unticked', { pr: pr(`## Test Plan\n${item}\n`) });
+    assert.deepEqual(unticked('- [ ] pnpm run check xanh'), ['testplan-unticked']);
+    assert.deepEqual(unticked('- [ ] check pass trên PR'), []);
+  });
+
   test('số commit ghi trong mô tả khác thực tế thì chặn; khớp hay không ghi thì qua', () => {
     assert.equal(statedCommitCount('Một commit cộng một commit merge dev'), 1);
     assert.equal(statedCommitCount('PR có 2 commit'), 2);
