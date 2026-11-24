@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { decide, ensureAutoUpdate, ensureLoa, FETCH_RUNNER, fetchInBackground, installedVersion, MARKETPLACE, newer, PLUGIN, restartSentence, runnableClaude, TRY_GAP_MS } from '../plugins/tinh-nlh/hooks/self-update.mjs';
+import { decide, ensureAutoUpdate, FETCH_RUNNER, fetchInBackground, installedVersion, MARKETPLACE, newer, PLUGIN, restartSentence, runnableClaude, TRY_GAP_MS } from '../plugins/tinh-nlh/hooks/self-update.mjs';
 
 const hook = join(fileURLToPath(new URL('..', import.meta.url)), 'plugins/tinh-nlh/hooks/self-update.mjs');
 const temp = (name) => mkdtempSync(join(tmpdir(), `${name}-`));
@@ -124,29 +124,5 @@ describe('self-update', () => {
     writeFileSync(file, '{ not json');
     assert.equal(ensureAutoUpdate(home), false);
     assert.equal(readFileSync(file, 'utf8'), '{ not json');
-  });
-
-  test('Loa tự bật lại (Windows): chỉ khi máy đã cài Loa, không trong phiên của Loa; làm lại khoá khởi động một lần cho mỗi bản; máy khác Windows thì im', () => {
-    const home = temp('su-loa');
-    const calls = [];
-    const spawnFn = (command, args, options) => (calls.push([command, args.join(' '), options.detached, options.windowsHide]), { on: () => {}, unref: () => calls.push('unref') });
-    const base = { home, env: { SystemRoot: 'C:\\Windows' }, platform: 'win32', running: '0.25.9', state: {}, spawnFn };
-    assert.equal(ensureLoa(base).started, false, 'chưa cài Loa');
-    const speaker = join(home, '.tinh-nlh', 'speaker');
-    mkdirSync(speaker, { recursive: true });
-    for (const name of ['tower-key.dpapi', 'loa.vbs', 'start.ps1']) writeFileSync(join(speaker, name), 'x');
-    const first = ensureLoa(base);
-    assert.equal(first.started, true);
-    assert.equal(first.state.loginFor, '0.25.9');
-    assert.match(calls[0][1], /start\.ps1.* -RegisterOnly & .*wscript\.exe.*loa\.vbs.* login/);
-    assert.deepEqual([calls[0][2], calls[0][3]], [true, true]);
-    calls.length = 0;
-    const second = ensureLoa({ ...base, state: first.state });
-    assert.equal(second.started, true);
-    assert.doesNotMatch(calls[0][1], /RegisterOnly/);
-    assert.match(calls[0][1], /loa\.vbs.* login/);
-    assert.equal(ensureLoa({ ...base, platform: 'darwin' }).started, false);
-    assert.equal(ensureLoa({ ...base, env: { NLH_TOWER: '1' } }).started, false, 'không tự gọi trong phiên của Loa');
-    assert.equal(ensureLoa({ ...base, spawnFn: () => { throw new Error('no'); } }).started, false);
   });
 });

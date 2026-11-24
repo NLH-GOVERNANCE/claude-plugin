@@ -9,8 +9,7 @@
 // 3. Claude never runs update commands itself (in the Claude app all three failed and printed English progress): every session
 //    starts with one status line, and "update Nếp" is answered from it.
 // 4. The marketplace is switched to auto-update (known_marketplaces.json), so the Claude app fetches new versions when it opens.
-// 5. Windows: Loa (when set up on this machine) is started and its login start is made again, so it comes back after a restart
-//    even when the plugin was upgraded without running setup.
+// (Loa is no longer started here: hooks/loa-boot.mjs does it, 29/10.)
 // Failures are silent; the files are ~/.tinh-nlh/self-update.json and ~/.claude/plugins/installed_plugins.json.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -55,25 +54,6 @@ export function ensureAutoUpdate(home = homedir()) {
     return true;
   } catch {
     return false;
-  }
-}
-
-// Windows: make the login start of Loa again (once per plugin version) and start Loa (a second one ends by itself).
-// Only where Loa was set up on this machine (its key and launcher exist); never inside Loa's own session.
-export function ensureLoa({ home = homedir(), env = process.env, platform = process.platform, running, state, spawnFn = spawn }) {
-  if (platform !== 'win32' || env.NLH_TOWER === '1') return { state, started: false };
-  const dir = join(home, '.tinh-nlh', 'speaker');
-  if (!existsSync(join(dir, 'tower-key.dpapi')) || !existsSync(join(dir, 'loa.vbs')) || !existsSync(join(dir, 'start.ps1'))) return { state, started: false };
-  const system = join(env.SystemRoot || 'C:\\Windows', 'System32');
-  const register = state.loginFor === running ? '' : `"${join(system, 'WindowsPowerShell', 'v1.0', 'powershell.exe')}" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${join(dir, 'start.ps1')}" -RegisterOnly & `;
-  const script = `${register}"${join(system, 'wscript.exe')}" "${join(dir, 'loa.vbs')}" login`;
-  try {
-    const child = spawnFn('cmd.exe', ['/d', '/s', '/c', `"${script}"`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
-    child.on?.('error', () => {});
-    child.unref?.();
-    return { state: { ...state, loginFor: running }, started: true };
-  } catch {
-    return { state, started: false };
   }
 }
 
@@ -157,9 +137,8 @@ export function main(env = process.env, write = (text) => process.stdout.write(t
   const claude = env.CLAUDE_CODE_EXECPATH && existsSync(env.CLAUDE_CODE_EXECPATH) ? runnableClaude(env.CLAUDE_CODE_EXECPATH) : '';
   const state = readState(file);
   const result = decide({ running, installed: installedVersion(), state, claude, now: Date.now() });
-  const loa = ensureLoa({ env, running, state: result.state });
   ensureAutoUpdate();
-  if (loa.state !== state) writeState(file, loa.state);
+  if (result.state !== state) writeState(file, result.state);
   if (result.fetch) fetchInBackground(claude);
   if (result.line) write(result.line);
 }
