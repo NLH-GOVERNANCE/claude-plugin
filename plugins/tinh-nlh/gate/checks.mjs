@@ -78,6 +78,14 @@ function commandsIn(line, cwd, join) {
   return commands;
 }
 
+// A Git Bash (MSYS, Cygwin) path /c/x, /cygdrive/c/x or /c as the Windows path C:/x, which node and git.exe understand.
+// Only on win32: elsewhere /c/x is a real folder. Other paths come back unchanged.
+export function gitPath(path, platform = process.platform) {
+  if (platform !== 'win32') return path;
+  const found = String(path).match(/^(?:\/cygdrive)?\/([A-Za-z])(?=\/|$)(.*)$/);
+  return found ? `${found[1].toUpperCase()}:${found[2] || '/'}` : path;
+}
+
 // git commit and git push in a command line, each with the folder it runs in (after cd / Set-Location / git -C).
 export function gitOps(line, cwd, join) {
   const ops = [];

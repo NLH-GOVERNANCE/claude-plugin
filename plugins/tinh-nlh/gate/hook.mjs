@@ -18,6 +18,7 @@ import {
   gateFindings,
   ghPrOps,
   gitOps,
+  gitPath,
   isBaseBranch,
   parseAddedLines,
   pushRecord,
@@ -164,7 +165,11 @@ function quickTests(root, tree) {
 
 async function checkOp({ op, dir, args }, pending, now) {
   const root = git(dir, 'rev-parse', '--show-toplevel');
-  if (!root) return null;
+  // No repo found for a git commit or push: fail closed. Letting it through would skip every check (ticket 819aa06b:
+  // a Git Bash path /c/... made git fail and 7 lanes went by unchecked).
+  if (!root) {
+    return { op, root: dir, repo: dir, branch: '', findings: [{ id: 'repo-not-found', message: `Không tìm được repo git ở "${String(dir).replace(/\s+/g, ' ').slice(0, 120)}" nên không kiểm được. Kiểm lại đường ở lệnh cd hay git -C (trên Windows dùng C:/x thay vì /c/x), rồi chạy lại.` }] };
+  }
   const repo = scopedRepo(git(root, 'remote', 'get-url', 'origin'));
   const current = git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
   if (!repo || !current || current === 'HEAD') return null;
@@ -352,7 +357,7 @@ async function pre(input) {
   const tool = String(input.tool_name ?? '').match(/__(create_pull_request|update_pull_request)$/);
   const command = tool ? '' : String(input.tool_input?.command ?? '');
   const specs = tool ? [fromGithubTool(tool[1], input.tool_input ?? {}, cwd)] : [];
-  const join = (from, to) => resolve(from, to.replace(/^~(?=$|[\\/])/, homedir()));
+  const join = (from, to) => resolve(from, gitPath(to.replace(/^~(?=$|[\\/])/, homedir())));
   if (/\bgh\b/.test(command) && /\bpr\b/.test(command)) {
     specs.push(...ghPrOps(command, cwd, join).map((op) => ({ ...op, body: op.body == null ? null : shellBodyText(op.body) })));
   }
