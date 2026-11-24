@@ -417,6 +417,24 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  test('test:fast trong package.json: lỗi thì chặn kèm dòng cuối của lệnh, qua thì cho đi, không khai thì bỏ qua', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-OS/demo.git');
+    const input = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_7', cwd: work, tool_input: { command: 'git commit -m "feat: a"' } };
+    writeFileSync(join(work, 'a.mjs'), 'export {};\n');
+    sh(work, 'add', '.');
+    assert.equal(await run(input, gateDir), null, 'không có package.json thì không chạy test nhanh');
+    writeFileSync(join(work, 'check.cjs'), "const ok = require('fs').existsSync('ok.txt'); if (!ok) console.error('quick test failed: ok.txt missing'); process.exit(ok ? 0 : 1);\n");
+    writeFileSync(join(work, 'package.json'), JSON.stringify({ name: 'demo', scripts: { 'test:fast': 'node check.cjs' } }));
+    sh(work, 'add', '.');
+    const denied = await run(input, gateDir);
+    assert.equal(denied.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(denied.hookSpecificOutput.permissionDecisionReason, /\n- test:fast · .*test:fast lỗi: quick test failed: ok\.txt missing/);
+    writeFileSync(join(work, 'ok.txt'), 'ok\n');
+    sh(work, 'add', '.');
+    assert.equal(await run(input, gateDir), null);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test('commit gộp dev vào nhánh chỉ đếm file khác so với dev, không đếm file dev kéo về (việc 9ea10c50)', async () => {
     const { dir, work, gateDir } = makeRepo('https://github.com/NLH-OS/demo.git');
     const write = (name, text = `${name}\n`) => writeFileSync(join(work, name), text);
