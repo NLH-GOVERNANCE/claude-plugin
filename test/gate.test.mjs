@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, win32 } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -14,6 +14,7 @@ import {
   gateFindings,
   ghPrOps,
   gitOps,
+  gitPath,
   matchesPath,
   parseAddedLines,
   pushRecord,
@@ -81,6 +82,21 @@ describe('cổng trên máy: đọc lệnh', () => {
     );
     assert.deepEqual(gitOps('git log --oneline; echo "git commit"; git status', base, join), []);
     assert.deepEqual(gitOps('git -c core.quotepath=off --no-pager commit -am x', base, join)[0].args, ['-am', 'x']);
+  });
+
+  test('đường Git Bash /c/x thành C:/x (chỉ trên Windows); cd và git -C trong lệnh ghép cho cùng kết quả với C:/x', () => {
+    assert.equal(gitPath('/c/NLH/api', 'win32'), 'C:/NLH/api');
+    assert.equal(gitPath('/d', 'win32'), 'D:/');
+    assert.equal(gitPath('/cygdrive/c/x', 'win32'), 'C:/x');
+    assert.equal(gitPath('C:/NLH/api', 'win32'), 'C:/NLH/api');
+    assert.equal(gitPath('/cmd/x', 'win32'), '/cmd/x');
+    assert.equal(gitPath('/usr/lib', 'win32'), '/usr/lib');
+    assert.equal(gitPath('/c/NLH/api', 'linux'), '/c/NLH/api');
+    const join = (from, to) => win32.resolve(from, gitPath(to, 'win32'));
+    const view = (line) => gitOps(line, 'C:/start', join).map(({ op, dir }) => [op, dir]);
+    const same = view('cd /c/NLH/api && git add . && git commit -m x; git -C /c/NLH/web push origin HEAD');
+    assert.deepEqual(same, view('cd C:/NLH/api && git add . && git commit -m x; git -C C:/NLH/web push origin HEAD'));
+    assert.deepEqual(same, [['commit', win32.resolve('C:/NLH/api')], ['push', win32.resolve('C:/NLH/web')]]);
   });
 
   test('cờ commit: --amend không thêm commit, -a và -am lấy cả file đã sửa; -m "a" thì không', () => {
@@ -560,6 +576,18 @@ describe('cổng trên máy: hook chạy thật trên một repo git', () => {
     assert.match(denied.hookSpecificOutput.permissionDecisionReason, /^Nếp gate blocked create_pull_request: .*\n- R12 · Mục ## Rules cần/);
     assert.equal(await run(call({ owner: 'NLH-OS', repo: 'demo', body: `${GOOD_BODY}\n## Rules\n- D-0097\n` }), gateDir), null);
     assert.equal(await run(call({ owner: 'someone', repo: 'else', body }), gateDir), null);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('git commit hay push mà không tìm được repo thì chặn kèm lời báo, không cho qua', async () => {
+    const { dir, work, gateDir } = makeRepo('https://github.com/NLH-OS/demo.git');
+    const input = (command) => ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_20', cwd: work, tool_input: { command } });
+    for (const command of ['cd /khong/co/repo/nao && git commit -m x', 'git -C /khong/co/repo/nao push origin HEAD']) {
+      const denied = await run(input(command), gateDir);
+      assert.equal(denied.hookSpecificOutput.permissionDecision, 'deny', command);
+      assert.match(denied.hookSpecificOutput.permissionDecisionReason, /- repo-not-found · Không tìm được repo git/);
+    }
+    assert.equal(await run(input('cd /khong/co/repo/nao && git status'), gateDir), null, 'lệnh khác commit/push thì không đụng');
     rmSync(dir, { recursive: true, force: true });
   });
 
