@@ -13,6 +13,7 @@ import { PassThrough } from 'node:stream';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  alsoSeated,
   childEnv,
   defaultSpawn,
   dueChecks,
@@ -131,24 +132,26 @@ describe('hàm thuần của Loa', () => {
       { pid: 1, kind: 'interactive', sessionId: LIVE, name: 'Ô CTO (son/cto)' },
       { kind: 'background', sessionId: STOPPED, name: 'Ô Review (son/review)', state: 'stopped', cwd: 'C:\\r' },
     ];
+    const stoppedOnly = [sessions[1]];
     const cwdOf = (id) => (id === CLOSED ? 'C:\\w' : null);
     const at = '2026-10-18T05:00:00.000Z';
     assert.deepEqual(route(entry('a', at, { session_id: LIVE }), { sessions, cwdOf }), { via: 'send', to: 'Ô CTO (son/cto)', sessionId: LIVE });
     // Phiên nền đã dừng: không --resume (phiên cũ làm theo kế hoạch cũ trong trí nhớ của nó), không mở phiên mới.
-    assert.deepEqual(route(entry('b', at, { session_id: STOPPED }), { sessions, cwdOf }), { via: 'none', name: 'Ô cto' });
+    // (Mục không kèm người: phiên đang chạy mang tên gọi "cto" sẽ nhận, nên thử riêng với danh sách chỉ có phiên đã dừng.)
+    assert.deepEqual(route(entry('b', at, { session_id: STOPPED }), { sessions: stoppedOnly, cwdOf }), { via: 'none', name: 'Ô cto' });
     // Phiên cửa sổ lệnh đã đóng, không báo tên: không có trong danh sách, bản ghi còn; cũng không phiên.
-    assert.deepEqual(route(entry('c', at, { session_id: CLOSED }), { sessions, cwdOf }), { via: 'none', name: 'Ô cto' });
+    assert.deepEqual(route(entry('c', at, { session_id: CLOSED }), { sessions: stoppedOnly, cwdOf }), { via: 'none', name: 'Ô cto' });
     // Đã xoá: không phiên; dòng in ra giữ tên phiên ô đã báo, bỏ @.
-    assert.deepEqual(route(entry('d', at, { session_id: GONE, session_name: 'Ô CTO (son@cto)' }), { sessions, cwdOf }), { via: 'none', name: 'Ô CTO (son/cto)' });
+    assert.deepEqual(route(entry('d', at, { session_id: GONE, session_name: 'Ô CTO (son@cto)' }), { sessions: stoppedOnly, cwdOf }), { via: 'none', name: 'Ô CTO (son/cto)' });
     assert.deepEqual(route(entry('e', at), { sessions: null, cwdOf }), { via: 'none', name: 'Ô cto' });
     // recent (phiên đã báo lần trước, dùng khi nhắc): gửi vào phiên đó.
     const recent = new Map([['cto', { name: 'Ô cto', at: Date.now() }]]);
-    assert.deepEqual(route(entry('f', at), { sessions, cwdOf, recent }), { via: 'send', to: 'Ô cto', sessionId: null });
-    assert.equal(route(entry('g', at, { kind: 'you' }), { sessions, cwdOf }), null);
+    assert.deepEqual(route(entry('f', at), { sessions: stoppedOnly, cwdOf, recent }), { via: 'send', to: 'Ô cto', sessionId: null });
+    assert.equal(route(entry('g', at, { kind: 'you' }), { sessions: stoppedOnly, cwdOf }), null);
     // Phiên đang chạy mà không có tên: không gửi được, cũng không mở lại (tạo bản sao); ô tự thấy việc trong hộp việc.
     assert.equal(route(entry('h', at, { session_id: LIVE }), { sessions: [{ pid: 1, kind: 'interactive', sessionId: LIVE, name: '' }], cwdOf }), null);
     // Mã không phải uuid (ví dụ bắt đầu bằng --) không bao giờ thành đối số của claude.
-    assert.deepEqual(route(entry('i', at, { session_id: '--dangerously-skip-permissions' }), { sessions, cwdOf: () => 'C:\w' }), { via: 'none', name: 'Ô cto' });
+    assert.deepEqual(route(entry('i', at, { session_id: '--dangerously-skip-permissions' }), { sessions: stoppedOnly, cwdOf: () => 'C:\w' }), { via: 'none', name: 'Ô cto' });
   });
 
   test('phiên ô đã báo đang chạy mà tên có @ (SendMessage từ chối): không gửi, không mở lại; theo tên không @, phiên đã báo trước, hoặc không phiên', () => {
@@ -223,6 +226,32 @@ describe('hàm thuần của Loa', () => {
     // Phiên nền đã dừng (còn trong danh sách): không mở lại, không phiên.
     const stopped = [{ kind: 'background', sessionId: APP, name: 'Ô Tech Lead (son/lead)', state: 'done', cwd: 'C:/t' }];
     assert.deepEqual(route(entry('e', at, { ...seat, session_name: 'Ô Tech Lead (son/lead)' }), { sessions: stopped, cwdOf: () => null }), fresh);
+  });
+
+  test('việc mở cho ô chung (@review, @build): phiên ngồi dân làng có tên gọi đó nhận tin dù mục không kèm người; mọi phiên cùng ngồi đều được báo (22/10)', () => {
+    const A = '5e22aee8-b510-4a5b-b071-046ba1d93b31';
+    const B = '5e22aee8-b510-4a5b-b071-046ba1d93b32';
+    const at = '2026-10-22T13:30:00.000Z';
+    // Mục cho ô chung "review": không có person_handle, ô là chính tên gọi.
+    const shared = { cell: 'review', cell_title: 'Review' };
+    const sessions = [
+      { pid: 1, kind: 'interactive', sessionId: A, name: 'Dân làng Review của anh Sơn (son/review)' },
+      { pid: 2, kind: 'interactive', sessionId: B, name: 'Review PR phiên hai (son/review)' },
+      { pid: 3, kind: 'interactive', sessionId: 'x', name: 'Tech Lead (son/lead)' },
+    ];
+    assert.deepEqual(route(entry('a', at, shared), { sessions, cwdOf: () => null }), { via: 'send', to: 'Dân làng Review của anh Sơn (son/review)', sessionId: A });
+    assert.deepEqual(alsoSeated(entry('a', at, shared), { sessions, skip: ['Dân làng Review của anh Sơn (son/review)'] }), [{ to: 'Review PR phiên hai (son/review)', sessionId: B }]);
+    // Phiên đã báo ngồi dân làng có tên gọi "review" trong cell_handles, tên phiên không mang thẻ: vẫn được báo.
+    const plainName = [{ pid: 4, kind: 'interactive', sessionId: A, name: 'PC của Sơn' }];
+    const reported = [{ session_id: A, session_name: 'PC của Sơn', cell: 'review-pr-son', cell_handles: ['review', 'review-son'], status: 'idle' }];
+    assert.deepEqual(alsoSeated(entry('b', at, shared), { sessions: plainName, reported }), [{ to: 'PC của Sơn', sessionId: A }]);
+    // Dân làng khác (lead) không nhận việc của @review; phiên tên có @ không nhận.
+    assert.deepEqual(alsoSeated(entry('c', at, shared), { sessions: [sessions[2], { pid: 5, sessionId: B, name: 'Review (son@review)' }] }), []);
+    assert.equal(route(entry('d', at, shared), { sessions: [sessions[2]], cwdOf: () => null }).via, 'none');
+    // Mục có người (ô riêng): chỉ một phiên, như cũ (D-0065).
+    assert.deepEqual(alsoSeated(entry('e', at, { ...shared, person_handle: 'son', cell_handles: ['review'] }), { sessions }), []);
+    // Thẻ có người vẫn khớp đúng người.
+    assert.equal(findByName(sessions, seatTags({ ...shared, person_handle: 'danh' })), null);
   });
 
   test('phiên Claude Desktop đã báo ngồi dân làng (report_session) mà mục chưa kèm mã phiên: gửi theo tên đã báo, không mở phiên trùng (fact 850d6a86)', () => {

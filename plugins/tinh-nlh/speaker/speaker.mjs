@@ -328,17 +328,61 @@ export function transcriptCwd(id, projects = join(homedir(), '.claude', 'project
 export function seatTags(entry) {
   const person = name(entry.person_handle);
   if (!person) return [];
-  const handles = [...(Array.isArray(entry.cell_handles) ? entry.cell_handles : []).map(name), ...cellsOf(entry.cell)].filter(Boolean);
-  return [...new Set(handles)].map((handle) => `(${person}/${handle})`);
+  return handlesOf(entry).map((handle) => `(${person}/${handle})`);
+}
+
+// The handles an item calls: the cell's handles and the item's cell. For a shared cell (review, build, lead; no person
+// sits in it) the item's cell is the handle itself.
+const handlesOf = (entry) => [...new Set([...(Array.isArray(entry.cell_handles) ? entry.cell_handles : []).map(name), ...cellsOf(entry.cell)].filter(Boolean))];
+
+// Does a session name carry "(<anyone>/<handle>)" for one of these handles? The hub sends a shared cell's item (22/10:
+// @review, @build) without the person's handle, so the person part cannot be matched: every session seated at a villager
+// with that handle counts.
+const carriesHandle = (text, handles) => {
+  const wanted = new Set(handles);
+  for (const found of String(text ?? '').toLowerCase().matchAll(/\(([a-z0-9][a-z0-9_-]*)\/([a-z0-9][a-z0-9_-]*)\)/g)) {
+    if (wanted.has(found[2])) return true;
+  }
+  return false;
+};
+
+// Does this session name seat at the item's cell? With the person's handle: exact "(person/handle)"; without it (a shared
+// cell): any person, same handle.
+export function seatedAt(entry, text) {
+  const tags = seatTags(entry);
+  const lower = String(text ?? '').toLowerCase();
+  if (tags.length) return tags.some((tag) => lower.includes(tag));
+  return carriesHandle(lower, handlesOf(entry));
 }
 
 // A running session whose name carries one of the tags: a seated session that never reported its id (it ran before the
-// connector signed in). Only names without @, since SendMessage refuses @; none such: null.
-export function findByName(list, tags) {
-  if (!tags.length) return null;
-  const found = (list ?? []).find((session) => session?.pid && typeof session.name === 'string' && !session.name.includes('@') && tags.some((tag) => session.name.toLowerCase().includes(tag)));
+// connector signed in). Only names without @, since SendMessage refuses @; none such: null. matches: tags, or a function
+// of the name (shared cells).
+export function findByName(list, matches) {
+  const test = typeof matches === 'function' ? matches : (text) => Array.isArray(matches) && matches.some((tag) => text.toLowerCase().includes(tag));
+  if (typeof matches !== 'function' && !matches?.length) return null;
+  const found = (list ?? []).find((session) => session?.pid && typeof session.name === 'string' && !session.name.includes('@') && test(session.name));
   if (!found || !plain(found.name)) return null;
   return { name: plain(found.name), sessionId: SESSION_ID.test(String(found.sessionId ?? '')) ? found.sessionId : null };
+}
+
+// Every other running session seated at the same shared cell (no person on the item): 22/10, @review work lay an hour
+// because Loa told no one; each seated session is told, the first to claim wins and the others stop (the hub drops the
+// item from the feed, recheck drops the rest). An item with the person's handle goes to one session only (D-0065).
+export function alsoSeated(entry, { sessions, reported = [], skip = [] }) {
+  if (name(entry.person_handle) || !Array.isArray(sessions)) return [];
+  const handles = handlesOf(entry);
+  const reportedNames = new Map((Array.isArray(reported) ? reported : []).map((seat) => [seat?.session_id, seat]));
+  const out = [];
+  for (const session of sessions) {
+    const label = plain(session?.name);
+    if (!session?.pid || !label || label.includes('@') || skip.includes(label) || out.some((other) => other.to === label)) continue;
+    const seat = reportedNames.get(session.sessionId);
+    const byHandle = Array.isArray(seat?.cell_handles) && seat.status !== 'stopped' && seat.cell_handles.map(name).some((handle) => handles.includes(handle));
+    if (!carriesHandle(label, handles) && !byHandle) continue;
+    out.push({ to: label, sessionId: SESSION_ID.test(String(session.sessionId ?? '')) ? session.sessionId : null });
+  }
+  return out;
 }
 
 // Name for a new session: "Ô <cell title> (<person>/<first handle>)", never @. A hub without these fields: the name the
@@ -370,20 +414,20 @@ export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.n
     } else {
       // A running session seated at the same cell (an app session the person reopened under a new id) gets the item
       // before anything else (21/10: two Review, two Tech Lead).
-      const named = findByName(sessions, seatTags(entry));
+      const named = findByName(sessions, (text) => seatedAt(entry, text));
       if (named) return { via: 'send', to: named.name, sessionId: named.sessionId };
       // Not listed at all but its transcript is on disk, and the name it reported carries this cell's "(person/handle)":
       // most likely a Claude app session at rest (no process, so `claude agents` leaves it out); the app wakes it when
       // SendMessage reaches that name (21/10). A closed terminal session looks the same: when no session takes the send,
       // Loa prints one line (the fallback), never resumes the old one or opens a new one.
       const reported = plain(entry.session_name);
-      const tagged = seatTags(entry).some((tag) => reported.toLowerCase().includes(tag));
+      const tagged = seatedAt(entry, reported);
       if (!found && sessions && cwdOf(id) && tagged && !reported.includes('@')) {
         return { via: 'send', to: reported, sessionId: id, fallback: { via: 'none', name: seatName(entry) } };
       }
     }
   }
-  const named = findByName(sessions, seatTags(entry));
+  const named = findByName(sessions, (text) => seatedAt(entry, text));
   if (named) return { via: 'send', to: named.name, sessionId: named.sessionId };
   const rested = reportedSeat(entry, { sessions, cwdOf, reported });
   if (rested) return rested;
@@ -398,15 +442,15 @@ export function route(entry, { sessions, cwdOf, recent = new Map(), now = Date.n
 // with the "no session" line as the fallback. null when there is none, or the sessions on the machine cannot be listed.
 export function reportedSeat(entry, { sessions, cwdOf, reported = [] }) {
   if (!sessions || !Array.isArray(reported)) return null;
-  const tags = seatTags(entry);
-  if (!tags.length) return null;
+  if (!seatTags(entry).length && !handlesOf(entry).length) return null;
   // Running seats first, so a background copy that reported the same cell earlier does not win over it (5d66123d).
   const running = (seat) => (findSession(sessions, String(seat?.session_id ?? ''))?.live ? 0 : 1);
   for (const seat of [...reported].sort((a, b) => running(a) - running(b))) {
     const id = String(seat?.session_id ?? '');
     const reportedName = plain(seat?.session_name);
     if (!SESSION_ID.test(id) || seat.status === 'stopped' || !reportedName || reportedName.includes('@')) continue;
-    if (!tags.some((tag) => reportedName.toLowerCase().includes(tag))) continue;
+    const handled = !name(entry.person_handle) && Array.isArray(seat.cell_handles) && seat.cell_handles.map(name).some((handle) => handlesOf(entry).includes(handle));
+    if (!seatedAt(entry, reportedName) && !handled) continue;
     const listed = findSession(sessions, id);
     if (listed?.live) {
       if (listed.name && !listed.name.includes('@')) return { via: 'send', to: listed.name, sessionId: id };
@@ -737,7 +781,17 @@ export function startServer({
       const pending = { ...item, at: entry.at, session_id: plan.sessionId ?? '', to: plan.to, text, queued_at: clock(), ...(plan.fallback ? { fallback: plan.fallback } : {}) };
       state.pending = [...state.pending.filter((other) => other.entry_id !== item.entry_id), pending];
       remember(entry, item, plan.to, reminder);
-      return push(text, { action: 'send', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, to: plan.to, ...(plan.sessionId ? { session_id: plan.sessionId } : {}) });
+      push(text, { action: 'send', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: item.entry_id, to: plan.to, ...(plan.sessionId ? { session_id: plan.sessionId } : {}) });
+      // A shared cell (@review, @build, @lead): every other session seated at a villager with that handle is told too, on
+      // the first notice only; each one a row of its own (entry_id ends #n), all dropped together once someone claims.
+      if (!reminder) {
+        alsoSeated(entry, { sessions, reported, skip: [plan.to] }).forEach((other, index) => {
+          const extra = { ...item, entry_id: `${item.entry_id}#${index + 2}` };
+          state.pending = [...state.pending.filter((row) => row.entry_id !== extra.entry_id), { ...extra, at: entry.at, session_id: other.sessionId ?? '', to: other.to, text, queued_at: clock() }];
+          push(text, { action: 'send', kind: item.kind, cell: item.cell, ticket: item.ticket, entry_id: extra.entry_id, to: other.to, ...(other.sessionId ? { session_id: other.sessionId } : {}) });
+        });
+      }
+      return;
     }
     // No session sits at the cell (a stopped one is never resumed, ticket 17e647c1; none is opened, ticket 3a65c3bd).
     await tellNoSession(item, plan.name);
